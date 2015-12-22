@@ -40,7 +40,7 @@ model.createAgent = function(A)
     -- Loop over received frames
     for f = 1, observation:size(1) do
       -- Convert to grayscale
-      local frame = image.rgb2y(observation:select(1, f))
+      local frame = image.rgb2y(observation:select(1, f):float()) -- image does not work with CudaTensor
       -- Reduce 210x160 screen to 84x84
       input[{{f}, {}, {}, {}}] = image.scale(frame, 84, 84)
     end
