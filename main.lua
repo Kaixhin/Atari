@@ -27,6 +27,7 @@ cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-alpha', 0.00025, 'Learning rate α')
 cmd:option('-epsilon', 1, 'Greediness ε (decreases linearly from 1 to 0.1 over expReplMem steps)') -- TODO: Parameterise decay
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
+cmd:option('-tdClamp', 1, 'Clamps TD error magnitude (approximates Huber loss)')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
@@ -44,7 +45,7 @@ cmd:option('-prog_freq', 5000, 'Frequency of progress output')
 cmd:option('-save_freq', 125000, 'Frequency of saving model')
 cmd:option('-name', '', 'filename used for saving network and training history')
 cmd:option('-network', '<snapshot filename>', 'reload pretrained network')
-cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500,clip_delta=1,min_reward=-1,max_reward=1', 'string of agent parameters')
+cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500,min_reward=-1,max_reward=1', 'string of agent parameters')
 --]]
 local opt = cmd:parse(arg)
 
@@ -99,7 +100,7 @@ end
 
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
-local gameActions = gameEnv:getActions()
+local A = gameEnv:getActions() -- Set of actions
 
 -- Create agent
 local agent = model.createAgent(gameEnv, opt)
@@ -131,9 +132,9 @@ end
 if opt.mode == 'train' then
   for step = 1, opt.steps do
     --local action_index = agent:perceive(reward, screen, terminal)
-    local actionIndex = agent:observe(screen) -- TODO: Add terminal?
+    local actionIndex = agent:act(screen) -- TODO: Add terminal?
     if not terminal then
-      screen, reward, terminal = agent:act(actionIndex, true) -- True flag for training mode
+      screen, reward, terminal = gameEnv:step(A[actionIndex], true) -- True flag for training mode
       agent:learn(reward)
     else
       if opt.random_starts > 0 then
@@ -168,10 +169,10 @@ if opt.mode == 'train' then
       local eval_time = sys.clock()
       for estep = 1, opt.eval_steps do
         --local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
-        local actionIndex = agent:observe(screen)
+        local actionIndex = agent:act(screen)
 
         -- Play game in test mode (episodes don't end when losing a life)
-        screen, reward, terminal = agent:act(actionIndex, false)
+        screen, reward, terminal = gameEnv:step(A[actionIndex], false)
 
         -- record every reward
         episode_reward = episode_reward + reward
@@ -228,8 +229,8 @@ elseif opt.mode == 'test' then
     -- play game in test mode (episodes don't end when losing a life)
     --screen, reward, terminal = game_env:step(game_actions[action_index], false)
     
-    local actionIndex = agent:observe(screen)
-    screen, reward, terminal = agent:act(actionIndex, false) -- Flag for test mode
+    local actionIndex = agent:act(screen)
+    screen, reward, terminal = gameEnv:step(A[actionIndex], false) -- Flag for test mode
 
     if qt then
       image.display({image=screen, win=window})
@@ -238,10 +239,6 @@ elseif opt.mode == 'test' then
 end
 
 --[[
--- Create agent
-local agent = model.createAgent()
--- Model parameters θ
-local theta, dTheta = agent:getParameters()
 
 -- Reinforcement learning variables
 local s = environment:start()
