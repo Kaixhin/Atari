@@ -5,6 +5,9 @@ local optim = require 'optim'
 local environment = require 'environment'
 local model = require 'model'
 
+-- Detect QT for image display
+local qt = pcall(require, 'qt')
+
 local cmd = torch.CmdLine()
 -- Base options
 cmd:option('-seed', 123, 'Random seed')
@@ -117,9 +120,13 @@ local nepisodes
 local episode_reward
 --]]
 
--- Start
+-- Start gaming
 local screen, reward, terminal = gameEnv:newGame()
---local window = image.display({image=screen})
+-- Activate display if using QT
+local window
+if qt then
+  window = image.display({image=screen})
+end
 
 if opt.mode == 'train' then
   for step = 1, opt.steps do
@@ -134,6 +141,10 @@ if opt.mode == 'train' then
       else
         screen, reward, terminal = gameEnv:newGame()
       end
+    end
+
+    if qt then
+      image.display({image=screen, win=window})
     end
 
     --[[
@@ -220,8 +231,9 @@ elseif opt.mode == 'test' then
     local actionIndex = agent:observe(screen)
     screen, reward, terminal = agent:act(actionIndex, false) -- Flag for test mode
 
-    -- Update screen
-    --image.display({image=screen, win=window})
+    if qt then
+      image.display({image=screen, win=window})
+    end
   end
 end
 
