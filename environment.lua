@@ -4,7 +4,7 @@ local environment = {}
 
 -- Initialises ALE with game
 environment.init = function(opt)
-  -- Set GPU flag (GPU enables faster screen buffer)
+  -- Set GPU flag (GPU enables faster screen buffer with CudaTensors)
   local gpu = opt.gpu - 1
   -- Create options from opt
   local options = {
@@ -13,9 +13,9 @@ environment.init = function(opt)
     actrep = opt.actrep,
     random_starts = opt.random_starts,
     gpu = gpu,
-    pool_frms = {
-      size = 2, -- Pool over frames to prevent problems with fixed interval events
-      type = 'max' -- Defaults to 2-frame mean-pooling
+    pool_frms = { -- Defaults to 2-frame mean-pooling
+      size = 2, -- Pools over frames to prevent problems with fixed interval events like lasers blinking
+      type = 'max'
     }
   }
   return framework.GameEnvironment(options)

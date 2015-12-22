@@ -15,30 +15,34 @@ cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
 cmd:option('-game', 'pong', 'Name of Atari ROM (stored in "roms" directory)')
 -- Train vs. test mode
 cmd:option('-mode', 'train', '"train" or "test" mode')
+-- Experience replay options
+cmd:option('-expReplMem', 1000000, 'Experience replay memory (# of tuples)')
+cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
+-- TODO: Add prioritised experience replay
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-alpha', 0.00025, 'Learning rate α')
-cmd:option('-epsilon', 1, 'Greediness ε (decreases linearly from 1 to 0.1 over 1M steps)')
+cmd:option('-epsilon', 1, 'Greediness ε (decreases linearly from 1 to 0.1 over expReplMem steps)') -- TODO: Parameterise decay
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
-cmd:option('-expReplMem', 1000000, 'Experience replay memory (# of tuples)')
-cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 50000000, 'Training iterations')
--- alewrap
+cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
+-- alewrap options
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play action 0 between 1 and random_starts number of times at the start of each training episode')
 -- TODO: Tidy up options/check agent_params
+--[[
 cmd:option('-eval_freq', 250000, 'Frequency of greedy evaluation')
 cmd:option('-eval_steps', 125000, 'Number of evaluation steps')
 cmd:option('-prog_freq', 5000, 'Frequency of progress output')
 cmd:option('-save_freq', 125000, 'Frequency of saving model')
 cmd:option('-name', '', 'filename used for saving network and training history')
 cmd:option('-network', '<snapshot filename>', 'reload pretrained network')
-cmd:option('-agent', 'NeuralQLearner', 'name of agent file to use')
-cmd:option('-agent_params', 'hist_len=4,learn_start=50000,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500,clip_delta=1,min_reward=-1,max_reward=1', 'string of agent parameters')
+cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500,clip_delta=1,min_reward=-1,max_reward=1', 'string of agent parameters')
+--]]
 local opt = cmd:parse(arg)
 
 -- Torch setup
@@ -93,43 +97,37 @@ end
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
 local gameActions = gameEnv:getActions()
-print(gameActions)
 
--- Creates agent
-local agent = model.createAgent(gameActions)
+-- Create agent
+local agent = model.createAgent(gameEnv, opt)
 
 -- TODO: Sort out variables
-local learn_start = agent.learn_start
+--[[
 local start_time = sys.clock()
 local reward_counts = {}
 local episode_counts = {}
-local time_history = {}
+local time_history = {0}
 local v_history = {}
 local qmax_history = {}
 local td_history = {}
 local reward_history = {}
-local step = 0
-time_history[1] = 0
-
 local total_reward
 local nrewards
 local nepisodes
 local episode_reward
+--]]
 
 -- Start
 local screen, reward, terminal = gameEnv:newGame()
-print(terminal)
 --local window = image.display({image=screen})
 
 if opt.mode == 'train' then
-  local step = 0
-  while step < opt.steps do
-    step = step + 1
+  for step = 1, opt.steps do
     --local action_index = agent:perceive(reward, screen, terminal)
-    local actionIndex = agent:observe(screen)
+    local actionIndex = agent:observe(screen) -- TODO: Add terminal?
     if not terminal then
-      --screen, reward, terminal = game_env:step(game_actions[action_index], true)
-      screen, reward, terminal = gameEnv:step(gameActions[actionIndex], true) -- True flag for training mode
+      screen, reward, terminal = agent:act(actionIndex, true) -- True flag for training mode
+      agent:learn(reward)
     else
       if opt.random_starts > 0 then
         screen, reward, terminal = gameEnv:nextRandomGame()
@@ -147,8 +145,9 @@ if opt.mode == 'train' then
     end
     --]]
 
-    if step % opt.eval_freq == 0 and step > learn_start then
-      screen, reward, terminal = game_env:newGame()
+    --[[
+    if step % opt.eval_freq == 0 and step > opt.learnStart then
+      screen, reward, terminal = gameEnv:newGame()
 
       total_reward = 0
       nrewards = 0
@@ -156,11 +155,12 @@ if opt.mode == 'train' then
       episode_reward = 0
 
       local eval_time = sys.clock()
-      for estep=1,opt.eval_steps do
-        local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
+      for estep = 1, opt.eval_steps do
+        --local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
+        local actionIndex = agent:observe(screen)
 
         -- Play game in test mode (episodes don't end when losing a life)
-        screen, reward, terminal = game_env:step(game_actions[action_index])
+        screen, reward, terminal = agent:act(actionIndex, false)
 
         -- record every reward
         episode_reward = episode_reward + reward
@@ -172,7 +172,7 @@ if opt.mode == 'train' then
           total_reward = total_reward + episode_reward
           episode_reward = 0
           nepisodes = nepisodes + 1
-          screen, reward, terminal = game_env:nextRandomGame()
+          screen, reward, terminal = gameEnv:nextRandomGame()
         end
       end
 
@@ -203,6 +203,7 @@ if opt.mode == 'train' then
 
       local training_rate = opt.actrep*opt.eval_freq/time_dif
     end
+    --]]
 
     -- TODO: Saving network
   end
@@ -217,7 +218,7 @@ elseif opt.mode == 'test' then
     --screen, reward, terminal = game_env:step(game_actions[action_index], false)
     
     local actionIndex = agent:observe(screen)
-    screen, reward, terminal = gameEnv:step(gameActions[actionIndex], false) -- Flag for test mode
+    screen, reward, terminal = agent:act(actionIndex, false) -- Flag for test mode
 
     -- Update screen
     --image.display({image=screen, win=window})
