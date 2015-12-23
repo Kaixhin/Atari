@@ -29,6 +29,7 @@ cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.1, 'Final value of greediness ε')
 cmd:option('-epsilonSteps', 1000000, 'Number of steps to linearly decay epsilonStart to epsilonEnd')
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
+cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
 cmd:option('-tdClamp', 1, 'Clamps TD error magnitude')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
@@ -40,15 +41,7 @@ cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play action 0 between 1 and random_starts number of times at the start of each training episode')
 -- TODO: Tidy up options/check agent_params
---[[
-cmd:option('-eval_freq', 250000, 'Frequency of greedy evaluation')
-cmd:option('-eval_steps', 125000, 'Number of evaluation steps')
-cmd:option('-prog_freq', 5000, 'Frequency of progress output')
-cmd:option('-save_freq', 125000, 'Frequency of saving model')
-cmd:option('-name', '', 'filename used for saving network and training history')
-cmd:option('-network', '<snapshot filename>', 'reload pretrained network')
-cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500,min_reward=-1,max_reward=1', 'string of agent parameters')
---]]
+--cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512,valid_size=500', 'string of agent parameters')
 local opt = cmd:parse(arg)
 
 -- Torch setup
@@ -64,41 +57,6 @@ torch.manualSeed(math.random(1, 10000))
 -- GPU setup
 cutorch.setDevice(opt.gpu)
 cutorch.manualSeedAll(torch.random())
--- TODO: Confirm necessary to override print to always flush the output
---[[
-local old_print = print
-local print = function(...)
-    old_print(...)
-    io.flush()
-end
---]]
-
--- TODO: Separate out options so that this is unneeded
--- Converts strings to tables
-local function str_to_table(str)
-  if type(str) == 'table' then
-    return str
-  end
-  if not str or type(str) ~= 'string' then
-    if type(str) == 'table' then
-      return str
-    end
-    return {}
-  end
-  local ttr
-  if str ~= '' then
-    local ttx=tt
-    loadstring('tt = {' .. str .. '}')()
-    ttr = tt
-    tt = ttx
-  else
-    ttr = {}
-  end
-  return ttr
-end
-if opt.agent_params then
-  opt.agent_params = str_to_table(opt.agent_params)
-end
 
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
@@ -106,22 +64,6 @@ local A = gameEnv:getActions() -- Set of actions
 
 -- Create agent
 local agent = model.createAgent(gameEnv, opt)
-
--- TODO: Sort out variables
---[[
-local start_time = sys.clock()
-local reward_counts = {}
-local episode_counts = {}
-local time_history = {0}
-local v_history = {}
-local qmax_history = {}
-local td_history = {}
-local reward_history = {}
-local total_reward
-local nrewards
-local nepisodes
-local episode_reward
---]]
 
 -- Start gaming
 local screen, reward, terminal = gameEnv:newGame()
@@ -140,8 +82,8 @@ if opt.mode == 'train' then
 
   for step = 1, opt.steps do
     opt.step = step -- Pass step to agent for training
-    --local action_index = agent:perceive(reward, screen, terminal)
-    local actionIndex = agent:observe(screen, 'train') -- TODO: Add terminal?
+    -- TODO: Pass screen, reward, terminal
+    local actionIndex = agent:observe(screen, 'train')
     if not terminal then
       screen, reward, terminal = gameEnv:step(A[actionIndex], true) -- True flag for training mode
       agent:learn(reward)
@@ -160,9 +102,7 @@ if opt.mode == 'train' then
 elseif opt.mode == 'test' then
   -- Play one game (episode)
   while not terminal do
-    -- if action was chosen randomly, Q-value is 0
-    --agent.bestq = 0
-    local actionIndex = agent:osberve(screen, 'test')
+    local actionIndex = agent:observe(screen, 'test')
     screen, reward, terminal = gameEnv:step(A[actionIndex], false) -- Flag for test mode
 
     if qt then

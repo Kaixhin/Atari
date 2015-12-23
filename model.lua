@@ -91,7 +91,7 @@ model.createAgent = function(gameEnv, opt)
     net:backward(states, QCurr)
 
     -- Update parameters
-    theta:add(torch.mul(dTheta, opt.alpha))
+    --theta:add(torch.mul(dTheta, opt.alpha))
     -- TODO: Too much instability -> NaNs
   end
 
@@ -119,6 +119,10 @@ model.createAgent = function(gameEnv, opt)
 
   -- Perform a learning step from the latest reward
   agent.learn = function(self, reward)
+    -- Clamp reward for stability
+    reward = math.min(reward, -opt.rewardClamp)
+    reward = math.max(reward, opt.rewardClamp)
+
     if a0 ~= nil and opt.alpha > 0 then
       -- Store experience
       memory.store(s0, a0, r0, s1)
