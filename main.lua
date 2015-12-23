@@ -27,7 +27,7 @@ cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-alpha', 0.00025, 'Learning rate α')
 cmd:option('-epsilon', 1, 'Greediness ε (decreases linearly from 1 to 0.1 over expReplMem steps)') -- TODO: Parameterise decay
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
-cmd:option('-tdClamp', 1, 'Clamps TD error magnitude (approximates Huber loss)')
+cmd:option('-tdClamp', 1, 'Clamps TD error magnitude')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')

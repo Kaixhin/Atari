@@ -61,64 +61,42 @@ model.createAgent = function(gameEnv, opt)
   local s1 = nil
   local a1 = nil
   
-  --[[
-  -- Create transition table.
-  ---- assuming the transition table always gets floating point input
-  ---- (Foat or Cuda tensors) and always returns one of the two, as required
-  ---- internally it always uses ByteTensors for states, scaling and
-  ---- converting accordingly
-  local transition_args = {
-    stateDim = self.state_dim, numActions = self.n_actions,
-    histLen = self.hist_len, gpu = self.gpu,
-    maxSize = self.replay_memory, histType = self.histType,
-    histSpacing = self.histSpacing, nonTermProb = self.nonTermProb,
-    bufferSize = self.bufferSize
-  }
-
-  self.transitions = dqn.TransitionTable(transition_args)
-  --]]
-
   local learnFromTuple = function(_s0, _a0, _r0, _s1, _a1)
-    -- Calculate max Q-value from next step
-    local QMax = torch.max(net:forward(_s1), 1)
+    -- Calculate max Q-value from next state
+    local QMax = torch.max(net:forward(_s1), 1)[1]
     -- Calculate target Y
     local Y = _r0 + opt.gamma*QMax
-    -- Calculate error
-    local err = torch.mul(theta, (Y - output[a]))
-    -- Compute target Q value
-    --[[
-    //compute the target Q value
-    var tmat = this.forwardQ(this.net, s1, false);
-    var qmax = r0 + this.gamma * tmat.w[R.maxi(tmat.w)];
 
-    // now predict
-    var pred = this.forwardQ(this.net, s0, true);
+    -- Get all predicted Q-values from the current state
+    local QCurr = net:forward(_s0)
+    -- Get prediction of current Q-value with given action
+    local QTaken = QCurr[_a0]
 
-    var tderror = pred.w[a0] - qmax;
-    var clamp = this.tderror_clamp;
-    if(Math.abs(tderror) > clamp) {  // huber loss to robustify
-      if(tderror > clamp) tderror = clamp;
-      if(tderror < -clamp) tderror = -clamp;
-    }
-    pred.dw[a0] = tderror;
-    this.lastG.backward(); // compute gradients on net params
-
-    // update net
-    R.updateNet(this.net, this.alpha);
-    return tderror;
-    --]]
+    -- Calculate TD error
+    local tdErr = QTaken - Y
+    -- Clamp TD error (approximates Huber loss)
+    tdErr = math.max(tdErr, -opt.tdClamp)
+    tdErr = math.min(tdErr, opt.tdClamp)
     
-    return 0
+    -- Zero QCurr outputs (no error)
+    QCurr:zero()
+    -- Set Q(_s0, _a0) as TD error
+    QCurr[_a0] = tdErr
+    -- Backpropagate loss
+    net:backward(_s0, QCurr)
+    
+    return tdErr
   end
 
   -- Performs an action on the environment
-  agent.act = function(self, observation, trainMode)
+  agent.act = function(self, observation)
+    local state = preprocess(observation)
     local aIndex
+    
     -- Choose action by ε-greedy
     if math.random() < opt.epsilon then 
       aIndex = torch.random(1, _.size(A))
     else
-      local state = preprocess(observation)
       local __, ind = torch.max(net:forward(state), 1)
       aIndex = ind[1]
     end
@@ -135,16 +113,11 @@ model.createAgent = function(gameEnv, opt)
   -- Perform a learning step from the latest reward
   agent.learn = function(self, reward)
     if s0 ~= nil and opt.alpha > 0 then
-      print(s0:size())
-      print(a0)
-      print(r0)
-      print(s1:size())
-      print(a1)
       -- Calculate TD error
       learnFromTuple(s0, a0, r0, s1, a1)
 
       -- Decide whether to store in replay memory
-      if t % memSampleFreq == 0 then
+      if t % opt.memSampleFreq == 0 then
         experience[expIndex] = {s0, a0, r0, s1, a1}
         expIndex = expIndex + 1
         -- Roll back to beginning if overflow
@@ -155,10 +128,12 @@ model.createAgent = function(gameEnv, opt)
       t = t + 1
 
       -- Sample and learn from experience in replay memory
-      for r = 1, 10 do -- TODO: Learning steps per iteration - minibatch size?
-        local randomIndex = torch.random(1, _.size(experience))
-        local replay = experience[randomIndex]
-        learnFromTuple(replay[1], replay[2], replay[3], replay[4], replay[5])
+      if _.size(experience) >= 10 then
+        for r = 1, 10 do -- TODO: Learning steps per iteration - minibatch size?
+          local randomIndex = torch.random(1, _.size(experience))
+          local replay = experience[randomIndex]
+          learnFromTuple(replay[1], replay[2], replay[3], replay[4], replay[5])
+        end
       end
     end
 
