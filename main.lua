@@ -132,7 +132,7 @@ end
 if opt.mode == 'train' then
   for step = 1, opt.steps do
     --local action_index = agent:perceive(reward, screen, terminal)
-    local actionIndex = agent:act(screen) -- TODO: Add terminal?
+    local actionIndex = agent:act(screen, 'train') -- TODO: Add terminal?
     if not terminal then
       screen, reward, terminal = gameEnv:step(A[actionIndex], true) -- True flag for training mode
       agent:learn(reward)
@@ -169,7 +169,7 @@ if opt.mode == 'train' then
       local eval_time = sys.clock()
       for estep = 1, opt.eval_steps do
         --local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
-        local actionIndex = agent:act(screen)
+        local actionIndex = agent:act(screen, 'test')
 
         -- Play game in test mode (episodes don't end when losing a life)
         screen, reward, terminal = gameEnv:step(A[actionIndex], false)
@@ -229,7 +229,7 @@ elseif opt.mode == 'test' then
     -- play game in test mode (episodes don't end when losing a life)
     --screen, reward, terminal = game_env:step(game_actions[action_index], false)
     
-    local actionIndex = agent:act(screen)
+    local actionIndex = agent:act(screen, 'test')
     screen, reward, terminal = gameEnv:step(A[actionIndex], false) -- Flag for test mode
 
     if qt then
@@ -238,35 +238,6 @@ elseif opt.mode == 'test' then
   end
 end
 
---[[
-
--- Reinforcement learning variables
-local s = environment:start()
-local a, sPrime, r
-local isTerminal = false
-while not isTerminal do
-  -- Process the current state to pick an action
-  local output = agent:forward(s)
-  __, a = torch.max(output, 1)
-  a = a[1]
-
-  -- Perform a step in the environment
-  sPrime, r, isTerminal = environment.step(s, a)
-
-  -- Calculate max Q-value from next step
-  local outputPrime = agent:forward(sPrime)
-  local QPrime = torch.max(outputPrime)
-  -- Calculate target Y
-  local Y = r + gamma*QPrime
-  -- Calculate error
-  local err = torch.mul(theta, (Y - output[a]))
-
-  -- TODO: Save experience
-
-  -- Replace s with s'
-  s = sPrime
-end
---]]
 -- Training
 --[[
 local optimConfig = {

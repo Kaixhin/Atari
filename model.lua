@@ -61,6 +61,7 @@ model.createAgent = function(gameEnv, opt)
   local s1 = nil
   local a1 = nil
   
+  -- TODO: If _s1 is terminal then TD error = _r0
   local learnFromTuple = function(_s0, _a0, _r0, _s1, _a1)
     -- Calculate max Q-value from next state
     local QMax = torch.max(net:forward(_s1), 1)[1]
@@ -89,12 +90,12 @@ model.createAgent = function(gameEnv, opt)
   end
 
   -- Performs an action on the environment
-  agent.act = function(self, observation)
+  agent.act = function(self, observation, mode)
     local state = preprocess(observation)
     local aIndex
     
-    -- Choose action by ε-greedy
-    if math.random() < opt.epsilon then 
+    -- Choose action by ε-greedy exploration
+    if math.random() < opt.epsilon or mode == 'test' then 
       aIndex = torch.random(1, _.size(A))
     else
       local __, ind = torch.max(net:forward(state), 1)
