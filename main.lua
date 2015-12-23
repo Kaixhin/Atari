@@ -25,7 +25,9 @@ cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-alpha', 0.00025, 'Learning rate α')
-cmd:option('-epsilon', 1, 'Greediness ε (decreases linearly from 1 to 0.1 over expReplMem steps)') -- TODO: Parameterise decay
+cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
+cmd:option('-epsilonEnd', 0.1, 'Final value of greediness ε')
+cmd:option('-epsilonSteps', 1000000, 'Number of steps to linearly decay epsilonStart to epsilonEnd')
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
 cmd:option('-tdClamp', 1, 'Clamps TD error magnitude')
 -- Training options
@@ -130,9 +132,16 @@ if qt then
 end
 
 if opt.mode == 'train' then
+  -- Create ε decay vector
+  opt.epsilon = torch.linspace(opt.epsilonEnd, opt.epsilonStart, opt.epsilonSteps)
+  opt.epsilon:mul(-1):add(opt.epsilonStart)
+  local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
+  opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
+
   for step = 1, opt.steps do
+    opt.step = step -- Pass step to agent for training
     --local action_index = agent:perceive(reward, screen, terminal)
-    local actionIndex = agent:act(screen, 'train') -- TODO: Add terminal?
+    local actionIndex = agent:observe(screen, 'train') -- TODO: Add terminal?
     if not terminal then
       screen, reward, terminal = gameEnv:step(A[actionIndex], true) -- True flag for training mode
       agent:learn(reward)
@@ -147,89 +156,13 @@ if opt.mode == 'train' then
     if qt then
       image.display({image=screen, win=window})
     end
-
-    --[[
-    if step % opt.prog_freq == 0 then
-        assert(step==agent.numSteps, 'trainer step: ' .. step ..
-                ' & agent.numSteps: ' .. agent.numSteps)
-        print("Steps: ", step)
-        agent:report()
-    end
-    --]]
-
-    --[[
-    if step % opt.eval_freq == 0 and step > opt.learnStart then
-      screen, reward, terminal = gameEnv:newGame()
-
-      total_reward = 0
-      nrewards = 0
-      nepisodes = 0
-      episode_reward = 0
-
-      local eval_time = sys.clock()
-      for estep = 1, opt.eval_steps do
-        --local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
-        local actionIndex = agent:act(screen, 'test')
-
-        -- Play game in test mode (episodes don't end when losing a life)
-        screen, reward, terminal = gameEnv:step(A[actionIndex], false)
-
-        -- record every reward
-        episode_reward = episode_reward + reward
-        if reward ~= 0 then
-          nrewards = nrewards + 1
-        end
-
-        if terminal then
-          total_reward = total_reward + episode_reward
-          episode_reward = 0
-          nepisodes = nepisodes + 1
-          screen, reward, terminal = gameEnv:nextRandomGame()
-        end
-      end
-
-      eval_time = sys.clock() - eval_time
-      start_time = start_time + eval_time
-      agent:compute_validation_statistics()
-      local ind = #reward_history+1
-      total_reward = total_reward/math.max(1, nepisodes)
-
-      if #reward_history == 0 or total_reward > torch.Tensor(reward_history):max() then
-        agent.best_network = agent.network:clone()
-      end
-
-      if agent.v_avg then
-        v_history[ind] = agent.v_avg
-        td_history[ind] = agent.tderr_avg
-        qmax_history[ind] = agent.q_max
-      end
-      print("V", v_history[ind], "TD error", td_history[ind], "Qmax", qmax_history[ind])
-
-      reward_history[ind] = total_reward
-      reward_counts[ind] = nrewards
-      episode_counts[ind] = nepisodes
-
-      time_history[ind+1] = sys.clock() - start_time
-
-      local time_dif = time_history[ind+1] - time_history[ind]
-
-      local training_rate = opt.actrep*opt.eval_freq/time_dif
-    end
-    --]]
-
-    -- TODO: Saving network
   end
 elseif opt.mode == 'test' then
   -- Play one game (episode)
   while not terminal do
     -- if action was chosen randomly, Q-value is 0
     --agent.bestq = 0
-    -- choose the best action
-    --local action_index = agent:perceive(reward, screen, terminal, true, 0.05)
-    -- play game in test mode (episodes don't end when losing a life)
-    --screen, reward, terminal = game_env:step(game_actions[action_index], false)
-    
-    local actionIndex = agent:act(screen, 'test')
+    local actionIndex = agent:osberve(screen, 'test')
     screen, reward, terminal = gameEnv:step(A[actionIndex], false) -- Flag for test mode
 
     if qt then
