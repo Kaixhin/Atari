@@ -108,14 +108,16 @@ if opt.mode == 'train' then
     end
 
     if step % opt.evalFreq then
+      agent:evaluate()
       -- TODO: Perform evaluation
       -- TODO: Save best parameters
+      agent:training()
     end
   end
 
 elseif opt.mode == 'test' then
   -- Set agent (and hence environment steps) to evaluation mode
-  agent:evaluation()
+  agent:evaluate()
 
   -- Play one game (episode)
   while not terminal do
