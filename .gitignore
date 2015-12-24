@@ -40,4 +40,4 @@ luac.out
 *.hex
 
 # ROMs
-roms
+roms/*.bin
