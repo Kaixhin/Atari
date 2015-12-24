@@ -2,7 +2,7 @@
 require 'cutorch'
 local image = require 'image'
 local environment = require 'environment'
-local model = require 'model'
+local agent = require 'agent'
 
 -- Detect QT for image display
 local qt = pcall(require, 'qt')
@@ -63,8 +63,8 @@ cutorch.manualSeedAll(torch.random())
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
 
--- Create agent
-local agent = model.createAgent(gameEnv, opt)
+-- Create DQN agent
+local DQN = agent.create(gameEnv, opt)
 
 -- Start gaming
 local screen, reward, terminal = gameEnv:newGame()
@@ -82,17 +82,17 @@ if opt.mode == 'train' then
   opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
 
   -- Set agent (and hence environment steps) to training mode
-  agent:training()
+  DQN:training()
 
   -- Training loop
   for step = 1, opt.steps do
     opt.step = step -- Pass step to agent for use in training
 
     -- Observe and choose next action
-    local actionIndex = agent:observe(screen)
+    local actionIndex = DQN:observe(screen)
     if not terminal then
       -- Act on environment and learn
-      screen, reward, terminal = agent:act(actionIndex)
+      screen, reward, terminal = DQN:act(actionIndex)
     else
       -- Start a new episode
       if opt.random_starts > 0 then
@@ -108,22 +108,22 @@ if opt.mode == 'train' then
     end
 
     if step % opt.evalFreq then
-      agent:evaluate()
+      DQN:evaluate()
       -- TODO: Perform evaluation
       -- TODO: Save best parameters
-      agent:training()
+      DQN:training()
     end
   end
 
 elseif opt.mode == 'test' then
   -- Set agent (and hence environment steps) to evaluation mode
-  agent:evaluate()
+  DQN:evaluate()
 
   -- Play one game (episode)
   while not terminal do
-    local actionIndex = agent:observe(screen)
+    local actionIndex = DQN:observe(screen)
     -- Act on environment
-    screen, reward, terminal = agent:act(actionIndex)
+    screen, reward, terminal = DQN:act(actionIndex)
 
     if qt then
       image.display({image=screen, win=window})

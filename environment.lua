@@ -18,6 +18,7 @@ environment.init = function(opt)
       type = 'max'
     }
   }
+  -- Return game environment
   return framework.GameEnvironment(options)
 end
 
