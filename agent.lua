@@ -74,7 +74,7 @@ agent.create = function(gameEnv, opt)
     return aIndex
   end
 
-  -- Acts on the environment (and can learn)
+  -- Acts on (and can learn from) the environment
   DQN.act = function(self, aIndex)
     local screen, reward, terminal = gameEnv:step(A[aIndex], self.isTraining)
 
@@ -115,7 +115,7 @@ agent.create = function(gameEnv, opt)
     return screen, reward, terminal
   end
 
-  -- Learns from experience (in batches)
+  -- Learns from experience
   DQN.learn = function(self, states, actions, rewards, transitions, terminals)
     -- Perform argmax action selection using network
     local __, AMax = torch.max(self.net:forward(transitions), 2)

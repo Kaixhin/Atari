@@ -41,7 +41,7 @@ cmd:option('-evalFreq', 1000000, 'Evaluation frequency')
 cmd:option('-evalSize', 500, '# of validation transitions to use')
 -- alewrap options
 cmd:option('-actrep', 4, 'Times to repeat action')
-cmd:option('-random_starts', 30, 'Play action 0 between 1 and random_starts number of times at the start of each training episode')
+cmd:option('-random_starts', 30, 'Play noop action between 1 and random_starts number of times at the start of each training episode')
 -- TODO: Tidy up options/check agent_params
 --cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1,bufferSize=512', 'string of agent parameters')
 local opt = cmd:parse(arg)
@@ -88,7 +88,7 @@ if opt.mode == 'train' then
   for step = 1, opt.steps do
     opt.step = step -- Pass step to agent for use in training
 
-    -- Observe and choose next action
+    -- Observe and choose next action (index)
     local actionIndex = DQN:observe(screen)
     if not terminal then
       -- Act on environment and learn

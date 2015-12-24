@@ -25,7 +25,6 @@ end
 -- Creates a dueling DQN
 model.create = function(A)
   local m = _.size(A) -- Number of discrete actions
-  require 'dpnn'
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()
@@ -79,8 +78,9 @@ model.create = function(A)
   aggregator:add(aggParallel)
   aggregator:add(nn.CAddTable())
 
-  local net = nn.Sequential()
   -- TODO: Work out how to get 4 observations
+  local net = nn.Sequential()
+  -- Convolutional layers
   net:add(cudnn.SpatialConvolution(1, 32, 8, 8, 4, 4))
   net:add(cudnn.ReLU(true))
   net:add(cudnn.SpatialConvolution(32, 64, 4, 4, 2, 2))
@@ -89,8 +89,9 @@ model.create = function(A)
   net:add(cudnn.ReLU(true))
   net:add(nn.View(64*7*7))
   net:add(nn.GradientRescale(1 / math.sqrt(2))) -- Heuristic that mildly increases stability
-  -- Create and join dueling streams
+  -- Create dueling streams
   net:add(streams)
+  -- Join dueling streams
   net:add(aggregator)
   net:cuda()
 
