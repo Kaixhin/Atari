@@ -133,7 +133,13 @@ model.createAgent = function(gameEnv, opt)
   
   -- Outputs an action (index) to perform on the environment
   agent.observe = function(self, observation)
-    local s = preprocess(observation)
+    local s
+    -- Use preprocessed transition if available
+    if state then
+      s = state
+    else
+      s = preprocess(observation)
+    end
     local aIndex
 
     -- Set ε based on training vs. evaluation mode
@@ -165,7 +171,6 @@ model.createAgent = function(gameEnv, opt)
     if self.isTraining then
       -- Store action (index), reward, transition and terminal
       action, reward, transition, terminal = aIndex, rew, preprocess(scr), term
-      -- TODO: Save preprocessed transition safely (perhaps checking terminal?) to save computation
 
       -- Clamp reward for stability
       reward = math.min(reward, -opt.rewardClamp)
@@ -173,7 +178,12 @@ model.createAgent = function(gameEnv, opt)
 
       -- Store in memory
       memory.store(state, action, reward, transition, terminal)
-      state, action, reward, transition, terminal = nil, nil, nil, nil, nil -- TODO: Sanity check to remove later
+      -- Store preprocessed transition as state for performance
+      if not terminal then
+        state = transition
+      else
+        state = nil
+      end
 
       -- Occasionally sample from from memory
       if opt.step % opt.memSampleFreq == 0 and memory.size() >= opt.batchSize then
