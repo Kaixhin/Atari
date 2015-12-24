@@ -138,12 +138,19 @@ model.createAgent = function(gameEnv, opt)
 
   -- Learns from experience (in batches)
   local learn = function(states, actions, rewards, transitions, terminals)
-    -- Calculate max Q-value from next state using target network
-    local QMax = torch.max(targetNet:forward(transitions), 2)
+    -- Perform argmax action selection using network
+    local __, AMax = torch.max(net:forward(transitions), 2)
+    -- Calculate Q-values from next state using target network
+    local QTargets = targetNet:forward(transitions)
+    -- Evaluate Q-values of argmax actions using target network (Double Q-learning)
+    local QMax = torch.CudaTensor(opt.batchSize)
+    for q = 1, opt.batchSize do
+      QMax[q] = QTargets[q][AMax[q][1]]
+    end    
     -- Calculate target Y
-    local Y = torch.add(rewards, torch.mul(QMax, opt.gamma)) -- TODO: Add Double Q calculation
+    local Y = torch.add(rewards, torch.mul(QMax, opt.gamma))
     -- Set target Y to reward if the transition was terminal
-    Y[terminals] = rewards[terminals]
+    Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
 
     -- Get all predicted Q-values from the current state
     local QCurr = net:forward(states)
