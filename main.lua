@@ -19,7 +19,7 @@ cmd:option('-game', 'pong', 'Name of Atari ROM (stored in "roms" directory)')
 -- Train vs. test mode
 cmd:option('-mode', 'train', '"train" or "test" mode')
 -- Experience replay options
-cmd:option('-expReplMem', 1000000, 'Experience replay memory (# of tuples)')
+cmd:option('-memSize', 1000000, 'Experience replay memory size (# of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 -- TODO: Add prioritised experience replay
 -- Reinforcement learning parameters
@@ -30,13 +30,13 @@ cmd:option('-epsilonEnd', 0.1, 'Final value of greediness ε')
 cmd:option('-epsilonSteps', 1000000, 'Number of steps to linearly decay epsilonStart to epsilonEnd')
 cmd:option('-tau', 10000, 'Steps between target net updates τ')
 cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
-cmd:option('-tdClamp', 1, 'Clamps TD error magnitude')
+cmd:option('-tdClamp', 1, 'Clamps TD error δ magnitude')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 50000000, 'Training iterations')
-cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
+--cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- alewrap options
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play action 0 between 1 and random_starts number of times at the start of each training episode')
@@ -80,14 +80,20 @@ if opt.mode == 'train' then
   local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
   opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
 
+  -- Set agent (and hence environment steps) in training mode
+  agent:training()
+
+  -- Training loop
   for step = 1, opt.steps do
-    opt.step = step -- Pass step to agent for training
-    -- TODO: Pass screen, reward, terminal
-    local actionIndex = agent:observe(screen, 'train')
+    opt.step = step -- Pass step to agent for use in training
+
+    -- Observe and choose next action
+    local actionIndex = agent:observe(screen)
     if not terminal then
-      screen, reward, terminal = gameEnv:step(A[actionIndex], true) -- True flag for training mode
-      agent:learn(reward)
+      -- Act on environment and learn
+      screen, reward, terminal = agent:act(actionIndex)
     else
+      -- Start a new episode
       if opt.random_starts > 0 then
         screen, reward, terminal = gameEnv:nextRandomGame()
       else
@@ -95,15 +101,21 @@ if opt.mode == 'train' then
       end
     end
 
+    -- Update display
     if qt then
       image.display({image=screen, win=window})
     end
   end
+
 elseif opt.mode == 'test' then
+  -- Set agent (and hence environment steps) in evaluation mode
+  agent:evaluation()
+
   -- Play one game (episode)
   while not terminal do
-    local actionIndex = agent:observe(screen, 'test')
-    screen, reward, terminal = gameEnv:step(A[actionIndex], false) -- Flag for test mode
+    local actionIndex = agent:observe(screen)
+    -- Act on environment
+    screen, reward, terminal = agent:act(actionIndex)
 
     if qt then
       image.display({image=screen, win=window})

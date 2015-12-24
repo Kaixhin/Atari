@@ -50,16 +50,77 @@ model.createAgent = function(gameEnv, opt)
   -- Model parameters θ
   local theta, dTheta = net:getParameters()
   -- Experience replay memory
-  local memory = experience.createMemory(opt.expReplMem, {1, 84, 84})
-  -- SARSA
-  local s0 = nil
-  local a0 = nil
-  local r0 = nil
-  local s1 = nil
-  local a1 = nil
+  local memory = experience.createMemory(opt.memSize, {1, 84, 84})
+  -- Training mode
+  agent.isTraining = false
+  -- Experience variables for learning
+  local state -- Updated on observe
+  local action, reward, transition, terminal -- Updated on act
+
+  -- Sets training mode
+  agent.training = function(self)
+    self.isTraining = true
+  end
+
+  -- Sets evaluation mode
+  agent.evaluate = function(self)
+    self.isTraining = false
+  end
   
+  -- Outputs an action (index) to perform on the environment
+  agent.observe = function(self, observation)
+    local s = preprocess(observation)
+    local aIndex
+    
+    -- Choose action by ε-greedy exploration
+    if not self.trainingMode or math.random() < opt.epsilon[opt.step] then 
+      aIndex = torch.random(1, _.size(A))
+    else
+      local __, ind = torch.max(net:forward(s), 1)
+      aIndex = ind[1]
+    end
+
+    -- If training
+    if self.trainingMode then
+      -- Store state
+      state = s
+    end
+
+    return aIndex
+  end
+
+  -- Acts on the environment (and can learn)
+  agent.act = function(self, aIndex)
+    local scr, rew, term = gameEnv:step(A[aIndex], self.trainingMode)
+
+    -- If training
+    if self.trainingMode then
+      -- Store action (index), reward, transition and terminal
+      action, reward, transition, terminal = aIndex, rew, scr, term
+
+      -- Clamp reward for stability
+      reward = math.min(reward, -opt.rewardClamp)
+      reward = math.max(reward, opt.rewardClamp)
+
+      -- Store in memory
+      memory.store(state, action, reward, transition, terminal)
+      state, action, reward, transition, terminal = nil, nil, nil, nil, nil -- TODO: Sanity check to remove later
+
+      -- Occasionally sample from and learn from experience replay memory
+      if opt.step % opt.memSampleFreq == 0 and memory.size() >= opt.batchSize then
+        -- Sample experience uniformly
+        local indices = torch.randperm(memory.size()):long()
+        indices = indices[{{1, opt.batchSize}}]
+        -- Learn from experience tuples
+        learnFromTuples(memory.retrieve(indices))
+      end
+    end
+
+    return scr, rew, term
+  end
+
   -- TODO: If transition is terminal then TD error = reward
-  local learnFromTuples = function(states, actions, rewards, transitions)
+  local learnFromTuples = function(states, actions, rewards, transitions, terminals)
     -- Calculate max Q-value from next state
     local QMax = torch.max(net:forward(transitions), 2)
     -- Calculate target Y
@@ -93,51 +154,6 @@ model.createAgent = function(gameEnv, opt)
     -- Update parameters
     --theta:add(torch.mul(dTheta, opt.alpha))
     -- TODO: Too much instability -> NaNs
-  end
-
-  -- Outputs an action (index) to perform on the environment
-  agent.observe = function(self, observation, mode)
-    local state = preprocess(observation)
-    local aIndex
-    
-    -- Choose action by ε-greedy exploration
-    if mode == 'test' or math.random() < opt.epsilon[opt.step] then 
-      aIndex = torch.random(1, _.size(A))
-    else
-      local __, ind = torch.max(net:forward(state), 1)
-      aIndex = ind[1]
-    end
-
-    -- SARSA update
-    s0 = s1
-    a0 = a1
-    s1 = state
-    a1 = aIndex
-
-    return aIndex
-  end
-
-  -- Perform a learning step from the latest reward
-  agent.learn = function(self, reward)
-    -- Clamp reward for stability
-    reward = math.min(reward, -opt.rewardClamp)
-    reward = math.max(reward, opt.rewardClamp)
-
-    if a0 ~= nil and opt.alpha > 0 then
-      -- Store experience
-      memory.store(s0, a0, r0, s1)
-
-      -- Occasionally sample from replay memory
-      if opt.step % opt.memSampleFreq == 0 and memory.size() >= opt.batchSize then
-        -- Sample uniformly
-        local indices = torch.randperm(memory.size()):long()
-        indices = indices[{{1, opt.batchSize}}]
-        -- Learn
-        learnFromTuples(memory.retrieve(indices))
-      end
-    end
-
-    r0 = reward
   end
 
   return agent
