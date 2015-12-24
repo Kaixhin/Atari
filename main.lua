@@ -1,7 +1,6 @@
 -- Parameters taken from Double DQN specs
 require 'cutorch'
 local image = require 'image'
-local optim = require 'optim'
 local environment = require 'environment'
 local model = require 'model'
 
@@ -122,12 +121,3 @@ elseif opt.mode == 'test' then
     end
   end
 end
-
--- Training
---[[
-local optimConfig = {
-  learningRate = alpha,
-  alpha = momentum
-}
-optim[optimiser](func, x, optimConfig)
---]]
