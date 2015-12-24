@@ -1,7 +1,7 @@
 ROMs
 ====
 
-Atari 2600 game ROM (.bin) files should be placed in this directory with the appropriate filenames.
+Atari 2600 binary ROM files should be placed in this directory with the appropriate filenames.
 
 Supported Games
 ---------------
