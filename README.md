@@ -10,7 +10,7 @@ Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The m
 
 - **Use 4 frames (instead of 1)...**
 - Add networking saving and loading
-- Add evaluation scripts with [DDQN normalised scores](http://arxiv.org/pdf/1509.06461v3.pdf)
+- Add evaluation scripts
 - Use "sum tree" binary heap for prioritised experience replay
 - Add optimiser parameter processor
 
