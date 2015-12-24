@@ -75,7 +75,7 @@ end
 if opt.mode == 'train' then
   -- Create ε decay vector
   opt.epsilon = torch.linspace(opt.epsilonEnd, opt.epsilonStart, opt.epsilonSteps)
-  opt.epsilon:mul(-1):add(opt.epsilonStart)
+  opt.epsilon:mul(-1):add(opt.epsilonStart) -- TODO: Check if annealing has steps or goes till end of training
   local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
   opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
 

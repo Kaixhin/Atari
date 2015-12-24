@@ -23,8 +23,8 @@ local preprocess = function(observation)
   return input
 end
 
--- Creates a DQN model
-local createModel = function(A)
+-- Creates a DQN
+local createNetwork = function(A)
   local net = nn.Sequential()
   -- TODO: Work out how to get 4 observations
   net:add(cudnn.SpatialConvolution(1, 32, 8, 8, 4, 4))
@@ -47,8 +47,9 @@ model.createAgent = function(gameEnv, opt)
   local agent = {}
   local A = gameEnv:getActions()
   -- DQN
-  local net = createModel(A)
-  -- Model parameters θ and gradients dθ
+  local net = createNetwork(A)
+  local targetNet = net:clone() -- Create deep copy for target network
+  -- Network parameters θ and gradients dθ
   local theta, dTheta = net:getParameters()
   -- Experience replay memory
   local memory = experience.createMemory(opt.memSize, {1, 84, 84})
@@ -59,7 +60,7 @@ model.createAgent = function(gameEnv, opt)
   local action, reward, transition, terminal -- Updated on act
   -- Optimiser parameters
   local optimParams = {
-    learningRate = opt.alpha,
+    learningRate = opt.alpha, -- TODO: Check learning rate annealing parameters
     alpha = opt.momentum -- TODO: Select proper momentum for optimisers other than RMSprop
   }
 
@@ -124,6 +125,12 @@ model.createAgent = function(gameEnv, opt)
         -- Optimise (learn) from experience tuples
         self:optimise(memory.retrieve(indices))
       end
+
+      -- Update target network every τ steps
+      if opt.step % opt.tau == 0 then
+        local targetTheta = targetNet:getParameters()
+        targetTheta:copy(theta) -- Deep copy network parameters
+      end
     end
 
     return scr, rew, term
@@ -131,10 +138,10 @@ model.createAgent = function(gameEnv, opt)
 
   -- Learns from experience (in batches)
   local learn = function(states, actions, rewards, transitions, terminals)
-    -- Calculate max Q-value from next state
-    local QMax = torch.max(net:forward(transitions), 2)
+    -- Calculate max Q-value from next state using target network
+    local QMax = torch.max(targetNet:forward(transitions), 2)
     -- Calculate target Y
-    local Y = torch.add(rewards, torch.mul(QMax, opt.gamma)) -- TODO: Add target network and Double Q calculation
+    local Y = torch.add(rewards, torch.mul(QMax, opt.gamma)) -- TODO: Add Double Q calculation
     -- Set target Y to reward if the transition was terminal
     Y[terminals] = rewards[terminals]
 
@@ -146,7 +153,7 @@ model.createAgent = function(gameEnv, opt)
       QTaken[q] = QCurr[q][actions[q]]
     end
 
-    -- Calculate TD errors δ
+    -- Calculate TD errors δ (to minimise; Y - QTaken would require gradient ascent)
     local tdErr = QTaken - Y
     -- Clamp TD errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
@@ -169,7 +176,7 @@ model.createAgent = function(gameEnv, opt)
     return loss, dTheta
   end
 
-  -- "Optimises" the model parameters θ
+  -- "Optimises" the network parameters θ
   agent.optimise = function(self, states, actions, rewards, transitions, terminals)
     -- Create function to evaluate given parameters x
     local feval = function(x)
