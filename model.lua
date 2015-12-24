@@ -2,6 +2,7 @@ local _ = require 'moses'
 local nn = require 'nn'
 require 'cunn'
 local cudnn = require 'cudnn'
+require 'GradientRescale'
 local image = require 'image'
 local optim = require 'optim'
 local experience = require 'experience'
@@ -23,8 +24,63 @@ local preprocess = function(observation)
   return input
 end
 
--- Creates a DQN
+-- Creates a dueling DQN
 local createNetwork = function(A)
+  local m = _.size(A) -- Number of discrete actions
+  require 'dpnn'
+
+  -- Value approximator V^(s)
+  local valStream = nn.Sequential()
+  valStream:add(nn.Linear(64*7*7, 512))
+  valStream:add(cudnn.ReLU(true))
+  valStream:add(nn.Linear(512, 1)) -- Predicts value for state
+
+  -- Advantage approximator A^(s, a)
+  local advStream = nn.Sequential()
+  advStream:add(nn.Linear(64*7*7, 512))
+  advStream:add(cudnn.ReLU(true))
+  advStream:add(nn.Linear(512, m)) -- Predicts action-conditional advantage
+
+  -- Streams container
+  local streams = nn.ConcatTable()
+  streams:add(valStream)
+  streams:add(advStream)
+  
+  -- Aggregator module
+  local aggregator = nn.Sequential()
+  local aggParallel = nn.ParallelTable()
+  -- Value duplicator (for each action)
+  local valDuplicator = nn.Sequential()
+  local valConcat = nn.ConcatTable()
+  for a = 1, m do
+    valConcat:add(nn.Identity())
+  end
+  valDuplicator:add(valConcat)
+  valDuplicator:add(nn.JoinTable(1, 1))
+  -- Add value duplicator
+  aggParallel:add(valDuplicator)
+  -- Advantage duplicator (for calculating and subtracting mean)
+  local advDuplicator = nn.Sequential()
+  local advConcat = nn.ConcatTable()
+  advConcat:add(nn.Identity())
+  -- Advantage mean duplicator
+  local advMeanDuplicator = nn.Sequential()
+  advMeanDuplicator:add(nn.Mean(1, 1))
+  local advMeanConcat = nn.ConcatTable()
+  for a = 1, m do
+    advMeanConcat:add(nn.Identity())
+  end
+  advMeanDuplicator:add(advMeanConcat)
+  advMeanDuplicator:add(nn.JoinTable(1, 1))
+  advConcat:add(advMeanDuplicator)
+  advDuplicator:add(advConcat)
+  -- Subtract mean from advantage values
+  advDuplicator:add(nn.CSubTable())
+  aggParallel:add(advDuplicator)
+  -- Calculate Q^ from V^ and A^
+  aggregator:add(aggParallel)
+  aggregator:add(nn.CAddTable())
+
   local net = nn.Sequential()
   -- TODO: Work out how to get 4 observations
   net:add(cudnn.SpatialConvolution(1, 32, 8, 8, 4, 4))
@@ -34,9 +90,10 @@ local createNetwork = function(A)
   net:add(cudnn.SpatialConvolution(64, 64, 3, 3, 1, 1))
   net:add(cudnn.ReLU(true))
   net:add(nn.View(64*7*7))
-  net:add(nn.Linear(64*7*7, 512))
-  net:add(cudnn.ReLU(true))
-  net:add(nn.Linear(512, _.size(A)))
+  net:add(nn.GradientRescale(1 / math.sqrt(2))) -- Heuristic that mildly increases stability
+  -- Create and join dueling streams
+  net:add(streams)
+  net:add(aggregator)
   net:cuda()
 
   return net
@@ -79,19 +136,20 @@ model.createAgent = function(gameEnv, opt)
     local s = preprocess(observation)
     local aIndex
 
+    -- Set ε based on training vs. evaluation mode
+    local epsilon = 0.001
     if self.isTraining then
-      -- If training, choose action by ε-greedy exploration
-      if math.random() < opt.epsilon[opt.step] then 
-        aIndex = torch.random(1, _.size(A))
-      else
-        local __, ind = torch.max(net:forward(s), 1)
-        aIndex = ind[1]
-      end
-
+      -- Use annealing ε
+      epsilon = opt.epsilon[opt.step] 
+      
       -- Store state
       state = s
+    end
+
+    -- Choose action by ε-greedy exploration
+    if math.random() < epsilon then 
+      aIndex = torch.random(1, _.size(A))
     else
-      -- If not training, choose action greedily
       local __, ind = torch.max(net:forward(s), 1)
       aIndex = ind[1]
     end
@@ -176,6 +234,8 @@ model.createAgent = function(gameEnv, opt)
     dTheta:zero()
     -- Backpropagate gradients (network modifies internally)
     net:backward(states, QCurr)
+    -- Clip the norm of the gradients
+    net:gradParamClip(10)
     
     -- Calculate squared error loss (for optimiser)
     local loss = torch.mean(tdErr:pow(2))
