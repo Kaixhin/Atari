@@ -4,7 +4,7 @@ require 'cutorch'
 local experience = {}
 
 -- Creates experience replay memory
-experience.createMemory = function(length, stateSize)
+experience.create = function(length, stateSize)
   local memory = {}
   local stateSizes = torch.LongStorage(_.append({length}, stateSize)) -- Calculate state/transition storage size
   -- Allocate memory for experience

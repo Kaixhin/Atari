@@ -10,18 +10,20 @@ local agent = {}
 agent.create = function(gameEnv, opt)
   local DQN = {}
   local A = gameEnv:getActions()
-  -- DQN
-  local net = model.create(A)
-  local targetNet = net:clone() -- Create deep copy for target network
+  local m = _.size(A)
+  -- Actor and target networks
+  DQN.net = model.create(A)
+  DQN.targetNet = DQN.net:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
-  local theta, dTheta = net:getParameters()
+  local theta, dTheta = DQN.net:getParameters()
   -- Experience replay memory
-  local memory = experience.createMemory(opt.memSize, {1, 84, 84})
+  DQN.memory = experience.create(opt.memSize, {1, 84, 84})
   -- Training mode
   DQN.isTraining = false
-  -- Experience variables for learning
-  local state -- Updated on observe
-  local action, reward, transition, terminal -- Updated on act
+  -- Learning variable updated on observe()
+  DQN.state = nil
+  -- Learning variables updated on act()
+  DQN.action, DQN.reward, DQN.transition, DQN.terminal = nil, nil, nil, nil
   -- Optimiser parameters
   local optimParams = {
     learningRate = opt.alpha, -- TODO: Check learning rate annealing parameters
@@ -36,16 +38,18 @@ agent.create = function(gameEnv, opt)
   -- Sets evaluation mode
   DQN.evaluate = function(self)
     self.isTraining = false
+    -- Reset learning variables
+    self.state, self.action, self.reward, self.transition, self.terminal = nil, nil, nil, nil, nil
   end
   
   -- Outputs an action (index) to perform on the environment
   DQN.observe = function(self, observation)
-    local s
+    local state
     -- Use preprocessed transition if available
-    if state then
-      s = state
+    if self.state then
+      state = self.state
     else
-      s = model.preprocess(observation)
+      state = model.preprocess(observation)
     end
     local aIndex
 
@@ -56,14 +60,14 @@ agent.create = function(gameEnv, opt)
       epsilon = opt.epsilon[opt.step] 
       
       -- Store state
-      state = s
+      self.state = state
     end
 
     -- Choose action by ε-greedy exploration
     if math.random() < epsilon then 
-      aIndex = torch.random(1, _.size(A))
+      aIndex = torch.random(1, m)
     else
-      local __, ind = torch.max(net:forward(s), 1)
+      local __, ind = torch.max(self.net:forward(state), 1)
       aIndex = ind[1]
     end
 
@@ -72,51 +76,51 @@ agent.create = function(gameEnv, opt)
 
   -- Acts on the environment (and can learn)
   DQN.act = function(self, aIndex)
-    local scr, rew, term = gameEnv:step(A[aIndex], self.isTraining)
+    local screen, reward, terminal = gameEnv:step(A[aIndex], self.isTraining)
 
     -- If training
     if self.isTraining then
       -- Store action (index), reward, transition and terminal
-      action, reward, transition, terminal = aIndex, rew, model.preprocess(scr), term
+      self.action, self.reward, self.transition, self.terminal = aIndex, reward, model.preprocess(screen), terminal
 
       -- Clamp reward for stability
-      reward = math.min(reward, -opt.rewardClamp)
-      reward = math.max(reward, opt.rewardClamp)
+      self.reward = math.min(self.reward, -opt.rewardClamp)
+      self.reward = math.max(self.reward, opt.rewardClamp)
 
       -- Store in memory
-      memory.store(state, action, reward, transition, terminal)
+      self.memory.store(self.state, self.action, self.reward, self.transition, self.terminal)
       -- Store preprocessed transition as state for performance
       if not terminal then
-        state = transition
+        self.state = self.transition
       else
-        state = nil
+        self.state = nil
       end
 
       -- Occasionally sample from from memory
-      if opt.step % opt.memSampleFreq == 0 and memory.size() >= opt.batchSize then
+      if opt.step % opt.memSampleFreq == 0 and self.memory.size() >= opt.batchSize then
         -- Sample experience uniformly
-        local indices = torch.randperm(memory.size()):long()
+        local indices = torch.randperm(self.memory.size()):long()
         indices = indices[{{1, opt.batchSize}}]
         -- Optimise (learn) from experience tuples
-        self:optimise(memory.retrieve(indices))
+        self:optimise(self.memory.retrieve(indices))
       end
 
       -- Update target network every τ steps
       if opt.step % opt.tau == 0 then
-        local targetTheta = targetNet:getParameters()
+        local targetTheta = self.targetNet:getParameters()
         targetTheta:copy(theta) -- Deep copy network parameters
       end
     end
 
-    return scr, rew, term
+    return screen, reward, terminal
   end
 
   -- Learns from experience (in batches)
-  local learn = function(states, actions, rewards, transitions, terminals)
+  DQN.learn = function(self, states, actions, rewards, transitions, terminals)
     -- Perform argmax action selection using network
-    local __, AMax = torch.max(net:forward(transitions), 2)
+    local __, AMax = torch.max(self.net:forward(transitions), 2)
     -- Calculate Q-values from next state using target network
-    local QTargets = targetNet:forward(transitions)
+    local QTargets = self.targetNet:forward(transitions)
     -- Evaluate Q-values of argmax actions using target network (Double Q-learning)
     local QMax = torch.CudaTensor(opt.batchSize)
     for q = 1, opt.batchSize do
@@ -128,7 +132,7 @@ agent.create = function(gameEnv, opt)
     Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
 
     -- Get all predicted Q-values from the current state
-    local QCurr = net:forward(states)
+    local QCurr = self.net:forward(states)
     local QTaken = torch.CudaTensor(opt.batchSize)
     -- Get prediction of current Q-values with given actions
     for q = 1, opt.batchSize do
@@ -150,9 +154,9 @@ agent.create = function(gameEnv, opt)
     -- Reset gradients dθ
     dTheta:zero()
     -- Backpropagate gradients (network modifies internally)
-    net:backward(states, QCurr)
+    self.net:backward(states, QCurr)
     -- Clip the norm of the gradients
-    net:gradParamClip(10)
+    self.net:gradParamClip(10)
     
     -- Calculate squared error loss (for optimiser)
     local loss = torch.mean(tdErr:pow(2))
@@ -164,7 +168,7 @@ agent.create = function(gameEnv, opt)
   DQN.optimise = function(self, states, actions, rewards, transitions, terminals)
     -- Create function to evaluate given parameters x
     local feval = function(x)
-      return learn(states, actions, rewards, transitions, terminals)
+      return self:learn(states, actions, rewards, transitions, terminals)
     end
     
     local __, loss = optim[opt.optimiser](feval, theta, optimParams)
