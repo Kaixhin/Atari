@@ -1,7 +1,7 @@
-Atari
-=====
+# Atari ![Space Invader](http://www.rw-designer.com/cursor-view/74522.png)
 
-**Work In Progress**  
+**Work In Progress**
+
 Dueling Double DQN with (proportional) prioritised experience replay for the Arcade Learning Environment.
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
@@ -14,8 +14,7 @@ Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The m
 - Use "sum tree" binary heap for prioritised experience replay
 - Add optimiser parameter processor
 
-Requirements
-------------
+## Requirements
 
 Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requires the following extra packages:
 
