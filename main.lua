@@ -16,7 +16,7 @@ cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
 -- Game
 cmd:option('-game', 'pong', 'Name of Atari ROM (stored in "roms" directory)')
 -- Train vs. test mode
-cmd:option('-mode', 'train', '"train" or "test" mode')
+cmd:option('-mode', 'train', '"train" or "eval" mode')
 -- Experience replay options
 cmd:option('-memSize', 1000000, 'Experience replay memory size (# of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
@@ -115,7 +115,7 @@ if opt.mode == 'train' then
     end
   end
 
-elseif opt.mode == 'test' then
+elseif opt.mode == 'eval' then
   -- Set agent (and hence environment steps) to evaluation mode
   DQN:evaluate()
 

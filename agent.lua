@@ -1,5 +1,6 @@
 local _ = require 'moses'
 require 'cutorch'
+require 'dpnn' -- for :gradParamClip()
 local optim = require 'optim'
 local model = require 'model'
 local experience = require 'experience'
@@ -17,7 +18,7 @@ agent.create = function(gameEnv, opt)
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.net:getParameters()
   -- Experience replay memory
-  DQN.memory = experience.create(opt.memSize, {1, 84, 84})
+  DQN.memory = experience.create({1, 84, 84}, opt)
   -- Training mode
   DQN.isTraining = false
   -- Learning variable updated on observe()
@@ -88,7 +89,7 @@ agent.create = function(gameEnv, opt)
       self.reward = math.max(self.reward, opt.rewardClamp)
 
       -- Store in memory
-      self.memory.store(self.state, self.action, self.reward, self.transition, self.terminal)
+      self.memory:store(self.state, self.action, self.reward, self.transition, self.terminal)
       -- Store preprocessed transition as state for performance
       if not terminal then
         self.state = self.transition
@@ -97,12 +98,11 @@ agent.create = function(gameEnv, opt)
       end
 
       -- Occasionally sample from from memory
-      if opt.step % opt.memSampleFreq == 0 and self.memory.size() >= opt.batchSize then
-        -- Sample experience uniformly
-        local indices = torch.randperm(self.memory.size()):long()
-        indices = indices[{{1, opt.batchSize}}]
+      if opt.step % opt.memSampleFreq == 0 and self.memory:size() >= opt.batchSize then
+        -- Sample with proportional prioritised sampling
+        local indices = self.memory:prioritySample(opt.batchSize)
         -- Optimise (learn) from experience tuples
-        self:optimise(self.memory.retrieve(indices))
+        self:optimise(indices)
       end
 
       -- Update target network every τ steps
@@ -116,7 +116,10 @@ agent.create = function(gameEnv, opt)
   end
 
   -- Learns from experience
-  DQN.learn = function(self, states, actions, rewards, transitions, terminals)
+  DQN.learn = function(self, indices)
+    -- Retrieve experience tuples
+    local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
+
     -- Perform argmax action selection using network
     local __, AMax = torch.max(self.net:forward(transitions), 2)
     -- Calculate Q-values from next state using target network
@@ -143,6 +146,8 @@ agent.create = function(gameEnv, opt)
     local tdErr = QTaken - Y
     -- Clamp TD errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
+    -- Store magnitude of TD errors δ as priorities
+    self.memory:updatePriorities(indices, torch.abs(tdErr))
     
     -- Zero QCurr outputs (no error)
     QCurr:zero()
@@ -165,10 +170,10 @@ agent.create = function(gameEnv, opt)
   end
 
   -- "Optimises" the network parameters θ
-  DQN.optimise = function(self, states, actions, rewards, transitions, terminals)
+  DQN.optimise = function(self, indices)
     -- Create function to evaluate given parameters x
     local feval = function(x)
-      return self:learn(states, actions, rewards, transitions, terminals)
+      return self:learn(indices)
     end
     
     local __, loss = optim[opt.optimiser](feval, theta, optimParams)
