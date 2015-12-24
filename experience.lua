@@ -16,7 +16,7 @@ experience.create = function(stateSize, opt)
   -- Internal pointer
   memory.nextIndex = 1
   memory.isFull = false
-  -- TD error δ-based priorities
+  -- TD-error δ-based priorities
   memory.priorities = torch.Tensor(opt.memSize)
   local smallConst = 1e-9
   memory.maxPriority = opt.tdClamp -- Should prioritise sampling experience that has not been learnt from
@@ -76,15 +76,22 @@ experience.create = function(stateSize, opt)
     end)
   end
 
-  -- Returns indices based on (stochastic) proportional prioritised sampling
+  -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
   memory.prioritySample = function(self, sampleSize)
-    local size = self:size()
-    local alpha = 0
-    local expPriorities = torch.pow(self.priorities[{{1, size}}], alpha)
+    local N = self:size()
+
+    -- Calculate sampling probability distribution P
+    local expPriorities = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
     local Z = torch.sum(expPriorities) -- Normalisation constant
-    local P = expPriorities:div(Z) -- Sampling probability distribution
-    pdfToCdf(P) -- Convert to cumulative distribution
-    local indices = torch.sort(torch.Tensor(sampleSize):uniform()) -- Generate uniform numbers for inversion sampling
+    local P = expPriorities:div(Z)
+
+    -- Calculate importance-sampling weights w
+    local w = torch.pow(torch.mul(P, N), -opt.beta[opt.step]) -- Use importance-sampling exponent β
+    w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
+
+    -- Create a cumulative distribution for inverse transform sampling
+    pdfToCdf(P) -- Convert distribution
+    local indices = torch.sort(torch.Tensor(sampleSize):uniform()) -- Generate uniform numbers for sampling
     -- Perform linear search to sample
     local minIndex = 1
     for i = 1, sampleSize do
@@ -93,8 +100,9 @@ experience.create = function(stateSize, opt)
       end
       indices[i] = minIndex -- Get sampled index
     end
+    indices = indices:long() -- Convert to LongTensor for indexing
 
-    return indices:long()
+    return indices, w:index(1, indices)
   end
 
   return memory

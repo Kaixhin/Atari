@@ -20,16 +20,17 @@ cmd:option('-mode', 'train', '"train" or "eval" mode')
 -- Experience replay options
 cmd:option('-memSize', 1000000, 'Experience replay memory size (# of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
--- TODO: Add prioritised experience replay
+cmd:option('-alpha', 1, 'Prioritised experience replay exponent α')
+cmd:option('-betaZero', 1, 'Initial value of importance-sampling exponent β')
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
-cmd:option('-alpha', 0.00025, 'Learning rate α') -- TODO: Lower learning rate as per dueling paper
+cmd:option('-eta', 0.00007, 'Learning rate η') -- Accounts for prioritied experience sampling but not duel
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε')
 cmd:option('-epsilonSteps', 1000000, 'Number of steps to linearly decay epsilonStart to epsilonEnd')
 cmd:option('-tau', 30000, 'Steps between target net updates τ')
 cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
-cmd:option('-tdClamp', 1, 'Clamps TD error δ magnitude')
+cmd:option('-tdClamp', 1, 'Clamps TD-error δ magnitude')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
@@ -80,6 +81,8 @@ if opt.mode == 'train' then
   opt.epsilon:mul(-1):add(opt.epsilonStart)
   local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
   opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
+  -- Create β growth vector
+  opt.beta = torch.linspace(opt.betaZero, 1, opt.steps)
 
   -- Set agent (and hence environment steps) to training mode
   DQN:training()

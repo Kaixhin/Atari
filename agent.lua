@@ -27,7 +27,7 @@ agent.create = function(gameEnv, opt)
   DQN.action, DQN.reward, DQN.transition, DQN.terminal = nil, nil, nil, nil
   -- Optimiser parameters
   local optimParams = {
-    learningRate = opt.alpha, -- TODO: Check learning rate annealing parameters
+    learningRate = opt.eta, -- TODO: Check learning rate annealing parameters
     alpha = opt.momentum -- TODO: Select proper momentum for optimisers other than RMSprop
   }
 
@@ -100,9 +100,9 @@ agent.create = function(gameEnv, opt)
       -- Occasionally sample from from memory
       if opt.step % opt.memSampleFreq == 0 and self.memory:size() >= opt.batchSize then
         -- Sample with proportional prioritised sampling
-        local indices = self.memory:prioritySample(opt.batchSize)
+        local indices, ISWeights = self.memory:prioritySample(opt.batchSize)
         -- Optimise (learn) from experience tuples
-        self:optimise(indices)
+        self:optimise(indices, ISWeights)
       end
 
       -- Update target network every τ steps
@@ -116,7 +116,7 @@ agent.create = function(gameEnv, opt)
   end
 
   -- Learns from experience
-  DQN.learn = function(self, indices)
+  DQN.learn = function(self, indices, ISWeights)
     -- Retrieve experience tuples
     local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
 
@@ -142,18 +142,18 @@ agent.create = function(gameEnv, opt)
       QTaken[q] = QCurr[q][actions[q]]
     end
 
-    -- Calculate TD errors δ (to minimise; Y - QTaken would require gradient ascent)
+    -- Calculate TD-errors δ (to minimise; Y - QTaken would require gradient ascent)
     local tdErr = QTaken - Y
-    -- Clamp TD errors δ (approximates Huber loss)
+    -- Clamp TD-errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
-    -- Store magnitude of TD errors δ as priorities
+    -- Store magnitude of TD-errors δ as priorities
     self.memory:updatePriorities(indices, torch.abs(tdErr))
     
     -- Zero QCurr outputs (no error)
     QCurr:zero()
-    -- Set TD errors δ with given actions
+    -- Set TD-errors δ with given actions
     for q = 1, opt.batchSize do
-      QCurr[q][actions[q]] = tdErr[q]
+      QCurr[q][actions[q]] = ISWeights[q] * tdErr[q] -- Correct prioritisation bias with importance-sampling weights
     end
 
     -- Reset gradients dθ
@@ -170,10 +170,10 @@ agent.create = function(gameEnv, opt)
   end
 
   -- "Optimises" the network parameters θ
-  DQN.optimise = function(self, indices)
+  DQN.optimise = function(self, indices, ISWeights)
     -- Create function to evaluate given parameters x
     local feval = function(x)
-      return self:learn(indices)
+      return self:learn(indices, ISWeights)
     end
     
     local __, loss = optim[opt.optimiser](feval, theta, optimParams)
