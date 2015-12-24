@@ -1,5 +1,4 @@
 -- Parameters taken from (tuned) Double DQN paper: http://arxiv.org/pdf/1509.06461.pdf
-require 'cutorch'
 local image = require 'image'
 local environment = require 'environment'
 local agent = require 'agent'
@@ -58,8 +57,11 @@ torch.setdefaulttensortype(opt.tensorType)
 math.randomseed(opt.seed)
 torch.manualSeed(math.random(1, 10000))
 -- GPU setup
-cutorch.setDevice(opt.gpu)
-cutorch.manualSeedAll(torch.random())
+if opt.gpu > 0 then
+  require 'cutorch'
+  cutorch.setDevice(opt.gpu)
+  cutorch.manualSeedAll(torch.random())
+end
 
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)

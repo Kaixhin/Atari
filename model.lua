@@ -1,15 +1,16 @@
 local _ = require 'moses'
 local nn = require 'nn'
-require 'cunn'
-local cudnn = require 'cudnn'
 require 'GradientRescale'
 local image = require 'image'
 
 local model = {}
 
 -- Processes the full screen for DQN input
-model.preprocess = function(observation)
-  local input = torch.CudaTensor(observation:size(1), 1, 84, 84)
+model.preprocess = function(observation, opt)
+  local input =torch.Tensor(observation:size(1), 1, 84, 84)
+  if opt.gpu > 0 then
+    input = input:cuda()
+  end
 
   -- Loop over received frames
   for f = 1, observation:size(1) do
@@ -22,20 +23,43 @@ model.preprocess = function(observation)
   return input
 end
 
+-- Adds a cuDNN module if available (waiting on https://github.com/soumith/cudnn.torch/pull/76)
+local toCuDNN = function(mod, ...)
+  if cudnn then
+    if mod == 'relu' then
+      return cudnn.ReLU(true)
+    elseif mod == 'conv' then
+      return cudnn.SpatialConvolution(...)
+    end
+  else
+    if mod == 'relu' then
+      return nn.ReLU(true)
+    elseif mod == 'conv' then
+      return nn.SpatialConvolution(...)
+    end
+  end
+end
+
 -- Creates a dueling DQN
-model.create = function(A)
+model.create = function(A, opt)
+  -- Use cuDNN if available
+  pcall(require, 'cudnn')
+  if opt.gpu == 0 then
+    cudnn = nil
+  end
+
   local m = _.size(A) -- Number of discrete actions
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()
   valStream:add(nn.Linear(64*7*7, 512))
-  valStream:add(cudnn.ReLU(true))
+  valStream:add(toCuDNN('relu'))
   valStream:add(nn.Linear(512, 1)) -- Predicts value for state
 
   -- Advantage approximator A^(s, a)
   local advStream = nn.Sequential()
   advStream:add(nn.Linear(64*7*7, 512))
-  advStream:add(cudnn.ReLU(true))
+  advStream:add(toCuDNN('relu'))
   advStream:add(nn.Linear(512, m)) -- Predicts action-conditional advantage
 
   -- Streams container
@@ -81,19 +105,23 @@ model.create = function(A)
   -- TODO: Work out how to get 4 observations
   local net = nn.Sequential()
   -- Convolutional layers
-  net:add(cudnn.SpatialConvolution(1, 32, 8, 8, 4, 4))
-  net:add(cudnn.ReLU(true))
-  net:add(cudnn.SpatialConvolution(32, 64, 4, 4, 2, 2))
-  net:add(cudnn.ReLU(true))
-  net:add(cudnn.SpatialConvolution(64, 64, 3, 3, 1, 1))
-  net:add(cudnn.ReLU(true))
+  net:add(toCuDNN('conv', 1, 32, 8, 8, 4, 4))
+  net:add(toCuDNN('relu'))
+  net:add(toCuDNN('conv', 32, 64, 4, 4, 2, 2))
+  net:add(toCuDNN('relu'))
+  net:add(toCuDNN('conv', 64, 64, 3, 3, 1, 1))
+  net:add(toCuDNN('relu'))
   net:add(nn.View(64*7*7))
   net:add(nn.GradientRescale(1 / math.sqrt(2))) -- Heuristic that mildly increases stability
   -- Create dueling streams
   net:add(streams)
   -- Join dueling streams
   net:add(aggregator)
-  net:cuda()
+
+  if opt.gpu > 0 then
+    require 'cunn'
+    net:cuda()
+  end
 
   return net
 end

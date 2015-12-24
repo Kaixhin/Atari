@@ -1,5 +1,4 @@
 local _ = require 'moses'
-require 'cutorch'
 require 'dpnn' -- for :gradParamClip()
 local optim = require 'optim'
 local model = require 'model'
@@ -13,7 +12,7 @@ agent.create = function(gameEnv, opt)
   local A = gameEnv:getActions()
   local m = _.size(A)
   -- Actor and target networks
-  DQN.net = model.create(A)
+  DQN.net = model.create(A, opt)
   DQN.targetNet = DQN.net:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.net:getParameters()
@@ -50,7 +49,7 @@ agent.create = function(gameEnv, opt)
     if self.state then
       state = self.state
     else
-      state = model.preprocess(observation)
+      state = model.preprocess(observation, opt)
     end
     local aIndex
 
@@ -82,7 +81,7 @@ agent.create = function(gameEnv, opt)
     -- If training
     if self.isTraining then
       -- Store action (index), reward, transition and terminal
-      self.action, self.reward, self.transition, self.terminal = aIndex, reward, model.preprocess(screen), terminal
+      self.action, self.reward, self.transition, self.terminal = aIndex, reward, model.preprocess(screen, opt), terminal
 
       -- Clamp reward for stability
       self.reward = math.min(self.reward, -opt.rewardClamp)
@@ -125,7 +124,10 @@ agent.create = function(gameEnv, opt)
     -- Calculate Q-values from next state using target network
     local QTargets = self.targetNet:forward(transitions)
     -- Evaluate Q-values of argmax actions using target network (Double Q-learning)
-    local QMax = torch.CudaTensor(opt.batchSize)
+    local QMax = torch.Tensor(opt.batchSize)
+    if opt.gpu > 0 then
+      QMax = QMax:cuda()
+    end
     for q = 1, opt.batchSize do
       QMax[q] = QTargets[q][AMax[q][1]]
     end    
@@ -136,7 +138,10 @@ agent.create = function(gameEnv, opt)
 
     -- Get all predicted Q-values from the current state
     local QCurr = self.net:forward(states)
-    local QTaken = torch.CudaTensor(opt.batchSize)
+    local QTaken = torch.Tensor(opt.batchSize)
+    if opt.gpu > 0 then
+      QTaken = QTaken:cuda()
+    end
     -- Get prediction of current Q-values with given actions
     for q = 1, opt.batchSize do
       QTaken[q] = QCurr[q][actions[q]]

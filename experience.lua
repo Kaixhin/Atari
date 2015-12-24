@@ -1,5 +1,4 @@
 local _ = require 'moses'
-require 'cutorch'
 
 local experience = {}
 
@@ -52,7 +51,12 @@ experience.create = function(stateSize, opt)
 
   -- Retrieve experience tuples
   memory.retrieve = function(self, indices)
-    return self.states:index(1, indices):cuda(), self.actions:index(1, indices), self.rewards:index(1, indices):cuda(), self.transitions:index(1, indices):cuda(), self.terminals:index(1, indices)
+    local s, a, r, tr, te = self.states:index(1, indices), self.actions:index(1, indices), self.rewards:index(1, indices), self.transitions:index(1, indices), self.terminals:index(1, indices)
+    if opt.gpu > 0 then
+      return s:cuda(), a, r:cuda(), tr:cuda(), te
+    else
+      return s, a, r, tr, te
+    end
   end
 
   -- Update experience priorities
