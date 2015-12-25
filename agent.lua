@@ -17,7 +17,7 @@ agent.create = function(gameEnv, opt)
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.net:getParameters()
   -- Experience replay memory
-  DQN.memory = experience.create({1, 84, 84}, opt)
+  DQN.memory = experience.create(opt)
   -- Training mode
   DQN.isTraining = false
   -- Learning variable updated on observe()
