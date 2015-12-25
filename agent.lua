@@ -94,8 +94,8 @@ agent.create = function(gameEnv, opt)
 
       -- Occasionally sample from from memory
       if opt.step % opt.memSampleFreq == 0 and self.memory:size() >= opt.batchSize then
-        -- Sample with proportional prioritised sampling
-        local indices, ISWeights = self.memory:prioritySample(opt.batchSize)
+        -- Sample uniformly or with prioritised sampling
+        local indices, ISWeights = self.memory:prioritySample(opt.memPriority)
         -- Optimise (learn) from experience tuples
         self:optimise(indices, ISWeights)
       end

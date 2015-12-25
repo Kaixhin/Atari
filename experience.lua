@@ -75,32 +75,42 @@ experience.create = function(opt)
   end
 
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-  memory.prioritySample = function(self, sampleSize)
+  memory.prioritySample = function(self, priorityType)
     local N = self:size()
+    local indices, w
 
-    -- Calculate sampling probability distribution P
-    local expPriorities = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
-    local Z = torch.sum(expPriorities) -- Normalisation constant
-    local P = expPriorities:div(Z)
+    -- Priority 'none' = uniform sampling
+    if priorityType == 'none' then
+      indices = torch.randperm(N):long()
+      indices = indices[{{1, opt.batchSize}}]
+      w = torch.ones(opt.batchSize) -- Set weights to 1 as no correction needed
+      
+      return indices, w
+    else
+      -- Calculate sampling probability distribution P
+      local expPriorities = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
+      local Z = torch.sum(expPriorities) -- Normalisation constant
+      local P = expPriorities:div(Z)
 
-    -- Calculate importance-sampling weights w
-    local w = torch.pow(torch.mul(P, N), -opt.beta[opt.step]) -- Use importance-sampling exponent β
-    w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
+      -- Calculate importance-sampling weights w
+      w = torch.pow(torch.mul(P, N), -opt.beta[opt.step]) -- Use importance-sampling exponent β
+      w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
 
-    -- Create a cumulative distribution for inverse transform sampling
-    pdfToCdf(P) -- Convert distribution
-    local indices = torch.sort(torch.Tensor(sampleSize):uniform()) -- Generate uniform numbers for sampling
-    -- Perform linear search to sample
-    local minIndex = 1
-    for i = 1, sampleSize do
-      while indices[i] > P[minIndex] do
-        minIndex = minIndex + 1
+      -- Create a cumulative distribution for inverse transform sampling
+      pdfToCdf(P) -- Convert distribution
+      indices = torch.sort(torch.Tensor(opt.batchSize):uniform()) -- Generate uniform numbers for sampling
+      -- Perform linear search to sample
+      local minIndex = 1
+      for i = 1, opt.batchSize do
+        while indices[i] > P[minIndex] do
+          minIndex = minIndex + 1
+        end
+        indices[i] = minIndex -- Get sampled index
       end
-      indices[i] = minIndex -- Get sampled index
-    end
-    indices = indices:long() -- Convert to LongTensor for indexing
+      indices = indices:long() -- Convert to LongTensor for indexing
 
-    return indices, w:index(1, indices)
+      return indices, w:index(1, indices)
+    end
   end
 
   return memory

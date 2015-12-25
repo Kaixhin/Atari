@@ -20,13 +20,14 @@ cmd:option('-mode', 'train', '"train" or "eval" mode')
 cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
---cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1', 'string of agent parameters') -- TODO: Utilise
+--cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1', 'string of agent parameters') -- TODO: Utilise
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 --cmd:option('-bufferSize', 512, 'Memory buffer size')
-cmd:option('-alpha', 1, 'Prioritised experience replay exponent α')
-cmd:option('-betaZero', 1, 'Initial value of importance-sampling exponent β')
+cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
+cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-eta', 7e-5, 'Learning rate η') -- Accounts for prioritied experience sampling but not duel
@@ -59,7 +60,7 @@ torch.setnumthreads(opt.threads)
 torch.setdefaulttensortype(opt.tensorType)
 -- Set manual seeds using random numbers to reduce correlations
 math.randomseed(opt.seed)
-torch.manualSeed(math.random(1, 10000))
+torch.manualSeed(math.random(1, 1e6))
 -- GPU setup
 if opt.gpu > 0 then
   require 'cutorch'

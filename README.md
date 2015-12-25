@@ -2,7 +2,7 @@
 
 **Work In Progress**
 
-Dueling Double DQN with (proportional) prioritised experience replay for the Arcade Learning Environment.
+Dueling Double DQN with prioritised experience replay for the Arcade Learning Environment.
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
@@ -11,7 +11,7 @@ Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The m
 - **Use 4 frames (instead of 1)...**
 - Add networking saving and loading
 - Add evaluation scripts
-- Use "sum tree" binary heap for prioritised experience replay
+- Use "sum tree" binary heap for proportional prioritised experience replay
 - Add optimiser parameter processor
 
 ## Requirements
