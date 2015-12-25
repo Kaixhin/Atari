@@ -35,15 +35,19 @@ end
 
 -- Processes the full screen for DQN input
 model.preprocess = function(observation, opt)
-  local input = torch.Tensor(observation:size(1), 1, opt.height, opt.width)
+  local input = torch.Tensor(observation:size(1), opt.nChannels, opt.height, opt.width)
   if opt.gpu > 0 then
     input = input:cuda()
   end
 
   -- Loop over received frames
   for f = 1, observation:size(1) do
-    -- Convert to grayscale
-    local frame = image.rgb2y(observation:select(1, f):float()) -- image does not work with CudaTensor
+    -- Load frame
+    local frame = observation:select(1, f):float() -- image does not work with CudaTensor
+    -- Perform colour conversion
+    if opt.colorSpace ~= 'rgb' then
+      frame = image['rgb2' .. opt.colorSpace](frame)
+    end
     -- Resize 210x160 screen
     input[{{f}, {}, {}, {}}] = image.scale(frame, opt.width, opt.height)
   end
@@ -65,14 +69,14 @@ model.create = function(A, opt)
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
-  net:add(toCuDNN('conv', 1, 32, 8, 8, 4, 4))
+  net:add(toCuDNN('conv', opt.nChannels, 32, 8, 8, 4, 4))
   net:add(toCuDNN('relu'))
   net:add(toCuDNN('conv', 32, 64, 4, 4, 2, 2))
   net:add(toCuDNN('relu'))
   net:add(toCuDNN('conv', 64, 64, 3, 3, 1, 1))
   net:add(toCuDNN('relu'))
   -- Calculate convolutional network output size
-  local convOutputSize = calcOutputSize(net, torch.LongStorage({1, opt.height, opt.width}))
+  local convOutputSize = calcOutputSize(net, torch.LongStorage({opt.nChannels, opt.height, opt.width}))
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()

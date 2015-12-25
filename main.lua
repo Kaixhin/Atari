@@ -16,9 +16,10 @@ cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
 cmd:option('-game', 'pong', 'Name of Atari ROM (stored in "roms" directory)')
 -- Training vs. evaluate mode
 cmd:option('-mode', 'train', '"train" or "eval" mode')
--- Model options
-cmd:option('-height', 84, 'Height to resize screen to')
-cmd:option('-width', 84, 'Width to resize screen to')
+-- Screen preprocessing options
+cmd:option('-height', 84, 'Resized screen height')
+cmd:option('-width', 84, 'Resize screen width')
+cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
 --cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1,ncols=1', 'string of agent parameters') -- TODO: Utilise
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
@@ -68,6 +69,8 @@ end
 
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
+-- Work out number of colour channels
+opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
 -- Create DQN agent
 local DQN = agent.create(gameEnv, opt)
