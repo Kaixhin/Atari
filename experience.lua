@@ -1,5 +1,3 @@
-local _ = require 'moses'
-
 local experience = {}
 
 -- Creates experience replay memory
@@ -22,11 +20,7 @@ experience.create = function(opt)
 
   -- Returns number of saved tuples
   memory.size = function(self)
-    if self.isFull then
-      return opt.memSize
-    else
-      return self.nextIndex - 1
-    end
+    return self.isFull and opt.memSize or self.nextIndex - 1
   end
 
   -- Store new experience tuple

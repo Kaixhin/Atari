@@ -78,10 +78,7 @@ local DQN = agent.create(gameEnv, opt)
 -- Start gaming
 local screen, reward, terminal = gameEnv:newGame()
 -- Activate display if using QT
-local window
-if qt then
-  window = image.display({image=screen})
-end
+local window = qt and image.display({image=screen})
 
 if opt.mode == 'train' then
   -- Create ε decay vector

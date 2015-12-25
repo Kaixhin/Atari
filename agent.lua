@@ -46,11 +46,7 @@ agent.create = function(gameEnv, opt)
   DQN.observe = function(self, observation)
     local state
     -- Use preprocessed transition if available
-    if self.state then
-      state = self.state
-    else
-      state = model.preprocess(observation, opt)
-    end
+    state = self.state or model.preprocess(observation, opt)
     local aIndex
 
     -- Set ε based on training vs. evaluation mode

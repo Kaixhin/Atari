@@ -22,15 +22,13 @@ local toCuDNN = function(mod, ...)
   end
 end
 
--- Calculates the output size of a (2D convolutional) network
+-- Calculates the output size of a network (returns LongStorage)
 local calcOutputSize = function(network, inputSize)
-  local size
   if cudnn then
-    size = network:cuda():forward(torch.CudaTensor(inputSize)):size()
+    return network:cuda():forward(torch.CudaTensor(inputSize)):size()
   else
-    size = network:forward(torch.Tensor(inputSize)):size()
+    return network:forward(torch.Tensor(inputSize)):size()
   end
-  return size[1] * size[2] * size[3]
 end
 
 -- Processes the full screen for DQN input
@@ -76,7 +74,7 @@ model.create = function(A, opt)
   net:add(toCuDNN('conv', 64, 64, 3, 3, 1, 1))
   net:add(toCuDNN('relu'))
   -- Calculate convolutional network output size
-  local convOutputSize = calcOutputSize(net, torch.LongStorage({opt.nChannels, opt.height, opt.width}))
+  local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, torch.LongStorage({opt.nChannels, opt.height, opt.width})):totable()))
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()
