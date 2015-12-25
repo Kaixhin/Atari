@@ -12,7 +12,6 @@ Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The m
 - Add networking saving and loading
 - Add evaluation scripts
 - Use "sum tree" binary heap for proportional prioritised experience replay
-- Add optimiser parameter processor
 
 ## Requirements
 

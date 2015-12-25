@@ -26,9 +26,13 @@ agent.create = function(gameEnv, opt)
   DQN.action, DQN.reward, DQN.transition, DQN.terminal = nil, nil, nil, nil
   -- Optimiser parameters
   local optimParams = {
-    learningRate = opt.eta, -- TODO: Check learning rate annealing parameters
-    alpha = opt.momentum -- TODO: Select proper momentum for optimisers other than RMSprop
+    learningRate = opt.eta, -- TODO: Learning rate annealing superseded by β annealing?
+    momentum = opt.momentum
   }
+  if opt.optimiser == 'rmsprop' then
+    -- Just for RMSprop, the seeming default for DQNs, set its momentum variable
+    optimParams.alpha = opt.momentum
+  end
 
   -- Sets training mode
   DQN.training = function(self)
