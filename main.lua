@@ -1,4 +1,5 @@
 local _ = require 'moses'
+require 'logroll'
 local image = require 'image'
 local environment = require 'environment'
 local agent = require 'agent'
@@ -34,7 +35,7 @@ cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-eta', 7e-5, 'Learning rate η') -- Accounts for prioritied experience sampling but not duel
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε')
-cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd')
+cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel
 cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
 cmd:option('-tdClamp', 1, 'Clamps TD-error δ magnitude')
@@ -43,16 +44,30 @@ cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)')
---cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
+cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
-cmd:option('-evalFreq', 1e6, 'Evaluation frequency (by number of steps)')
-cmd:option('-evalSize', 500, 'Number of transitions to use for validation')
+cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
+cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
+--cmd:option('-valSize', 500, 'Number of transitions to use for validation')
 -- alewrap options
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
+-- Experiment options
+cmd:option('-_id', 'ID', 'ID of experiment (used to store saved results)')
 local opt = cmd:parse(arg)
 
+-- Create experiment directory
+if not paths.dirp('experiments') then
+  paths.mkdir('experiments')
+end
+paths.mkdir(paths.concat('experiments', opt._id))
+-- Set up logs
+local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
+local plog = logroll.print_logger()
+log = logroll.combine(flog, plog)
+
 -- Torch setup
+log.info('Setting up Torch7')
 -- Enable memory management
 torch.setheaptracking(true)
 -- Set number of BLAS threads
@@ -64,34 +79,42 @@ math.randomseed(opt.seed)
 torch.manualSeed(math.random(1, 1e6))
 -- GPU setup
 if opt.gpu > 0 then
+  log.info('Setting up GPU')
   require 'cutorch'
   cutorch.setDevice(opt.gpu)
   cutorch.manualSeedAll(torch.random())
 end
 
--- Initialise Arcade Learning Environment
-local gameEnv = environment.init(opt)
+-- Work out number of colour channels
 if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
+  log.error('Unsupported colour space for conversion')
   error('Unsupported colour space for conversion')
 end
-
--- Work out number of colour channels
 opt.nChannels = opt.colorSpace == 'y' and 1 or 3
+
+-- Initialise Arcade Learning Environment
+log.info('Setting up ALE')
+local gameEnv = environment.init(opt)
 
 -- Create DQN agent
 local DQN = agent.create(gameEnv, opt)
 
 -- Start gaming
+log.info('Starting ' .. opt.game)
 local screen, reward, terminal = gameEnv:newGame()
+local cumulativeReward = reward
+local bestValScore = -math.huge -- Best validation score
 -- Activate display if using QT
 local window = qt and image.display({image=screen})
 
 if opt.mode == 'train' then
+  log.info('Training mode')
   -- Check prioritised experience replay options
   if opt.memPriority == 'rank' then
-    print('Rank-based prioritised experience replay is not implemented, switching to proportional')
+    log.info('Rank-based prioritised experience replay is not implemented, switching to proportional')
     opt.memPriority = 'proportional'
   elseif opt.memPriority ~= 'none' and opt.memPriority ~= 'proportional' then
+    log.error('Unrecognised type of prioritised experience replay')
     error('Unrecognised type of prioritised experience replay')
   end
 
@@ -105,6 +128,8 @@ if opt.mode == 'train' then
 
   -- Set agent (and hence environment steps) to training mode
   DQN:training()
+  -- Keep track of episodes
+  local episode = 1
 
   -- Training loop
   for step = 1, opt.steps do
@@ -115,13 +140,19 @@ if opt.mode == 'train' then
     if not terminal then
       -- Act on environment and learn
       screen, reward, terminal = DQN:act(actionIndex)
+      cumulativeReward = cumulativeReward + reward
     else
+      -- Print score for episode
+      log.info('Episode ' .. episode .. ' | Score: ' .. cumulativeReward .. ' | Steps: ' .. step .. '/' .. opt.steps)
+
       -- Start a new episode
+      episode = episode + 1
       if opt.random_starts > 0 then
         screen, reward, terminal = gameEnv:nextRandomGame()
       else
         screen, reward, terminal = gameEnv:newGame()
       end
+      cumulativeReward = reward -- Refresh cumulative reward
     end
 
     -- Update display
@@ -129,14 +160,72 @@ if opt.mode == 'train' then
       image.display({image=screen, win=window})
     end
 
-    if step % opt.evalFreq then
+    -- Trigger learning after a while (wait to accumulate experience)
+    if step == opt.learnStart then
+      log.info('Learning started')
+    end
+
+    if step % opt.valFreq and step >= opt.learnStart then
+      -- TODO: Include TD-error δ squared loss as metric
+      log.info('Validating')
       DQN:evaluate()
-      -- TODO: Perform evaluation
-      -- TODO: Save best parameters
+
+      -- Start new game
+      screen, reward, terminal = gameEnv:newGame()
+      local valEpisode = 1
+      -- Reset cumulative reward
+      cumulativeReward = reward
+      -- Track total score for validation
+      local totalValScore = reward
+
+      for valStep = 1, opt.valSteps do
+        -- Observe and choose next action (index)
+        local actionIndex = DQN:observe(screen)
+        if not terminal then
+          -- Act on environment
+          screen, reward, terminal = DQN:act(actionIndex)
+          -- Track scores
+          cumulativeReward = cumulativeReward + reward
+          totalValScore = totalValScore + reward
+        else
+          -- Print score for episode
+          log.info('Val Episode ' .. valEpisode .. ' | Score: ' .. cumulativeReward .. ' | Steps: ' .. valStep .. '/' .. opt.valSteps)
+
+          -- Start a new episode
+          valEpisode = valEpisode + 1
+          if opt.random_starts > 0 then
+            screen, reward, terminal = gameEnv:nextRandomGame()
+          else
+            screen, reward, terminal = gameEnv:newGame()
+          end
+          cumulativeReward = reward -- Refresh cumulative reward
+        end
+
+        -- Update display
+        if qt then
+          image.display({image=screen, win=window})
+        end
+      end
+
+      -- Check total score against best
+      log.info('Total Score: ' .. totalValScore)
+      if totalValScore > bestValScore then
+        log.info('New best score')
+        bestValScore = totalValScore
+
+        log.info('Saving network')
+        DQN:save(paths.concat('experiments', opt._id))
+      end
+
+      log.info('Resuming training')
       DQN:training()
+      -- Start new game (as previous episode was interrupted)
+      screen, reward, terminal = gameEnv:newGame()
+      cumulativeReward = reward
     end
   end
 elseif opt.mode == 'eval' then
+  log.info('Evaluation mode')
   -- Set agent (and hence environment steps) to evaluation mode
   DQN:evaluate()
 
@@ -145,9 +234,11 @@ elseif opt.mode == 'eval' then
     local actionIndex = DQN:observe(screen)
     -- Act on environment
     screen, reward, terminal = DQN:act(actionIndex)
+    cumulativeReward = cumulativeReward + reward
 
     if qt then
       image.display({image=screen, win=window})
     end
   end
+  log.info('Final score: ' .. cumulativeReward)
 end

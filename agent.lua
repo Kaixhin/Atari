@@ -97,7 +97,7 @@ agent.create = function(gameEnv, opt)
       end
 
       -- Occasionally sample from from memory
-      if opt.step % opt.memSampleFreq == 0 and self.memory:size() >= opt.batchSize then
+      if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
         -- Sample uniformly or with prioritised sampling
         local indices, ISWeights = self.memory:prioritySample(opt.memPriority)
         -- Optimise (learn) from experience tuples
@@ -105,7 +105,7 @@ agent.create = function(gameEnv, opt)
       end
 
       -- Update target network every τ steps
-      if opt.step % opt.tau == 0 then
+      if opt.step % opt.tau == 0 and opt.step >= opt.learnStart then
         local targetTheta = self.targetNet:getParameters()
         targetTheta:copy(theta) -- Deep copy network parameters
       end
@@ -183,6 +183,16 @@ agent.create = function(gameEnv, opt)
     
     local __, loss = optim[opt.optimiser](feval, theta, optimParams)
     return loss[1]
+  end
+
+  -- Saves the network
+  function DQN:save(path)
+    torch.save(paths.concat(path, 'DQN.t7'), theta)
+  end
+
+  -- Loads a saved network
+  function DQN:load(path)
+    theta = torch.load(path)
   end
 
   return DQN

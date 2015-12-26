@@ -12,6 +12,7 @@ Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requ
 
 - dpnn
 - moses
+- logroll
 - classic
 - xitari
 - alewrap
@@ -27,6 +28,5 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewra
 ## Todo
 
 - **Use 4 frames (instead of 1)...**
-- Add networking saving and loading
-- Add evaluation scripts
+- Implement rank-based prioritised experience replay
 - Use "sum tree" binary heap for proportional prioritised experience replay
