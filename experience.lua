@@ -19,12 +19,12 @@ experience.create = function(opt)
   memory.maxPriority = opt.tdClamp -- Should prioritise sampling experience that has not been learnt from
 
   -- Returns number of saved tuples
-  memory.size = function(self)
+  function memory:size()
     return self.isFull and opt.memSize or self.nextIndex - 1
   end
 
   -- Store new experience tuple
-  memory.store = function(self, state, action, reward, transition, terminal)
+  function memory:store(state, action, reward, transition, terminal)
     self.states[{{self.nextIndex}, {}}] = state:float()
     self.actions[self.nextIndex] = action
     self.rewards[self.nextIndex] = reward
@@ -44,7 +44,7 @@ experience.create = function(opt)
   end
 
   -- Retrieve experience tuples
-  memory.retrieve = function(self, indices)
+  function memory:retrieve(indices)
     local s, a, r, tr, te = self.states:index(1, indices), self.actions:index(1, indices), self.rewards:index(1, indices), self.transitions:index(1, indices), self.terminals:index(1, indices)
     if opt.gpu > 0 then
       return s:cuda(), a, r:cuda(), tr:cuda(), te
@@ -54,14 +54,14 @@ experience.create = function(opt)
   end
 
   -- Update experience priorities
-  memory.updatePriorities = function(self, indices, priorities)
+  function memory:updatePriorities(indices, priorities)
     for p = 1, indices:size(1) do
       self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
     end
   end
 
   -- Retrieve experience priorities
-  memory.retrievePriorities = function(self, indices)
+  function memory:retrievePriorities(indices)
     return self.priorities:index(1, indices)
   end
 
@@ -75,7 +75,7 @@ experience.create = function(opt)
   end
 
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-  memory.prioritySample = function(self, priorityType)
+  function memory:prioritySample(priorityType)
     local N = self:size()
     local indices, w
 

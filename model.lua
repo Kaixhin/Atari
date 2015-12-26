@@ -1,6 +1,6 @@
 local _ = require 'moses'
 local nn = require 'nn'
-require 'GradientRescale'
+require 'modules/GradientRescale'
 local image = require 'image'
 
 local model = {}

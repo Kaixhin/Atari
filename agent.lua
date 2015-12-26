@@ -35,19 +35,19 @@ agent.create = function(gameEnv, opt)
   end
 
   -- Sets training mode
-  DQN.training = function(self)
+  function DQN:training()
     self.isTraining = true
   end
 
   -- Sets evaluation mode
-  DQN.evaluate = function(self)
+  function DQN:evaluate()
     self.isTraining = false
     -- Reset learning variables
     self.state, self.action, self.reward, self.transition, self.terminal = nil, nil, nil, nil, nil
   end
   
   -- Outputs an action (index) to perform on the environment
-  DQN.observe = function(self, observation)
+  function DQN:observe(observation)
     local state
     -- Use preprocessed transition if available
     state = self.state or model.preprocess(observation, opt)
@@ -75,7 +75,7 @@ agent.create = function(gameEnv, opt)
   end
 
   -- Acts on (and can learn from) the environment
-  DQN.act = function(self, aIndex)
+  function DQN:act(aIndex)
     local screen, reward, terminal = gameEnv:step(A[aIndex], self.isTraining)
 
     -- If training
@@ -115,7 +115,7 @@ agent.create = function(gameEnv, opt)
   end
 
   -- Learns from experience
-  DQN.learn = function(self, indices, ISWeights)
+  function DQN:learn(indices, ISWeights)
     -- Retrieve experience tuples
     local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
 
@@ -175,7 +175,7 @@ agent.create = function(gameEnv, opt)
   end
 
   -- "Optimises" the network parameters θ
-  DQN.optimise = function(self, indices, ISWeights)
+  function DQN:optimise(indices, ISWeights)
     -- Create function to evaluate given parameters x
     local feval = function(x)
       return self:learn(indices, ISWeights)
