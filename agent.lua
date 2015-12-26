@@ -151,8 +151,8 @@ agent.create = function(gameEnv, opt)
     local tdErr = QTaken - Y
     -- Clamp TD-errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
-    -- Store magnitude of TD-errors δ as priorities
-    self.memory:updatePriorities(indices, torch.abs(tdErr))
+    -- Send TD-errors δ to be used as priorities
+    self.memory:updatePriorities(indices, tdErr)
     
     -- Zero QCurr outputs (no error)
     QCurr:zero()

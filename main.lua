@@ -1,3 +1,4 @@
+local _ = require 'moses'
 local image = require 'image'
 local environment = require 'environment'
 local agent = require 'agent'
@@ -25,7 +26,7 @@ cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|l
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 --cmd:option('-bufferSize', 512, 'Memory buffer size')
-cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-memPriority', 'proportional', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
@@ -70,6 +71,10 @@ end
 
 -- Initialise Arcade Learning Environment
 local gameEnv = environment.init(opt)
+if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
+  error('Unsupported colour space for conversion')
+end
+
 -- Work out number of colour channels
 opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
@@ -82,6 +87,14 @@ local screen, reward, terminal = gameEnv:newGame()
 local window = qt and image.display({image=screen})
 
 if opt.mode == 'train' then
+  -- Check prioritised experience replay options
+  if opt.memPriority == 'rank' then
+    print('Rank-based prioritised experience replay is not implemented, switching to proportional')
+    opt.memPriority = 'proportional'
+  elseif opt.memPriority ~= 'none' and opt.memPriority ~= 'proportional' then
+    error('Unrecognised type of prioritised experience replay')
+  end
+
   -- Create ε decay vector
   opt.epsilon = torch.linspace(opt.epsilonEnd, opt.epsilonStart, opt.epsilonSteps)
   opt.epsilon:mul(-1):add(opt.epsilonStart)

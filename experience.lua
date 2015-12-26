@@ -53,10 +53,14 @@ experience.create = function(opt)
     end
   end
 
-  -- Update experience priorities
-  function memory:updatePriorities(indices, priorities)
+  -- Update experience priorities using TD-errors δ
+  function memory:updatePriorities(indices, delta)
+    if opt.memPriority == 'proportional' then
+      delta:abs()
+    end
+
     for p = 1, indices:size(1) do
-      self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
+      self.priorities[indices[p]] = delta[p] + smallConst -- Allows transitions to be sampled even if error is 0
     end
   end
 
