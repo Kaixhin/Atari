@@ -47,13 +47,14 @@ cmd:option('-steps', 5e7, 'Training iterations (steps)')
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
-cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
+cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usually 125000
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
 -- alewrap options
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
 -- Experiment options
 cmd:option('-_id', 'ID', 'ID of experiment (used to store saved results)')
+cmd:option('-network', '', 'Saved DQN file (DQN.t7)')
 local opt = cmd:parse(arg)
 
 -- Create experiment directory
@@ -98,9 +99,14 @@ local gameEnv = environment.init(opt)
 
 -- Create DQN agent
 local DQN = agent.create(gameEnv, opt)
+-- Load saved agent if specified
+if paths.filep(opt.network) then
+  log.info('Loading pretrained network')
+  DQN:load(opt.network)
+end
 
 -- Start gaming
-log.info('Starting ' .. opt.game)
+log.info('Starting game: ' .. opt.game)
 local screen, reward, terminal = gameEnv:newGame()
 local cumulativeReward = reward
 local bestValScore = -math.huge -- Best validation score
@@ -165,7 +171,7 @@ if opt.mode == 'train' then
       log.info('Learning started')
     end
 
-    if step % opt.valFreq and step >= opt.learnStart then
+    if step % opt.valFreq == 0 and step >= opt.learnStart then
       -- TODO: Include TD-error δ squared loss as metric
       log.info('Validating')
       DQN:evaluate()

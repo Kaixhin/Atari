@@ -41,3 +41,5 @@ luac.out
 
 # ROMs
 roms/*.bin
+# Experiments
+experiments
