@@ -120,19 +120,19 @@ agent.create = function(gameEnv, opt)
     local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
 
     -- Perform argmax action selection using network
-    local __, AMax = torch.max(self.net:forward(transitions), 2)
+    local __, AMaxPrime = torch.max(self.net:forward(transitions), 2)
     -- Calculate Q-values from next state using target network
-    local QTargets = self.targetNet:forward(transitions)
+    local QTargetsPrime = self.targetNet:forward(transitions)
     -- Evaluate Q-values of argmax actions using target network (Double Q-learning)
-    local QMax = torch.Tensor(opt.batchSize)
+    local QMaxPrime = torch.Tensor(opt.batchSize) -- Note that this is therefore the estimate of V
     if opt.gpu > 0 then
-      QMax = QMax:cuda()
+      QMaxPrime = QMaxPrime:cuda()
     end
     for q = 1, opt.batchSize do
-      QMax[q] = QTargets[q][AMax[q][1]]
+      QMaxPrime[q] = QTargetsPrime[q][AMax[q][1]]
     end    
     -- Calculate target Y
-    local Y = torch.add(rewards, torch.mul(QMax, opt.gamma))
+    local Y = torch.add(rewards, torch.mul(QMaxPrime, opt.gamma))
     -- Set target Y to reward if the transition was terminal
     Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
 
@@ -147,8 +147,16 @@ agent.create = function(gameEnv, opt)
       QTaken[q] = QCurr[q][actions[q]]
     end
 
-    -- Calculate TD-errors δ (to minimise; Y - QTaken would require gradient ascent)
-    local tdErr = QTaken - Y
+    -- Calculate TD-errors δ (to minimise)
+    local tdErr = Y - QTaken
+    -- TODO: Find out which networks are used
+    --[[
+    -- Calculate Advantage Learning update
+    local tdErrAL = tdErr - torch.mul(V(s) - Q(s, a), opt.PALpha)
+    -- Calculate Persistent Advantage learning update
+    local tdErrPAL = torch.max(tdErrAL, tdErr - torch.mul(V(s') - Q(s', a), opt.PALpha))
+    --]]
+
     -- Clamp TD-errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
     -- Send TD-errors δ to be used as priorities

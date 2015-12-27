@@ -2,7 +2,7 @@
 
 **Work In Progress**
 
-Dueling [[1]](#references) Double [[2]](#references) DQN [[3]](#references) with prioritised experience replay [[4]](#references) for the Arcade Learning Environment [[5]](#references).
+~~Persistent advantage learning [[1]](#references)~~ dueling [[2]](#references) Double [[3]](#references) DQN [[4]](#references) ~~with prioritised experience replay [[5]](#references)~~ for the Arcade Learning Environment [[6]](#references). Or PALDDDQNwPER for short...
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
@@ -33,9 +33,9 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewra
 
 ## References
 
-[1] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
-[2] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
-[3] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
-[4] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
-[5] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  
-~~[6] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)~~  
+[1] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)  
+[2] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
+[3] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
+[4] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
+[5] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
+[6] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  

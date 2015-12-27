@@ -1,3 +1,4 @@
+-- TODO: Confirm nomenclature for parameters - a frame is a step in ALE, a time step is consecutive frames treated atomically by the agent
 local _ = require 'moses'
 require 'logroll'
 local image = require 'image'
@@ -39,11 +40,12 @@ cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel
 cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
 cmd:option('-tdClamp', 1, 'Clamps TD-error δ magnitude')
+cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
-cmd:option('-steps', 5e7, 'Training iterations (steps)')
+cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Equivalent to standard 200 million frames for DQN experiments
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
