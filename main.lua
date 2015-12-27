@@ -1,4 +1,5 @@
 -- TODO: Confirm nomenclature for parameters - a frame is a step in ALE, a time step is consecutive frames treated atomically by the agent
+local signal = require 'posix.signal'
 local _ = require 'moses'
 require 'logroll'
 local image = require 'image'
@@ -122,6 +123,19 @@ local window = qt and image.display({image=screen})
 
 if opt.mode == 'train' then
   log.info('Training mode')
+
+  -- Set up SIGINT (Ctrl+C) handler to save network before quitting
+  signal.signal(signal.SIGINT, function(signum)
+    logroll.warn('SIGINT received')
+    logroll.info('Save network (y/n)?')
+    if io.read() == 'y' then
+      logroll.info('Saving network')
+      DQN:save(paths.concat('experiments', opt._id))
+    end
+    logroll.warn('Exiting')
+    os.exit(128 + signum)
+  end)
+
   -- Check prioritised experience replay options
   if opt.memPriority == 'rank' then
     log.info('Rank-based prioritised experience replay is not implemented, switching to proportional')
