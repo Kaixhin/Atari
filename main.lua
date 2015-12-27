@@ -16,7 +16,7 @@ cmd:option('-threads', 4, 'Number of BLAS threads')
 cmd:option('-tensorType', 'torch.FloatTensor', 'Default tensor type')
 cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
 -- Game
-cmd:option('-game', 'pong', 'Name of Atari ROM (stored in "roms" directory)')
+cmd:option('-game', 'space_invaders', 'Name of Atari ROM (stored in "roms" directory)')
 -- Training vs. evaluate mode
 cmd:option('-mode', 'train', '"train" or "eval" mode')
 -- Screen preprocessing options
@@ -28,7 +28,7 @@ cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|l
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 --cmd:option('-bufferSize', 512, 'Memory buffer size')
-cmd:option('-memPriority', 'proportional', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
@@ -55,9 +55,14 @@ cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usual
 cmd:option('-actrep', 4, 'Times to repeat action')
 cmd:option('-random_starts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
 -- Experiment options
-cmd:option('-_id', 'ID', 'ID of experiment (used to store saved results)')
-cmd:option('-network', '', 'Saved DQN file (DQN.t7)')
+cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
+cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
 local opt = cmd:parse(arg)
+
+-- Set ID as game name if not set
+if opt._id == '' then
+  opt._id = opt.game
+end
 
 -- Create experiment directory
 if not paths.dirp('experiments') then

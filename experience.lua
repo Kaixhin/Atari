@@ -55,6 +55,7 @@ experience.create = function(opt)
 
   -- Update experience priorities using TD-errors δ
   function memory:updatePriorities(indices, delta)
+    delta = delta:float()
     if opt.memPriority == 'proportional' then
       delta:abs()
     end
@@ -88,8 +89,6 @@ experience.create = function(opt)
       indices = torch.randperm(N):long()
       indices = indices[{{1, opt.batchSize}}]
       w = torch.ones(opt.batchSize) -- Set weights to 1 as no correction needed
-      
-      return indices, w
     else
       -- Calculate sampling probability distribution P
       local expPriorities = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
@@ -112,9 +111,14 @@ experience.create = function(opt)
         indices[i] = minIndex -- Get sampled index
       end
       indices = indices:long() -- Convert to LongTensor for indexing
-
-      return indices, w:index(1, indices)
+      w = w:index(1, indices) -- Index weights
     end
+
+    if opt.gpu > 0 then
+      w = w:cuda()
+    end
+
+    return indices, w
   end
 
   return memory

@@ -2,7 +2,7 @@
 
 **Work In Progress**
 
-~~Persistent advantage learning [[1]](#references)~~ dueling [[2]](#references) Double [[3]](#references) DQN [[4]](#references) ~~with prioritised experience replay [[5]](#references)~~ for the Arcade Learning Environment [[6]](#references). Or PALDDDQNwPER for short...
+Persistent advantage learning [[1]](#references) dueling [[2]](#references) Double [[3]](#references) DQN [[4]](#references) ~~with prioritised experience replay [[5]](#references)~~ for the Arcade Learning Environment [[6]](#references). Or PALDDDQNwPER for short...
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
