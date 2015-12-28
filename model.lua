@@ -4,9 +4,10 @@ require 'modules/GradientRescale'
 local image = require 'image'
 
 local model = {}
-local cudnn = false -- cuDNN flag
-pcall(require, 'cudnn') -- Overwrites flag with cuDNN module if available
-local fbcunn = pcall(require, 'fbcunn') -- fbcunn flag (cuDNN is a dependency)
+pcall(require, 'cudnn')
+local cudnn = cudnn or false -- cuDNN flag
+pcall(require, 'fbcunn')
+local fbcunn = nn.SpatialConvolutionCuFFT and true or false -- fbcunn flag (cuDNN is a dependency)
 
 local bestModule = function(mod, ...)
   if mod == 'relu' then
