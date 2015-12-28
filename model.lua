@@ -4,20 +4,23 @@ require 'modules/GradientRescale'
 local image = require 'image'
 
 local model = {}
+local cudnn = false -- cuDNN flag
+pcall(require, 'cudnn') -- Overwrites flag with cuDNN module if available
+local fbcunn = pcall(require, 'fbcunn') -- fbcunn flag (cuDNN is a dependency)
 
--- Adds a cuDNN module if available (waiting on https://github.com/soumith/cudnn.torch/pull/76)
--- TODO: Use fbcunn if available since FFT is faster for large convs
-local toCuDNN = function(mod, ...)
-  if cudnn then
-    if mod == 'relu' then
-      return cudnn.ReLU(true)
-    elseif mod == 'conv' then
-      return cudnn.SpatialConvolution(...)
+local bestModule = function(mod, ...)
+  if mod == 'relu' then
+    if cudnn then
+      return cudnn.ReLU(...)
+    else
+      return nn.ReLU(...)
     end
-  else
-    if mod == 'relu' then
-      return nn.ReLU(true)
-    elseif mod == 'conv' then
+  elseif mod == 'conv' then
+    if fbcunn then
+      return nn.SpatialConvolutionCuFFT(...)
+    elseif cudnn then
+      return cudnn.SpatialConvolution(...)
+    else
       return nn.SpatialConvolution(...)
     end
   end
@@ -54,36 +57,30 @@ end
 -- TODO: Work out how to get 4 observations
 -- Creates a dueling DQN
 model.create = function(A, opt)
-  -- Use cuDNN if available
-  pcall(require, 'cudnn')
-  if opt.gpu == 0 then
-    cudnn = nil
-  end
-
   -- Number of discrete actions
   local m = _.size(A) 
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
-  net:add(toCuDNN('conv', opt.nChannels, 32, 8, 8, 4, 4))
-  net:add(toCuDNN('relu'))
-  net:add(toCuDNN('conv', 32, 64, 4, 4, 2, 2))
-  net:add(toCuDNN('relu'))
-  net:add(toCuDNN('conv', 64, 64, 3, 3, 1, 1))
-  net:add(toCuDNN('relu'))
+  net:add(bestModule('conv', opt.nChannels, 32, 8, 8, 4, 4))
+  net:add(bestModule('relu', true))
+  net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))
+  net:add(bestModule('relu', true))
+  net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
+  net:add(bestModule('relu', true))
   -- Calculate convolutional network output size
   local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, torch.LongStorage({opt.nChannels, opt.height, opt.width})):totable()))
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()
   valStream:add(nn.Linear(convOutputSize, 512))
-  valStream:add(toCuDNN('relu'))
+  valStream:add(bestModule('relu', true))
   valStream:add(nn.Linear(512, 1)) -- Predicts value for state
 
   -- Advantage approximator A^(s, a)
   local advStream = nn.Sequential()
   advStream:add(nn.Linear(convOutputSize, 512))
-  advStream:add(toCuDNN('relu'))
+  advStream:add(bestModule('relu', true))
   advStream:add(nn.Linear(512, m)) -- Predicts action-conditional advantage
 
   -- Streams container

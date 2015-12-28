@@ -10,7 +10,7 @@ In training mode if you want to quit using `Ctrl+C` then this will be caught and
 
 ## Requirements
 
-Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requires the following extra packages:
+Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN/fbcunn if available. Also requires the following extra packages:
 
 - dpnn
 - moses
