@@ -34,15 +34,12 @@ end
 
 -- Processes the full screen for DQN input
 model.preprocess = function(observation, opt)
-  local input = torch.Tensor(observation:size(1), opt.nChannels, opt.height, opt.width)
-  if opt.gpu > 0 then
-    input = input:cuda()
-  end
+  local input = opt.Tensor(observation:size(1), opt.nChannels, opt.height, opt.width)
 
   -- Loop over received frames
   for f = 1, observation:size(1) do
     -- Load frame
-    local frame = observation:select(1, f):float() -- image does not work with CudaTensor
+    local frame = observation:select(1, f) -- Note: image does not work with CudaTensor
     -- Perform colour conversion
     if opt.colorSpace ~= 'rgb' then
       frame = image['rgb2' .. opt.colorSpace](frame)

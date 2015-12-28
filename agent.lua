@@ -131,10 +131,7 @@ agent.create = function(gameEnv, opt)
     -- Calculate Q-values from transition using target network
     local QPrimeTargets = self.targetNet:forward(transitions)
     -- Evaluate Q-values of argmax actions using target network (Double Q-learning)
-    local QPrimeMax = torch.Tensor(opt.batchSize) -- Note that this is therefore the estimate of V(state)
-    if opt.gpu > 0 then
-      QPrimeMax = QPrimeMax:cuda()
-    end
+    local QPrimeMax = opt.Tensor(opt.batchSize) -- Note that this is therefore the estimate of V(state)
     for q = 1, opt.batchSize do
       QPrimeMax[q] = QPrimeTargets[q][APrimeMax[q][1]]
     end    
@@ -145,10 +142,7 @@ agent.create = function(gameEnv, opt)
 
     -- Get all predicted Q-values from the current state
     local QCurr = self.policyNet:forward(states)
-    local QTaken = torch.Tensor(opt.batchSize)
-    if opt.gpu > 0 then
-      QTaken = QTaken:cuda()
-    end
+    local QTaken = opt.Tensor(opt.batchSize)
     -- Get prediction of current Q-values with given actions
     for q = 1, opt.batchSize do
       QTaken[q] = QCurr[q][actions[q]]
@@ -158,10 +152,7 @@ agent.create = function(gameEnv, opt)
     local tdErr = Y - QTaken
     -- Calculate Q(state, action) and V(state) using target network -- TODO: Check if Q(s, a) is TD-error or from target network
     local Qs = self.targetNet:forward(states) -- Calculate all Q-values
-    local Q = torch.Tensor(opt.batchSize)
-    if opt.gpu > 0 then
-      Q = Q:cuda()
-    end
+    local Q = opt.Tensor(opt.batchSize)
     for q = 1, opt.batchSize do
       Q[q] = Qs[q][actions[q]]
     end
@@ -170,10 +161,7 @@ agent.create = function(gameEnv, opt)
     local tdErrAL = tdErr - torch.mul(torch.add(V, -Q), opt.PALpha)
     -- Calculate Q(transition, action) and V(transition) using target network
     local QPrimes = self.targetNet:forward(transitions) -- Calculate all Q-values
-    local QPrime = torch.Tensor(opt.batchSize)
-    if opt.gpu > 0 then
-      QPrime = QPrime:cuda()
-    end
+    local QPrime = opt.Tensor(opt.batchSize)
     for q = 1, opt.batchSize do
       QPrime[q] = QPrimes[q][actions[q]]
     end

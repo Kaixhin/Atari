@@ -86,12 +86,21 @@ torch.setdefaulttensortype(opt.tensorType)
 -- Set manual seeds using random numbers to reduce correlations
 math.randomseed(opt.seed)
 torch.manualSeed(math.random(1, 1e6))
+
+-- Tensor creation function for using appropriate CPU/GPU tensor type
+opt.Tensor = function(...)
+  return torch.Tensor(...)
+end
 -- GPU setup
 if opt.gpu > 0 then
   log.info('Setting up GPU')
   require 'cutorch'
   cutorch.setDevice(opt.gpu)
   cutorch.manualSeedAll(torch.random())
+  -- Replace tensor creation function
+  opt.Tensor = function(...)
+    return torch.CudaTensor(...)
+  end
 end
 
 -- Work out number of colour channels
