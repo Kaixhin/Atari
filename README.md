@@ -31,6 +31,7 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewra
 ## Todo
 
 - **Use 4 frames (instead of 1)...**
+- For tdAL, check if Q(s, a) is TD-error or from target network
 - Implement rank-based prioritised experience replay
 - Use "sum tree" binary heap for proportional prioritised experience replay
 

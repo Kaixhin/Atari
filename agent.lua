@@ -135,7 +135,7 @@ agent.create = function(gameEnv, opt)
     end    
     -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
     Y:mul(opt.gamma):add(rewards)
-    -- Set target Y to reward if the transition was terminal
+    -- Set target Y to reward if the transition was terminal as V(terminal) = 0
     Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
 
     -- Get all predicted Q-values from the current state
@@ -148,7 +148,7 @@ agent.create = function(gameEnv, opt)
 
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
     local tdErr = Y - QTaken
-    -- Calculate Q(s, a) and V(s) using target network -- TODO: Check if Q(s, a) is TD-error or from target network
+    -- Calculate Q(s, a) and V(s) using target network
     local Qs = self.targetNet:forward(states)
     local Q = opt.Tensor(opt.batchSize)
     for q = 1, opt.batchSize do
@@ -163,8 +163,11 @@ agent.create = function(gameEnv, opt)
       QPrime[q] = QPrimes[q][actions[q]]
     end
     local VPrime = torch.max(QPrimes, 2)
+    -- Set values to 0 for terminal states
+    QPrime[terminals] = 0
+    VPrime[terminals] = 0
     -- Calculate Persistent Advantage learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-    tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-VPrime:add(-QPrime):mul(opt.PALpha)), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
+    tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-(VPrime:add(-QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
 
     -- Clamp TD-errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
