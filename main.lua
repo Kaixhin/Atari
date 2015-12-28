@@ -107,10 +107,17 @@ local gameEnv = environment.init(opt)
 
 -- Create DQN agent
 local DQN = agent.create(gameEnv, opt)
--- Load saved agent if specified
 if paths.filep(opt.network) then
+  -- Load saved agent if specified
   log.info('Loading pretrained network')
   DQN:load(opt.network)
+elseif paths.filep(paths.concat('experiments', opt._id, 'DQN.t7')) then
+  -- Ask to load saved agent if found in experiment folder
+  log.info('Saved network found - load (y/n)?')
+  if io.read() == 'y' then
+    log.info('Loading pretrained network')
+    DQN:load(paths.concat('experiments', opt._id, 'DQN.t7'))
+  end
 end
 
 -- Start gaming
@@ -126,13 +133,13 @@ if opt.mode == 'train' then
 
   -- Set up SIGINT (Ctrl+C) handler to save network before quitting
   signal.signal(signal.SIGINT, function(signum)
-    logroll.warn('SIGINT received')
-    logroll.info('Save network (y/n)?')
+    log.warn('SIGINT received')
+    log.info('Save network (y/n)?')
     if io.read() == 'y' then
-      logroll.info('Saving network')
+      log.info('Saving network')
       DQN:save(paths.concat('experiments', opt._id))
     end
-    logroll.warn('Exiting')
+    log.warn('Exiting')
     os.exit(128 + signum)
   end)
 

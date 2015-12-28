@@ -6,6 +6,7 @@ local image = require 'image'
 local model = {}
 
 -- Adds a cuDNN module if available (waiting on https://github.com/soumith/cudnn.torch/pull/76)
+-- TODO: Use fbcunn if available since FFT is faster for large convs
 local toCuDNN = function(mod, ...)
   if cudnn then
     if mod == 'relu' then
