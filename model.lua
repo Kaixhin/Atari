@@ -36,23 +36,16 @@ local calcOutputSize = function(network, inputSize)
   end
 end
 
--- Processes the full screen for DQN input
+-- Processes a single frame for DQN input
 model.preprocess = function(observation, opt)
-  local input = opt.Tensor(observation:size(1), opt.histLen*opt.nChannels, opt.height, opt.width)
-
-  -- Loop over received frames
-  for f = 1, observation:size(1) do
-    -- Load frame
-    local frame = observation:select(1, f):float() -- Note: image does not work with CudaTensor
-    -- Perform colour conversion
-    if opt.colorSpace ~= 'rgb' then
-      frame = image['rgb2' .. opt.colorSpace](frame)
-    end
-    -- Resize 210x160 screen
-    input[{{f}, {}, {}, {}}] = image.scale(frame, opt.width, opt.height)
+  -- Load frame
+  local frame = observation:float() -- Note: image does not work with CudaTensor
+  -- Perform colour conversion
+  if opt.colorSpace ~= 'rgb' then
+    frame = image['rgb2' .. opt.colorSpace](frame)
   end
-
-  return input
+  -- Resize 210x160 screen
+  return image.scale(frame, opt.width, opt.height) -- Passed straight to memory, so keep as FloatTensor
 end
 
 -- Creates a dueling DQN
@@ -62,6 +55,7 @@ model.create = function(A, opt)
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
+  net:add(nn.View(opt.histLen*opt.nChannels, opt.height, opt.width)) -- Concatenate history in channel dimension
   net:add(bestModule('conv', opt.histLen*opt.nChannels, 32, 8, 8, 4, 4))
   net:add(bestModule('relu', true))
   net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))

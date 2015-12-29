@@ -1,68 +1,76 @@
+local _ = require 'moses'
+
 local experience = {}
 
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local stateSizes = torch.LongStorage({opt.memSize, opt.histLen*opt.nChannels, opt.height, opt.width}) -- Calculate state/transition storage size
-  -- Allocate memory for experience
-  memory.states = torch.Tensor(stateSizes)
-  memory.actions = torch.Tensor(opt.memSize)
-  memory.rewards = torch.Tensor(opt.memSize)
-  memory.transitions = torch.Tensor(stateSizes)
-  memory.terminals = torch.ByteTensor(opt.memSize) -- Terminal conditions stored as 0 = false, 1 = true
+  local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
+  -- Allocate memory for experience (using most efficient storage types)
+  memory.states = torch.FloatTensor(stateSize) -- ByteTensor uses less memory but reduces speed from conversion needed
+  memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
+  memory.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
+  -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
+  memory.terminals = torch.ByteTensor(opt.memSize):fill(1) -- Filling with 1 prevents going back in history initially
   -- Internal pointer
-  memory.nextIndex = 1
+  memory.index = 1
   memory.isFull = false
   -- TD-error δ-based priorities
-  memory.priorities = torch.Tensor(opt.memSize)
-  local smallConst = 1e-9
-  memory.maxPriority = opt.tdClamp -- Should prioritise sampling experience that has not been learnt from
+  memory.priorities = torch.FloatTensor(opt.memSize):fill(0) -- Stored at time t
+  local smallConst = 1e-6 -- Account for half precision
+  memory.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
+
+  -- Initialise first time step
+  memory.states[1]:zero() -- Blank state
+  memory.actions[1] = 1 -- Action is no-op
+
+  -- Calculates circular indices
+  local circIndex = function(x)
+    local ind = x % opt.memSize
+    return ind == 0 and opt.memSize or ind -- Correct 0-index
+  end
 
   -- Returns number of saved tuples
   function memory:size()
-    return self.isFull and opt.memSize or self.nextIndex - 1
+    return self.isFull and opt.memSize or self.index - 1
   end
 
-  -- Store new experience tuple
-  function memory:store(state, action, reward, transition, terminal)
-    self.states[{{self.nextIndex}, {}}] = state:float()
-    self.actions[self.nextIndex] = action
-    self.rewards[self.nextIndex] = reward
-    self.transitions[{{self.nextIndex}, {}}] = transition:float()
-    self.terminals[self.nextIndex] = terminal and 1 or 0
+  -- Stores experience tuple parts (including pre-emptive action)
+  function memory:store(reward, state, terminal, action)
+    self.rewards[self.index] = reward
     -- Store with maximal priority
-    self.priorities[self.nextIndex] = self.maxPriority + smallConst
+    self.priorities[self.index] = self.maxPriority + smallConst
     self.maxPriority = self.maxPriority + smallConst
 
     -- Increment index
-    self.nextIndex = self.nextIndex + 1
+    self.index = self.index + 1
     -- Circle back to beginning if memory limit reached
-    if self.nextIndex > opt.memSize then
+    if self.index > opt.memSize then
       self.isFull = true -- Full memory flag
-      self.nextIndex = 1 -- Reset nextIndex
+      self.index = 1 -- Reset index
     end
+
+    self.states[{{self.index}, {}, {}, {}}]:copy(state)
+    self.terminals[self.index] = terminal and 1 or 0
+    self.actions[self.index] = action
   end
 
-  -- Retrieve experience tuples
-  function memory:retrieve(indices)
-    local s, a, r, tr, te = self.states:index(1, indices), self.actions:index(1, indices), self.rewards:index(1, indices), self.transitions:index(1, indices), self.terminals:index(1, indices)
-    if opt.gpu > 0 then
-      return s:cuda(), a, r:cuda(), tr:cuda(), te
-    else
-      return s, a, r, tr, te
-    end
-  end
+  -- Retrieves current and historical states
+  function memory:retrieveHistory(index)
+    index = index or self.index -- Default to current state if index not provided
+    -- Allocate tensor
+    local s = opt.Tensor(opt.histLen, opt.nChannels, opt.height, opt.width):fill(0) -- Zero out history before episode
 
-  -- Update experience priorities using TD-errors δ
-  function memory:updatePriorities(indices, delta)
-    local priorities = delta:float()
-    if opt.memPriority == 'proportional' then
-      priorities:abs()
-    end
-
-    for p = 1, indices:size(1) do
-      self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
-    end
+    -- Go back in history whilst episode exists
+    local histIndex = opt.histLen
+    repeat
+      -- Copy state
+      s[{{histIndex}, {}, {}, {}}]:copy(self.states[{{index}, {}, {}, {}}])
+      -- Adjust index
+      index = circIndex(index - 1)
+    until self.terminals[index] == 1
+    
+    return s
   end
 
   -- Converts a CDF from a PDF
@@ -75,15 +83,15 @@ experience.create = function(opt)
   end
 
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-  function memory:prioritySample(priorityType)
+  function memory:sample(nSamples, priorityType)
     local N = self:size()
     local indices, w
 
     -- Priority 'none' = uniform sampling
     if priorityType == 'none' then
       indices = torch.randperm(N):long()
-      indices = indices[{{1, opt.batchSize}}]
-      w = torch.ones(opt.batchSize) -- Set weights to 1 as no correction needed
+      indices = indices[{{1, nSamples}}]
+      w = torch.ones(nSamples) -- Set weights to 1 as no correction needed
     else
       -- Calculate sampling probability distribution P
       local P = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
@@ -96,10 +104,10 @@ experience.create = function(opt)
 
       -- Create a cumulative distribution for inverse transform sampling
       pdfToCdf(P) -- Convert distribution
-      indices = torch.sort(torch.Tensor(opt.batchSize):uniform()) -- Generate uniform numbers for sampling
+      indices = torch.sort(torch.Tensor(nSamples):uniform()) -- Generate uniform numbers for sampling
       -- Perform linear search to sample
       local minIndex = 1
-      for i = 1, opt.batchSize do
+      for i = 1, nSamples do
         while indices[i] > P[minIndex] do
           minIndex = minIndex + 1
         end
@@ -115,6 +123,53 @@ experience.create = function(opt)
 
     return indices, w
   end
+
+  -- Retrieves experience tuples (s, a, r, s', t)
+  function memory:retrieve(indices)
+    local batchSize = indices:size(1)
+    -- Allocate tensors
+    local s = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width)
+    local a = torch.ByteTensor(batchSize)
+    local r = opt.Tensor(batchSize)
+    local sPrime = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width)
+    local t = torch.ByteTensor(batchSize)
+
+    for i = 1, batchSize do
+      -- Retrieve state history
+      s[{{i}, {}, {}, {}, {}}]:copy(self:retrieveHistory(indices[i])) -- Assume indices are valid
+      -- Retrieve action
+      a[i] = self.actions[indices[i]]
+      -- Retrieve rewards
+      r[i] = self.rewards[indices[i]]
+      -- Retrieve terminal status
+      t[i] = self.terminals[indices[i]]
+
+      -- If not terminal, fill in transition history
+      if t[i] == 0 then
+        if opt.histLen > 1 then
+          -- Use state to fill in transition history
+          sPrime[{{i}, {1, opt.histLen - 1}, {}, {}, {}}]:copy(s[{{i}, {2, opt.histLen}, {}, {}, {}}])
+        end
+        -- Get next state
+        sPrime[{{i}, {opt.histLen}, {}, {}, {}}]:copy(self.states[{{circIndex(indices[i] + 1)}, {}, {}, {}}])
+      end
+    end
+
+    return s, a, r, sPrime, t
+  end
+
+  -- Update experience priorities using TD-errors δ
+  function memory:updatePriorities(indices, delta)
+    local priorities = delta:float()
+    if opt.memPriority == 'proportional' then
+      priorities:abs()
+    end
+
+    for p = 1, indices:size(1) do
+      self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
+    end
+  end
+
 
   return memory
 end

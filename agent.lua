@@ -16,14 +16,10 @@ agent.create = function(gameEnv, opt)
   DQN.targetNet = DQN.policyNet:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.policyNet:getParameters()
-  -- Experience replay memory
+  -- Experience replay memory (also retains history)
   DQN.memory = experience.create(opt)
   -- Training mode
   DQN.isTraining = false
-  -- Learning variable updated on observe()
-  DQN.state = nil
-  -- Learning variables updated on act()
-  DQN.action, DQN.reward, DQN.transition, DQN.terminal = nil, nil, nil, nil
   -- Optimiser parameters
   local optimParams = {
     learningRate = opt.eta, -- TODO: Learning rate annealing superseded by β annealing?
@@ -42,65 +38,48 @@ agent.create = function(gameEnv, opt)
   -- Sets evaluation mode
   function DQN:evaluate()
     self.isTraining = false
-    -- Reset learning variables
-    self.state, self.action, self.reward, self.transition, self.terminal = nil, nil, nil, nil, nil
   end
   
-  -- Outputs an action (index) to perform on the environment
-  function DQN:observe(observation)
-    local state
-    -- Use preprocessed transition if available
-    state = self.state or model.preprocess(observation, opt)
-    local aIndex
+  -- Observes the results of the previous transition and chooses the next action to perform
+  function DQN:observe(reward, observation, terminal)
+    -- Clip reward for stability
+    reward = math.min(reward, -opt.rewardClip)
+    reward = math.max(reward, opt.rewardClip)
+
+    -- Process observation of current state
+    local state = model.preprocess(observation:select(1, 1), opt) 
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
     if self.isTraining then
       -- Use annealing ε
-      epsilon = opt.epsilon[opt.step] 
-      
-      -- Store state
-      self.state = state
+      epsilon = opt.epsilon[opt.step]
     end
 
     -- Choose action by ε-greedy exploration
-    if math.random() < epsilon then 
-      aIndex = torch.random(1, m)
-    else
-      local __, ind = torch.max(self.policyNet:forward(state), 1)
-      aIndex = ind[1]
+    local aIndex = 1 -- In a terminal state, choose no-op by default
+    if not terminal then
+      if math.random() < epsilon then 
+        aIndex = torch.random(1, m)
+      else
+        -- Retrieve current and historical states
+        local history = self.memory:retrieveHistory()
+        -- Choose best action
+        local __, ind = torch.max(self.policyNet:forward(history), 1)
+        aIndex = ind[1]
+      end
     end
 
-    return aIndex
-  end
-
-  -- Acts on (and can learn from) the environment
-  function DQN:act(aIndex)
-    local screen, reward, terminal = gameEnv:step(A[aIndex], self.isTraining)
+    -- Store experience tuple parts (including pre-emptive action)
+    self.memory:store(reward, state, terminal, aIndex)
 
     -- If training
     if self.isTraining then
-      -- Store action (index), reward, transition and terminal
-      self.action, self.reward, self.transition, self.terminal = aIndex, reward, model.preprocess(screen, opt), terminal
-
-      -- Clamp reward for stability
-      self.reward = math.min(self.reward, -opt.rewardClamp)
-      self.reward = math.max(self.reward, opt.rewardClamp)
-
-      -- Store in memory
-      self.memory:store(self.state, self.action, self.reward, self.transition, self.terminal)
-      -- Store preprocessed transition as state for performance
-      if not terminal then
-        self.state = self.transition
-      else
-        self.state = nil
-      end
-
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
         for n = 1, opt.memNReplay do
           -- Optimise (learn) from experience tuples
-          self:optimise(self.memory:prioritySample(opt.memPriority))
+          self:optimise(self.memory:sample(opt.batchSize, opt.memPriority))
         end
       end
 
@@ -111,7 +90,13 @@ agent.create = function(gameEnv, opt)
       end
     end
 
-    return screen, reward, terminal
+    return aIndex
+  end
+
+  -- Acts on the environment
+  function DQN:act(aIndex)
+    -- Perform step on environment
+    return gameEnv:step(A[aIndex], self.isTraining)
   end
 
   -- Learns from experience
@@ -183,8 +168,8 @@ agent.create = function(gameEnv, opt)
       tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-(VPrime:add(-QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
     end
 
-    -- Clamp TD-errors δ (approximates Huber loss)
-    tdErr:clamp(-opt.tdClamp, opt.tdClamp)
+    -- Clip TD-errors δ (approximates Huber loss)
+    tdErr:clamp(-opt.tdClip, opt.tdClip)
     -- Send TD-errors δ to be used as priorities
     self.memory:updatePriorities(indices, tdErr)
     

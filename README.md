@@ -30,14 +30,13 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewra
 
 ## Todo
 
-- **Use 4 frames (instead of 1)...**
-- Separate history dimension and concatenate at bottom of network
+- Collect validation set transitions
 - Implement rank-based prioritised experience replay
 - Use "sum tree" binary heap for proportional prioritised experience replay
 
 ## Acknowledgements
 
-- Georg Ostrovski for confirmation on network usage in advantage operators + notes on interaction with Double DQN.
+- Georg Ostrovski for confirmation on network usage in advantage operators + note on interaction with Double DQN.
 
 ## References
 

@@ -24,12 +24,11 @@ cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
 -- Agent options
-cmd:option('-histLen', 1, 'Number of consecutive states processed')
+cmd:option('-histLen', 4, 'Number of consecutive states processed')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 cmd:option('-memNReplay', 1, 'Number of points to replay per learning step')
---cmd:option('-bufferSize', 512, 'Memory buffer size')
 cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
@@ -40,8 +39,8 @@ cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε')
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel
-cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
-cmd:option('-tdClamp', 1, 'Clamps TD-error δ magnitude')
+cmd:option('-rewardClip', 1, 'Clips reward magnitude')
+cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude')
 cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
@@ -56,7 +55,7 @@ cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
 cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usually 125000, reduced for speed
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
 -- ALEWrap options
-cmd:option('-actRep', 4, 'Times to repeat action')
+cmd:option('-actRep', 4, 'Times to repeat action') -- Independent of history length
 cmd:option('-randomStarts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
 cmd:option('-poolFrmsType', 'max', 'Type of pooling over frames: max|mean')
 cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
@@ -186,10 +185,10 @@ if opt.mode == 'train' then
   for step = 1, opt.steps do
     opt.step = step -- Pass step number to agent for use in training
 
-    -- Observe and choose next action (index)
-    local actionIndex = DQN:observe(screen)
+    -- Observe results of previous transition (r, s', terminal') and choose next action (index)
+    local actionIndex = DQN:observe(reward, screen, terminal) -- As results received, learn in training mode
     if not terminal then
-      -- Act on environment and learn
+      -- Act on environment (to cause transition)
       screen, reward, terminal = DQN:act(actionIndex)
       cumulativeReward = cumulativeReward + reward
     else
@@ -231,7 +230,7 @@ if opt.mode == 'train' then
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
-        local actionIndex = DQN:observe(screen)
+        local actionIndex = DQN:observe(reward, screen, terminal)
         if not terminal then
           -- Act on environment
           screen, reward, terminal = DQN:act(actionIndex)
@@ -282,7 +281,8 @@ elseif opt.mode == 'eval' then
 
   -- Play one game (episode)
   while not terminal do
-    local actionIndex = DQN:observe(screen)
+    -- Observe and choose next action (index)
+    local actionIndex = DQN:observe(reward, screen, terminal)
     -- Act on environment
     screen, reward, terminal = DQN:act(actionIndex)
     cumulativeReward = cumulativeReward + reward
