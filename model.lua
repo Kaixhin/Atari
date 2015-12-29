@@ -125,7 +125,7 @@ model.create = function(A, opt)
 
   -- Network finishing with fully connected layers
   net:add(nn.View(convOutputSize))
-  net:add(nn.GradientRescale(1 / math.sqrt(2))) -- Heuristic that mildly increases stability for duel
+  net:add(nn.GradientRescale(1 / math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
   -- Create dueling streams
   net:add(streams)
   -- Join dueling streams
