@@ -32,9 +32,12 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewra
 
 - **Use 4 frames (instead of 1)...**
 - Separate history dimension and concatenate at bottom of network
-- For tdAL, check if Q(s, a) is TD-error or from target network
 - Implement rank-based prioritised experience replay
 - Use "sum tree" binary heap for proportional prioritised experience replay
+
+## Acknowledgements
+
+- Georg Ostrovski for confirmation on network usage in advantage operators + notes on interaction with Double DQN.
 
 ## References
 

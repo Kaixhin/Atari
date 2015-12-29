@@ -42,7 +42,9 @@ cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel
 cmd:option('-rewardClamp', 1, 'Clamps reward magnitude')
 cmd:option('-tdClamp', 1, 'Clamps TD-error δ magnitude')
-cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α')
+cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
+-- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
+cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
 -- Training options
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
@@ -62,6 +64,9 @@ cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
 local opt = cmd:parse(arg)
+
+-- Process boolean options (Torch fails to accept false on the command line)
+opt.doubleQ = opt.doubleQ and true or false
 
 -- Set ID as game name if not set
 if opt._id == '' then
@@ -193,7 +198,7 @@ if opt.mode == 'train' then
 
       -- Start a new episode
       episode = episode + 1
-      if opt.random_starts > 0 then
+      if opt.randomStarts > 0 then
         screen, reward, terminal = gameEnv:nextRandomGame()
       else
         screen, reward, terminal = gameEnv:newGame()
@@ -239,7 +244,7 @@ if opt.mode == 'train' then
 
           -- Start a new episode
           valEpisode = valEpisode + 1
-          if opt.random_starts > 0 then
+          if opt.randomStarts > 0 then
             screen, reward, terminal = gameEnv:nextRandomGame()
           else
             screen, reward, terminal = gameEnv:newGame()

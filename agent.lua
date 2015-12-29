@@ -128,14 +128,20 @@ agent.create = function(gameEnv, opt)
 
     -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
     local __, APrimeMax = torch.max(self.policyNet:forward(transitions), 2)
-    -- Calculate Q-values from transition using target network
-    local QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+    local QPrimes
     -- Double Q-learning: Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
+    if opt.doubleQ then
+      -- Calculate Q-values from transition using target network
+      QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+    else
+      -- Calculate Q-values from transition using policy network
+      QPrimes = self.policyNet:forward(transitions) -- Evaluate Q-values of argmax actions using policy network
+    end
     local Y = opt.Tensor(opt.batchSize) -- Similar to evaluation of V(s) for δ := Y − V(s) now, will be updated to Y later
     for q = 1, opt.batchSize do
       Y[q] = QPrimes[q][APrimeMax[q][1]]
     end    
-    -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
+    -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget) in DDQN case
     Y:mul(opt.gamma):add(rewards)
     -- Set target Y to reward if the transition was terminal as V(terminal) = 0
     Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
@@ -150,26 +156,32 @@ agent.create = function(gameEnv, opt)
 
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
     local tdErr = Y - QTaken
-    -- Calculate Q(s, a) and V(s) using target network
-    local Qs = self.targetNet:forward(states)
-    local Q = opt.Tensor(opt.batchSize)
-    for q = 1, opt.batchSize do
-      Q[q] = Qs[q][actions[q]]
+    -- Calculate advantage learning update
+    if opt.PALpha > 0 then
+      -- Calculate Q(s, a) and V(s) using target network
+      local Qs = self.targetNet:forward(states)
+      local Q = opt.Tensor(opt.batchSize)
+      for q = 1, opt.batchSize do
+        Q[q] = Qs[q][actions[q]]
+      end
+      local V = torch.max(Qs, 2)
+      -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
+      local tdErrAL = tdErr - V:add(-Q):mul(opt.PALpha) -- TODO: Torch.CudaTensor:csub is missing
+      -- Calculate Q(s', a) and V(s') using target network
+      if not opt.doubleQ then
+        QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+      end
+      local QPrime = opt.Tensor(opt.batchSize)
+      for q = 1, opt.batchSize do
+        QPrime[q] = QPrimes[q][actions[q]]
+      end
+      local VPrime = torch.max(QPrimes, 2)
+      -- Set values to 0 for terminal states
+      QPrime[terminals] = 0
+      VPrime[terminals] = 0
+      -- Calculate Persistent Advantage learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
+      tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-(VPrime:add(-QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
     end
-    local V = torch.max(Qs, 2)
-    -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
-    local tdErrAL = tdErr - V:add(-Q):mul(opt.PALpha) -- TODO: Torch.CudaTensor:csub is missing
-    -- Calculate Q(s', a) and V(s') using target network
-    local QPrime = opt.Tensor(opt.batchSize)
-    for q = 1, opt.batchSize do
-      QPrime[q] = QPrimes[q][actions[q]]
-    end
-    local VPrime = torch.max(QPrimes, 2)
-    -- Set values to 0 for terminal states
-    QPrime[terminals] = 0
-    VPrime[terminals] = 0
-    -- Calculate Persistent Advantage learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-    tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-(VPrime:add(-QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
 
     -- Clamp TD-errors δ (approximates Huber loss)
     tdErr:clamp(-opt.tdClamp, opt.tdClamp)
