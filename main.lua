@@ -1,4 +1,3 @@
--- TODO: Confirm nomenclature for parameters - a frame is a step in ALE, a time step is consecutive frames treated atomically by the agent
 local signal = require 'posix.signal'
 local _ = require 'moses'
 require 'logroll'
@@ -24,10 +23,12 @@ cmd:option('-mode', 'train', '"train" or "eval" mode')
 cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
---cmd:option('-agent_params', 'hist_len=4,update_freq=4,n_replay=1', 'string of agent parameters') -- TODO: Utilise
+-- Agent options
+cmd:option('-histLen', 1, 'Number of consecutive states processed')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
+cmd:option('-memNReplay', 1, 'Number of points to replay per learning step')
 --cmd:option('-bufferSize', 512, 'Memory buffer size')
 cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
@@ -46,15 +47,17 @@ cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α')
 cmd:option('-optimiser', 'rmsprop', 'Training algorithm')
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
-cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Equivalent to standard 200 million frames for DQN experiments
+cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
-cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usually 125000
+cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usually 125000, reduced for speed
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
--- alewrap options
-cmd:option('-actrep', 4, 'Times to repeat action')
-cmd:option('-random_starts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
+-- ALEWrap options
+cmd:option('-actRep', 4, 'Times to repeat action')
+cmd:option('-randomStarts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
+cmd:option('-poolFrmsType', 'max', 'Type of pooling over frames: max|mean')
+cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
@@ -87,7 +90,7 @@ torch.setdefaulttensortype(opt.tensorType)
 math.randomseed(opt.seed)
 torch.manualSeed(math.random(1, 1e6))
 
--- Tensor creation function for using appropriate CPU/GPU tensor type
+-- Tensor creation function for removing need to cast to CUDA if GPU is enabled
 opt.Tensor = function(...)
   return torch.Tensor(...)
 end

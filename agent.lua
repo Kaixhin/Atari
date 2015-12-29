@@ -98,8 +98,10 @@ agent.create = function(gameEnv, opt)
 
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
-        -- Optimise (learn) from experience tuples
-        self:optimise(self.memory:prioritySample(opt.memPriority))
+        for n = 1, opt.memNReplay do
+          -- Optimise (learn) from experience tuples
+          self:optimise(self.memory:prioritySample(opt.memPriority))
+        end
       end
 
       -- Update target network every τ steps

@@ -10,12 +10,12 @@ environment.init = function(opt)
   local options = {
     game_path = "roms",
     env = opt.game,
-    actrep = opt.actrep,
-    random_starts = opt.random_starts,
+    actrep = opt.actRep,
+    random_starts = opt.randomStarts,
     gpu = gpu,
     pool_frms = { -- Defaults to 2-frame mean-pooling
-      size = 2, -- Pools over frames to prevent problems with fixed interval events like lasers blinking
-      type = 'max'
+      type = opt.poolFrmsType,
+      size = opt.poolFrmsSize -- Pools over frames to prevent problems with fixed interval events like lasers blinking
     }
   }
   -- Return game environment

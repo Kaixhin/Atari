@@ -38,7 +38,7 @@ end
 
 -- Processes the full screen for DQN input
 model.preprocess = function(observation, opt)
-  local input = opt.Tensor(observation:size(1), opt.nChannels, opt.height, opt.width)
+  local input = opt.Tensor(observation:size(1), opt.histLen*opt.nChannels, opt.height, opt.width)
 
   -- Loop over received frames
   for f = 1, observation:size(1) do
@@ -55,7 +55,6 @@ model.preprocess = function(observation, opt)
   return input
 end
 
--- TODO: Work out how to get 4 observations
 -- Creates a dueling DQN
 model.create = function(A, opt)
   -- Number of discrete actions
@@ -63,14 +62,14 @@ model.create = function(A, opt)
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
-  net:add(bestModule('conv', opt.nChannels, 32, 8, 8, 4, 4))
+  net:add(bestModule('conv', opt.histLen*opt.nChannels, 32, 8, 8, 4, 4))
   net:add(bestModule('relu', true))
   net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))
   net:add(bestModule('relu', true))
   net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
   net:add(bestModule('relu', true))
   -- Calculate convolutional network output size
-  local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, torch.LongStorage({opt.nChannels, opt.height, opt.width})):totable()))
+  local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, torch.LongStorage({opt.histLen*opt.nChannels, opt.height, opt.width})):totable()))
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()

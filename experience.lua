@@ -3,7 +3,7 @@ local experience = {}
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local stateSizes = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state/transition storage size
+  local stateSizes = torch.LongStorage({opt.memSize, opt.histLen*opt.nChannels, opt.height, opt.width}) -- Calculate state/transition storage size
   -- Allocate memory for experience
   memory.states = torch.Tensor(stateSizes)
   memory.actions = torch.Tensor(opt.memSize)
