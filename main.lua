@@ -122,6 +122,7 @@ log.info('Setting up ALE')
 local gameEnv = environment.init(opt)
 
 -- Create DQN agent
+log.info('Creating DQN')
 local DQN = agent.create(gameEnv, opt)
 if paths.filep(opt.network) then
   -- Load saved agent if specified

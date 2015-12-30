@@ -6,8 +6,6 @@ local image = require 'image'
 local model = {}
 pcall(require, 'cudnn')
 local cudnn = cudnn or false -- cuDNN flag
-pcall(require, 'fbcunn')
-local fbcunn = nn.SpatialConvolutionCuFFT and true or false -- fbcunn flag (cuDNN is a dependency)
 
 local bestModule = function(mod, ...)
   if mod == 'relu' then
@@ -17,9 +15,7 @@ local bestModule = function(mod, ...)
       return nn.ReLU(...)
     end
   elseif mod == 'conv' then
-    if fbcunn then
-      return nn.SpatialConvolutionCuFFT(...)
-    elseif cudnn then
+    if cudnn then
       return cudnn.SpatialConvolution(...)
     else
       return nn.SpatialConvolution(...)
