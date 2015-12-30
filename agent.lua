@@ -36,13 +36,13 @@ agent.create = function(gameEnv, opt)
   -- Sets training mode
   function DQN:training()
     self.isTraining = true
-    self.stateBuffer:reset() -- Resets state buffer
+    self.stateBuffer:clear() -- Clears state buffer
   end
 
   -- Sets evaluation mode
   function DQN:evaluate()
     self.isTraining = false
-    self.stateBuffer:reset() -- Resets state buffer
+    self.stateBuffer:clear() -- Clears state buffer
   end
   
   -- Observes the results of the previous transition and chooses the next action to perform
@@ -98,9 +98,10 @@ agent.create = function(gameEnv, opt)
       if opt.step % opt.tau == 0 and opt.step >= opt.learnStart then
         self.targetNet = self.policyNet:clone()
       end
-
-      collectgarbage() -- Aggressive manual memory management
     end
+
+    -- Collect garbage manually to prevent running out of memory
+    collectgarbage()
 
     return aIndex
   end

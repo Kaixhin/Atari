@@ -56,7 +56,7 @@ function CircularQueue:pushReset(tensor)
 end
 
 -- Resets (zeros) the entire queue
-function CircularQueue:reset()
+function CircularQueue:clear()
   for i = 1, self.length do
     self.queue[i]:zero()
   end
