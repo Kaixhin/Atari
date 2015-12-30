@@ -55,6 +55,13 @@ function CircularQueue:pushReset(tensor)
   self.reset = true
 end
 
+-- Resets (zeros) the entire queue
+function CircularQueue:reset()
+  for i = 1, self.length do
+    self.queue[i]:zero()
+  end
+end
+
 -- Reads entire queue as a large tensor
 function CircularQueue:readAll()
   return torch.concat(self.queue)

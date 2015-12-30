@@ -28,7 +28,7 @@ agent.create = function(gameEnv, opt)
     learningRate = opt.eta, -- TODO: Learning rate annealing superseded by β annealing?
     momentum = opt.momentum
   }
-  -- Just for RMSprop, the seeming default for DQNs, set its momentum variable
+  -- Just for RMSprop, the default optimiser in DQN papers, set its momentum variable
   if opt.optimiser == 'rmsprop' then
     optimParams.alpha = opt.momentum
   end
@@ -36,11 +36,13 @@ agent.create = function(gameEnv, opt)
   -- Sets training mode
   function DQN:training()
     self.isTraining = true
+    self.stateBuffer:reset() -- Resets state buffer
   end
 
   -- Sets evaluation mode
   function DQN:evaluate()
     self.isTraining = false
+    self.stateBuffer:reset() -- Resets state buffer
   end
   
   -- Observes the results of the previous transition and chooses the next action to perform
@@ -213,12 +215,12 @@ agent.create = function(gameEnv, opt)
     return loss[1]
   end
 
-  -- Saves the network
+  -- Saves the network parameters θ
   function DQN:save(path)
     torch.save(paths.concat(path, 'DQN.t7'), theta)
   end
 
-  -- Loads a saved network
+  -- Loads saved network parameters θ
   function DQN:load(path)
     theta = torch.load(path)
     self.targetNet = self.policyNet:clone()
