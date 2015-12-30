@@ -3,6 +3,7 @@ require 'dpnn' -- for :gradParamClip()
 local optim = require 'optim'
 local model = require 'model'
 local experience = require 'experience'
+local CircularQueue = require 'structures/CircularQueue'
 
 local agent = {}
 
@@ -16,8 +17,10 @@ agent.create = function(gameEnv, opt)
   DQN.targetNet = DQN.policyNet:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.policyNet:getParameters()
-  -- Experience replay memory (also retains history)
+  -- Experience replay memory
   DQN.memory = experience.create(opt)
+  -- State buffer
+  DQN.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
   -- Training mode
   DQN.isTraining = false
   -- Optimiser parameters
@@ -47,7 +50,13 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    local state = model.preprocess(observation:select(1, 1), opt) 
+    local state = model.preprocess(observation:select(1, 1), opt)
+    -- Store in buffer depending on terminal status
+    if terminal then
+      self.stateBuffer:pushReset(state) -- Will clear buffer on next push
+    else
+      self.stateBuffer:push(state)
+    end
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
@@ -62,19 +71,19 @@ agent.create = function(gameEnv, opt)
       if math.random() < epsilon then 
         aIndex = torch.random(1, m)
       else
-        -- Retrieve current and historical states
-        local history = self.memory:retrieveHistory()
+        -- Retrieve current and historical states from state buffer
+        local history = self.stateBuffer:readAll()
         -- Choose best action
         local __, ind = torch.max(self.policyNet:forward(history), 1)
         aIndex = ind[1]
       end
     end
 
-    -- Store experience tuple parts (including pre-emptive action)
-    self.memory:store(reward, state, terminal, aIndex)
-
     -- If training
     if self.isTraining then
+      -- Store experience tuple parts (including pre-emptive action)
+      self.memory:store(reward, state, terminal, aIndex)
+
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
         for n = 1, opt.memNReplay do

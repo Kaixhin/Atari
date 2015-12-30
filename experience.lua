@@ -6,8 +6,8 @@ local experience = {}
 experience.create = function(opt)
   local memory = {}
   local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
-  -- Allocate memory for experience (using most efficient storage types)
-  memory.states = torch.FloatTensor(stateSize) -- ByteTensor uses less memory but reduces speed from conversion needed
+  -- Allocate memory for experience
+  memory.states = torch.FloatTensor(stateSize) -- ByteTensor uses less memory but reduces speed from byte <-> float conversion needed
   memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
   memory.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
