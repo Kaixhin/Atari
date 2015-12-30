@@ -5,7 +5,7 @@ local experience = {}
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
+  local stateSize = torch.LongStorage({opt.memSize, opt.histLen, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
   -- Allocate memory for experience
   memory.states = torch.FloatTensor(stateSize) -- ByteTensor uses less memory but reduces speed from byte <-> float conversion needed
   memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
@@ -50,27 +50,9 @@ experience.create = function(opt)
       self.index = 1 -- Reset index
     end
 
-    self.states[{{self.index}, {}, {}, {}}] = state
+    self.states[self.index] = state:float()
     self.terminals[self.index] = terminal and 1 or 0
     self.actions[self.index] = action
-  end
-
-  -- Retrieves current and historical states
-  function memory:retrieveHistory(index)
-    index = index or self.index -- Default to current state if index not provided
-    -- Allocate tensor
-    local s = opt.Tensor(opt.histLen, opt.nChannels, opt.height, opt.width):fill(0) -- Zero out history before episode
-
-    -- Go back in history whilst episode exists
-    local histIndex = opt.histLen
-    repeat
-      -- Copy state
-      s[{{histIndex}, {}, {}, {}}] = self.states[{{index}, {}, {}, {}}]
-      -- Adjust index
-      index = circIndex(index - 1)
-    until self.terminals[index] == 1
-    
-    return s
   end
 
   -- Converts a CDF from a PDF
@@ -136,7 +118,7 @@ experience.create = function(opt)
 
     for i = 1, batchSize do
       -- Retrieve state history
-      s[{{i}, {}, {}, {}, {}}] = self:retrieveHistory(indices[i]) -- Assume indices are valid
+      s[i] = self.states[indices[i]] -- Assume indices are valid
       -- Retrieve action
       a[i] = self.actions[indices[i]]
       -- Retrieve rewards
@@ -146,12 +128,7 @@ experience.create = function(opt)
 
       -- If not terminal, fill in transition history
       if t[i] == 0 then
-        if opt.histLen > 1 then
-          -- Use state to fill in transition history
-          sPrime[{{i}, {1, opt.histLen - 1}, {}, {}, {}}] = s[{{i}, {2, opt.histLen}, {}, {}, {}}]
-        end
-        -- Get next state
-        sPrime[{{i}, {opt.histLen}, {}, {}, {}}] = self.states[{{circIndex(indices[i] + 1)}, {}, {}, {}}]
+        sPrime[i] = self.states[circIndex(indices[i] + 1)]
       end
     end
 

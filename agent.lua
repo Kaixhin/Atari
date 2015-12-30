@@ -57,6 +57,8 @@ agent.create = function(gameEnv, opt)
     else
       self.stateBuffer:push(state)
     end
+    -- Retrieve current and historical states from state buffer
+    local history = self.stateBuffer:readAll()
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
@@ -71,8 +73,6 @@ agent.create = function(gameEnv, opt)
       if math.random() < epsilon then 
         aIndex = torch.random(1, m)
       else
-        -- Retrieve current and historical states from state buffer
-        local history = self.stateBuffer:readAll()
         -- Choose best action
         local __, ind = torch.max(self.policyNet:forward(history), 1)
         aIndex = ind[1]
@@ -82,7 +82,7 @@ agent.create = function(gameEnv, opt)
     -- If training
     if self.isTraining then
       -- Store experience tuple parts (including pre-emptive action)
-      self.memory:store(reward, state, terminal, aIndex)
+      self.memory:store(reward, history, terminal, aIndex)
 
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
