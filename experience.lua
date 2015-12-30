@@ -50,7 +50,7 @@ experience.create = function(opt)
       self.index = 1 -- Reset index
     end
 
-    self.states[{{self.index}, {}, {}, {}}]:copy(state)
+    self.states[{{self.index}, {}, {}, {}}] = state
     self.terminals[self.index] = terminal and 1 or 0
     self.actions[self.index] = action
   end
@@ -65,7 +65,7 @@ experience.create = function(opt)
     local histIndex = opt.histLen
     repeat
       -- Copy state
-      s[{{histIndex}, {}, {}, {}}]:copy(self.states[{{index}, {}, {}, {}}])
+      s[{{histIndex}, {}, {}, {}}] = self.states[{{index}, {}, {}, {}}]
       -- Adjust index
       index = circIndex(index - 1)
     until self.terminals[index] == 1
@@ -136,7 +136,7 @@ experience.create = function(opt)
 
     for i = 1, batchSize do
       -- Retrieve state history
-      s[{{i}, {}, {}, {}, {}}]:copy(self:retrieveHistory(indices[i])) -- Assume indices are valid
+      s[{{i}, {}, {}, {}, {}}] = self:retrieveHistory(indices[i]) -- Assume indices are valid
       -- Retrieve action
       a[i] = self.actions[indices[i]]
       -- Retrieve rewards
@@ -148,10 +148,10 @@ experience.create = function(opt)
       if t[i] == 0 then
         if opt.histLen > 1 then
           -- Use state to fill in transition history
-          sPrime[{{i}, {1, opt.histLen - 1}, {}, {}, {}}]:copy(s[{{i}, {2, opt.histLen}, {}, {}, {}}])
+          sPrime[{{i}, {1, opt.histLen - 1}, {}, {}, {}}] = s[{{i}, {2, opt.histLen}, {}, {}, {}}]
         end
         -- Get next state
-        sPrime[{{i}, {opt.histLen}, {}, {}, {}}]:copy(self.states[{{circIndex(indices[i] + 1)}, {}, {}, {}}])
+        sPrime[{{i}, {opt.histLen}, {}, {}, {}}] = self.states[{{circIndex(indices[i] + 1)}, {}, {}, {}}]
       end
     end
 
@@ -169,7 +169,6 @@ experience.create = function(opt)
       self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
     end
   end
-
 
   return memory
 end

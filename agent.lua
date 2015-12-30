@@ -149,6 +149,7 @@ agent.create = function(gameEnv, opt)
 
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
     local tdErr = Y - QTaken
+
     -- Calculate advantage learning update
     if opt.PALpha > 0 then
       -- Calculate Q(s, a) and V(s) using target network
