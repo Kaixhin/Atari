@@ -85,8 +85,7 @@ agent.create = function(gameEnv, opt)
 
       -- Update target network every τ steps
       if opt.step % opt.tau == 0 and opt.step >= opt.learnStart then
-        local targetTheta = self.targetNet:getParameters()
-        targetTheta:copy(theta) -- Deep copy policy network parameters
+        self.targetNet = self.policyNet:clone()
       end
     end
 
@@ -210,8 +209,7 @@ agent.create = function(gameEnv, opt)
   -- Loads a saved network
   function DQN:load(path)
     theta = torch.load(path)
-    local targetTheta = self.targetNet:getParameters()
-    targetTheta:copy(theta) -- Deep copy policy network parameters
+    self.targetNet = self.policyNet:clone()
   end
 
   return DQN

@@ -18,7 +18,7 @@ cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
 -- Game
 cmd:option('-game', 'space_invaders', 'Name of Atari ROM (stored in "roms" directory)')
 -- Training vs. evaluate mode
-cmd:option('-mode', 'train', '"train" or "eval" mode')
+cmd:option('-mode', 'train', 'Train vs. test mode: train|eval')
 -- Screen preprocessing options
 cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
@@ -28,7 +28,7 @@ cmd:option('-histLen', 4, 'Number of consecutive states processed')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
-cmd:option('-memNReplay', 1, 'Number of points to replay per learning step')
+cmd:option('-memNReplay', 1, 'Number of times to replay per learning step')
 cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
@@ -38,9 +38,9 @@ cmd:option('-eta', 7e-5, 'Learning rate η') -- Accounts for prioritied experien
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε')
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
-cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel
-cmd:option('-rewardClip', 1, 'Clips reward magnitude')
-cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude')
+cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel than for standard DQN
+cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip')
+cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip')
 cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
@@ -52,18 +52,17 @@ cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
-cmd:option('-valSteps', 12500, 'Number of steps to use for validation') -- Usually 125000, reduced for speed
+cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
 -- ALEWrap options
 cmd:option('-actRep', 4, 'Times to repeat action') -- Independent of history length
-cmd:option('-randomStarts', 30, 'Play no-op action between 1 and random_starts number of times at the start of each training episode')
+cmd:option('-randomStarts', 30, 'Play no-op action between 1 and randomStarts number of times at the start of each training episode')
 cmd:option('-poolFrmsType', 'max', 'Type of pooling over frames: max|mean')
 cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
 local opt = cmd:parse(arg)
-
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.doubleQ = opt.doubleQ and true or false
 
@@ -98,6 +97,7 @@ torch.manualSeed(math.random(1, 1e6))
 opt.Tensor = function(...)
   return torch.Tensor(...)
 end
+
 -- GPU setup
 if opt.gpu > 0 then
   log.info('Setting up GPU')
@@ -171,7 +171,7 @@ if opt.mode == 'train' then
 
   -- Create ε decay vector
   opt.epsilon = torch.linspace(opt.epsilonEnd, opt.epsilonStart, opt.epsilonSteps)
-  opt.epsilon:mul(-1):add(opt.epsilonStart)
+  opt.epsilon:neg():add(opt.epsilonStart)
   local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
   opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
   -- Create β growth vector
@@ -226,8 +226,8 @@ if opt.mode == 'train' then
       local valEpisode = 1
       -- Reset cumulative reward
       cumulativeReward = reward
-      -- Track total score for validation
-      local totalValScore = reward
+      -- Track total/average score for validation
+      local valScore = reward
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
@@ -237,7 +237,7 @@ if opt.mode == 'train' then
           screen, reward, terminal = DQN:act(actionIndex)
           -- Track scores
           cumulativeReward = cumulativeReward + reward
-          totalValScore = totalValScore + reward
+          valScore = valScore + reward
         else
           -- Print score for episode
           log.info('Val Episode ' .. valEpisode .. ' | Score: ' .. cumulativeReward .. ' | Steps: ' .. valStep .. '/' .. opt.valSteps)
@@ -258,11 +258,12 @@ if opt.mode == 'train' then
         end
       end
 
-      -- Check total score against best
-      log.info('Total Score: ' .. totalValScore)
-      if totalValScore > bestValScore then
+      -- Check average score against best
+      valScore = valScore/valEpisode
+      log.info('Average Score: ' .. valScore)
+      if valScore > bestValScore then
         log.info('New best score')
-        bestValScore = totalValScore
+        bestValScore = valScore
 
         log.info('Saving network')
         DQN:save(paths.concat('experiments', opt._id))

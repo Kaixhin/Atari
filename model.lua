@@ -35,10 +35,10 @@ end
 -- Processes a single frame for DQN input
 model.preprocess = function(observation, opt)
   -- Load frame
-  local frame = observation:float() -- Note: image does not work with CudaTensor
+  local frame = observation:float() -- Convert from CudaTensor if necessary
   -- Perform colour conversion
   if opt.colorSpace ~= 'rgb' then
-    frame = image['rgb2' .. opt.colorSpace](frame)
+    image['rgb2' .. opt.colorSpace](frame, frame)
   end
   -- Resize 210x160 screen
   return image.scale(frame, opt.width, opt.height) -- Passed straight to memory, so keep as FloatTensor
