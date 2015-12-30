@@ -83,8 +83,6 @@ log = logroll.combine(flog, plog)
 
 -- Torch setup
 log.info('Setting up Torch7')
--- Enable memory management
-torch.setheaptracking(true)
 -- Set number of BLAS threads
 torch.setnumthreads(opt.threads)
 -- Set default Tensor type (float is more efficient than double)

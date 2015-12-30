@@ -96,6 +96,8 @@ agent.create = function(gameEnv, opt)
       if opt.step % opt.tau == 0 and opt.step >= opt.learnStart then
         self.targetNet = self.policyNet:clone()
       end
+
+      collectgarbage() -- Aggressive manual memory management
     end
 
     return aIndex
