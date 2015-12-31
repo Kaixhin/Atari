@@ -185,7 +185,6 @@ agent.create = function(gameEnv, opt)
     if opt.PALpha > 0 then
       -- Calculate Q(s, a) and V(s) using target network
       learn.Qs = self.targetNet:forward(tuple.states)
-      learn.Q = opt.Tensor(opt.batchSize)
       for q = 1, opt.batchSize do
         learn.Q[q] = learn.Qs[q][tuple.actions[q]]
       end
