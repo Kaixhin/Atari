@@ -5,9 +5,10 @@ local experience = {}
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local stateSize = torch.LongStorage({opt.memSize, opt.histLen, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
+  local nLevels = 255 -- Number of grayscale levels (used in byte <-> float conversion)
+  local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
   -- Allocate memory for experience
-  memory.states = torch.FloatTensor(stateSize) -- ByteTensor uses less memory but reduces speed from byte <-> float conversion needed
+  memory.states = torch.ByteTensor(stateSize) -- Most efficient storage needed to cope with large memory
   memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
   memory.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
@@ -20,8 +21,11 @@ experience.create = function(opt)
   local smallConst = 1e-6 -- Account for half precision
   memory.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
 
+  -- Work out tensor type to cast to for retrieveal
+  local castType = string.match(opt.Tensor():type(), 'torch.(.*)Tensor'):lower()
+
   -- Initialise first time step
-  memory.states[1]:zero() -- Blank state
+  memory.states[1]:zero() -- Blank out state
   memory.actions[1] = 1 -- Action is no-op
 
   -- Calculates circular indices
@@ -50,7 +54,7 @@ experience.create = function(opt)
       self.index = 1 -- Reset index
     end
 
-    self.states[self.index] = state:float()
+    self.states[self.index] = state:float():mul(nLevels) -- Convert to byte
     self.terminals[self.index] = terminal and 1 or 0
     self.actions[self.index] = action
   end
@@ -124,18 +128,34 @@ experience.create = function(opt)
     end
 
     for i = 1, batchSize do
-      -- Retrieve state history
-      tuple.states[i] = self.states[indices[i]] -- Assume indices are valid
+      local index = indices[i]
       -- Retrieve action
-      tuple.actions[i] = self.actions[indices[i]]
+      tuple.actions[i] = self.actions[index]
       -- Retrieve rewards
-      tuple.rewards[i] = self.rewards[indices[i]]
+      tuple.rewards[i] = self.rewards[index]
       -- Retrieve terminal status
-      tuple.terminals[i] = self.terminals[indices[i]]
+      tuple.terminals[i] = self.terminals[index]
+
+      -- Go back in history whilst episode exists
+      local histIndex = opt.histLen
+      repeat
+        -- Copy state
+        tuple.states[i][histIndex] = self.states[index][castType](self.states[index]):div(nLevels) -- Convert from byte
+        -- Adjust index
+        index = circIndex(index - 1)
+      until self.terminals[index] == 1
+      -- Blank out rest of history
+      for h = histIndex, 1, -1 do
+        tuple.states[i][h]:zero()
+      end
 
       -- If not terminal, fill in transition history
       if tuple.terminals[i] == 0 then
-        tuple.transitions[i] = self.states[circIndex(indices[i] + 1)]
+        -- Copy most recent state
+        for h = 2, opt.histLen do
+          tuple.transitions[i][h] = tuple.states[i][h - 1]
+        end
+        tuple.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index]):div(nLevels) -- Convert from byte
       end
     end
 
@@ -144,7 +164,7 @@ experience.create = function(opt)
 
   -- Update experience priorities using TD-errors δ
   function memory:updatePriorities(indices, delta)
-    local priorities = delta:float()
+    local priorities = delta:clone():float()
     if opt.memPriority == 'proportional' then
       priorities:abs()
     end

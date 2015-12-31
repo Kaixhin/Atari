@@ -10,17 +10,22 @@ local agent = {}
 -- Creates a DQN agent
 agent.create = function(gameEnv, opt)
   local DQN = {}
+
+  -- Actions
   local A = gameEnv:getActions()
   local m = _.size(A)
+
   -- Policy and target networks
   DQN.policyNet = model.create(A, opt)
   DQN.targetNet = DQN.policyNet:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.policyNet:getParameters()
+
   -- Experience replay memory
   DQN.memory = experience.create(opt)
   -- State buffer
   DQN.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+
   -- Training mode
   DQN.isTraining = false
   -- Optimiser parameters
@@ -88,7 +93,7 @@ agent.create = function(gameEnv, opt)
     -- If training
     if self.isTraining then
       -- Store experience tuple parts (including pre-emptive action)
-      self.memory:store(reward, history, terminal, aIndex)
+      self.memory:store(reward, state, terminal, aIndex)
 
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
@@ -209,7 +214,7 @@ agent.create = function(gameEnv, opt)
     -- Clip TD-errors δ (approximates Huber loss)
     learn.tdErr:clamp(-opt.tdClip, opt.tdClip)
     -- Send TD-errors δ to be used as priorities
-    self.memory:updatePriorities(indices, learn.tdErr:clone())
+    self.memory:updatePriorities(indices, learn.tdErr)
     
     -- Zero QCurr outputs (no error)
     learn.QCurr:zero()
