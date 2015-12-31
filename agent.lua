@@ -44,6 +44,10 @@ agent.create = function(gameEnv, opt)
     self.isTraining = false
     self.stateBuffer:clear() -- Clears state buffer
   end
+
+  -- Preallocate memory for state and history
+  local state = torch.FloatTensor(opt.nChannels, opt.height, opt.width)
+  local history = opt.Tensor(opt.histLen, opt.nChannels, opt.height, opt.width)
   
   -- Observes the results of the previous transition and chooses the next action to perform
   function DQN:observe(reward, observation, terminal)
@@ -52,7 +56,7 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    local state = model.preprocess(observation:select(1, 1), opt)
+    model.preprocess(state, observation:select(1, 1), opt)
     -- Store in buffer depending on terminal status
     if terminal then
       self.stateBuffer:pushReset(state) -- Will clear buffer on next push
@@ -60,7 +64,7 @@ agent.create = function(gameEnv, opt)
       self.stateBuffer:push(state)
     end
     -- Retrieve current and historical states from state buffer
-    local history = self.stateBuffer:readAll()
+    self.stateBuffer:readAll(history)
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
@@ -112,6 +116,30 @@ agent.create = function(gameEnv, opt)
     return gameEnv:step(A[aIndex], self.isTraining)
   end
 
+  -- Preallocate memory for experience tuples and learning variables
+  local tuple = {
+    states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    actions = torch.ByteTensor(opt.batchSize),
+    rewards = opt.Tensor(opt.batchSize),
+    transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    terminals = torch.ByteTensor(opt.batchSize)
+  }
+  local learn = {
+    __ = opt.Tensor(opt.batchSize, 1),
+    APrimeMax = opt.Tensor(opt.batchSize, 1),
+    QPrimes = opt.Tensor(opt.batchSize, m),
+    Y = opt.Tensor(opt.batchSize),
+    QCurr = opt.Tensor(opt.batchSize, m), 
+    QTaken = opt.Tensor(opt.batchSize),
+    tdErr = opt.Tensor(opt.batchSize),
+    Qs = opt.Tensor(opt.batchSize, m), 
+    Q = opt.Tensor(opt.batchSize),
+    V = opt.Tensor(opt.batchSize, 1),
+    tdErrAL = opt.Tensor(opt.batchSize),
+    QPrime = opt.Tensor(opt.batchSize),
+    VPrime = opt.Tensor(opt.batchSize, 1)
+  }
+
   -- Learns from experience
   function DQN:learn(x, indices, ISWeights)
     -- Copy x to parameters θ if necessary
@@ -122,85 +150,82 @@ agent.create = function(gameEnv, opt)
     dTheta:zero()
 
     -- Retrieve experience tuples
-    local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
+    self.memory:retrieve(tuple, indices)
 
     -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
-    local __, APrimeMax = torch.max(self.policyNet:forward(transitions), 2)
-    local QPrimes
+    learn.__, learn.APrimeMax = torch.max(self.policyNet:forward(tuple.transitions), 2)
     -- Double Q-learning: Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
     if opt.doubleQ then
       -- Calculate Q-values from transition using target network
-      QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+      learn.QPrimes = self.targetNet:forward(tuple.transitions) -- Evaluate Q-values of argmax actions using target network
     else
       -- Calculate Q-values from transition using policy network
-      QPrimes = self.policyNet:forward(transitions) -- Evaluate Q-values of argmax actions using policy network
+      learn.QPrimes = self.policyNet:forward(tuple.transitions) -- Evaluate Q-values of argmax actions using policy network
     end
-    local Y = opt.Tensor(opt.batchSize) -- Similar to evaluation of V(s) for δ := Y − V(s) now, will be updated to Y later
+    -- Similar to evaluation of V(s) for δ := Y − V(s) now, will be updated to Y later
     for q = 1, opt.batchSize do
-      Y[q] = QPrimes[q][APrimeMax[q][1]]
+      learn.Y[q] = learn.QPrimes[q][learn.APrimeMax[q][1]]
     end    
     -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget) in DDQN case
-    Y:mul(opt.gamma):add(rewards)
+    learn.Y:mul(opt.gamma):add(tuple.rewards)
     -- Set target Y to reward if the transition was terminal as V(terminal) = 0
-    Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
+    learn.Y[tuple.terminals] = tuple.rewards[tuple.terminals] -- Little use optimising over batch processing if terminal states are rare
 
     -- Get all predicted Q-values from the current state
-    local QCurr = self.policyNet:forward(states)
-    local QTaken = opt.Tensor(opt.batchSize)
+    learn.QCurr = self.policyNet:forward(tuple.states)
     -- Get prediction of current Q-values with given actions
     for q = 1, opt.batchSize do
-      QTaken[q] = QCurr[q][actions[q]]
+      learn.QTaken[q] = learn.QCurr[q][tuple.actions[q]]
     end
 
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
-    local tdErr = Y - QTaken
+    learn.tdErr = learn.Y - learn.QTaken
 
     -- Calculate advantage learning update
     if opt.PALpha > 0 then
       -- Calculate Q(s, a) and V(s) using target network
-      local Qs = self.targetNet:forward(states)
-      local Q = opt.Tensor(opt.batchSize)
+      learn.Qs = self.targetNet:forward(tuple.states)
+      learn.Q = opt.Tensor(opt.batchSize)
       for q = 1, opt.batchSize do
-        Q[q] = Qs[q][actions[q]]
+        learn.Q[q] = learn.Qs[q][tuple.actions[q]]
       end
-      local V = torch.max(Qs, 2)
+      learn.V = torch.max(learn.Qs, 2)
       -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
-      local tdErrAL = tdErr - V:add(-Q):mul(opt.PALpha) -- TODO: Torch.CudaTensor:csub is missing
+      learn.tdErrAL = learn.tdErr - learn.V:add(-learn.Q):mul(opt.PALpha) -- TODO: Torch.CudaTensor:csub is missing
       -- Calculate Q(s', a) and V(s') using target network
       if not opt.doubleQ then
-        QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+        learn.QPrimes = self.targetNet:forward(tuple.transitions) -- Evaluate Q-values of argmax actions using target network
       end
-      local QPrime = opt.Tensor(opt.batchSize)
       for q = 1, opt.batchSize do
-        QPrime[q] = QPrimes[q][actions[q]]
+        learn.QPrime[q] = learn.QPrimes[q][tuple.actions[q]]
       end
-      local VPrime = torch.max(QPrimes, 2)
+      learn.VPrime = torch.max(learn.QPrimes, 2)
       -- Set values to 0 for terminal states
-      QPrime[terminals] = 0
-      VPrime[terminals] = 0
+      learn.QPrime[tuple.terminals] = 0
+      learn.VPrime[tuple.terminals] = 0
       -- Calculate Persistent Advantage learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-      tdErr = torch.max(torch.cat(tdErrAL, tdErr:add(-(VPrime:add(-QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
+      learn.tdErr = torch.max(torch.cat(learn.tdErrAL, learn.tdErr:add(-(learn.VPrime:add(-learn.QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
     end
 
     -- Clip TD-errors δ (approximates Huber loss)
-    tdErr:clamp(-opt.tdClip, opt.tdClip)
+    learn.tdErr:clamp(-opt.tdClip, opt.tdClip)
     -- Send TD-errors δ to be used as priorities
-    self.memory:updatePriorities(indices, tdErr)
+    self.memory:updatePriorities(indices, learn.tdErr:clone())
     
     -- Zero QCurr outputs (no error)
-    QCurr:zero()
+    learn.QCurr:zero()
     -- Set TD-errors δ with given actions
     for q = 1, opt.batchSize do
-      QCurr[q][actions[q]] = ISWeights[q] * tdErr[q] -- Correct prioritisation bias with importance-sampling weights
+      learn.QCurr[q][tuple.actions[q]] = ISWeights[q] * learn.tdErr[q] -- Correct prioritisation bias with importance-sampling weights
     end
 
     -- Backpropagate gradients (network modifies internally)
-    self.policyNet:backward(states, QCurr)
+    self.policyNet:backward(tuple.states, learn.QCurr)
     -- Clip the norm of the gradients
     self.policyNet:gradParamClip(10)
     
     -- Calculate squared error loss (for optimiser)
-    local loss = torch.mean(tdErr:pow(2))
+    local loss = torch.mean(learn.tdErr:pow(2))
 
     return loss, dTheta
   end

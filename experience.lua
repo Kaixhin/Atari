@@ -107,32 +107,39 @@ experience.create = function(opt)
   end
 
   -- Retrieves experience tuples (s, a, r, s', t)
-  function memory:retrieve(indices)
-    local batchSize = indices:size(1)
-    -- Allocate tensors
-    local s = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width)
-    local a = torch.ByteTensor(batchSize)
-    local r = opt.Tensor(batchSize)
-    local sPrime = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width)
-    local t = torch.ByteTensor(batchSize)
+  function memory:retrieve(tuple, indices)
+    local batchSize
+    if not indices then
+      indices = tuple
+      batchSize = indices:size(1)
+      tuple = {
+        states = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+        actions = torch.ByteTensor(batchSize),
+        rewards = opt.Tensor(batchSize),
+        transitions = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+        terminals = torch.ByteTensor(batchSize)
+      }
+    else
+      batchSize = indices:size(1)
+    end
 
     for i = 1, batchSize do
       -- Retrieve state history
-      s[i] = self.states[indices[i]] -- Assume indices are valid
+      tuple.states[i] = self.states[indices[i]] -- Assume indices are valid
       -- Retrieve action
-      a[i] = self.actions[indices[i]]
+      tuple.actions[i] = self.actions[indices[i]]
       -- Retrieve rewards
-      r[i] = self.rewards[indices[i]]
+      tuple.rewards[i] = self.rewards[indices[i]]
       -- Retrieve terminal status
-      t[i] = self.terminals[indices[i]]
+      tuple.terminals[i] = self.terminals[indices[i]]
 
       -- If not terminal, fill in transition history
-      if t[i] == 0 then
-        sPrime[i] = self.states[circIndex(indices[i] + 1)]
+      if tuple.terminals[i] == 0 then
+        tuple.transitions[i] = self.states[circIndex(indices[i] + 1)]
       end
     end
 
-    return s, a, r, sPrime, t
+    return tuple
   end
 
   -- Update experience priorities using TD-errors δ

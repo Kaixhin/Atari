@@ -33,15 +33,22 @@ local calcOutputSize = function(network, inputSize)
 end
 
 -- Processes a single frame for DQN input
-model.preprocess = function(observation, opt)
+model.preprocess = function(res, observation, opt)
+  if not opt then
+    observation = res
+    res = observation:clone():zero() -- Create result tensor
+  end
+
   -- Load frame
   local frame = observation:float() -- Convert from CudaTensor if necessary
   -- Perform colour conversion
   if opt.colorSpace ~= 'rgb' then
     frame = image['rgb2' .. opt.colorSpace](frame)
   end
+
   -- Resize 210x160 screen
-  return image.scale(frame, opt.width, opt.height) -- Passed straight to memory, so keep as FloatTensor
+  res = image.scale(frame, opt.width, opt.height)
+  return res
 end
 
 -- Creates a dueling DQN
