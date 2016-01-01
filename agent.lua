@@ -61,7 +61,8 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    model.preprocess(state, observation:select(1, 1), opt)
+    state = model.preprocess(observation:select(1, 1), opt)
+
     -- Store in buffer depending on terminal status
     if terminal then
       self.stateBuffer:pushReset(state) -- Will clear buffer on next push
@@ -69,7 +70,7 @@ agent.create = function(gameEnv, opt)
       self.stateBuffer:push(state)
     end
     -- Retrieve current and historical states from state buffer
-    self.stateBuffer:readAll(history)
+    history = self.stateBuffer:readAll(history)
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
@@ -155,7 +156,7 @@ agent.create = function(gameEnv, opt)
     dTheta:zero()
 
     -- Retrieve experience tuples
-    self.memory:retrieve(tuple, indices)
+    tuple.states, tuple.actions, tuple.rewards, tuple.transitions, tuple.terminals = self.memory:retrieve(indices)
 
     -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
     learn.__, learn.APrimeMax = torch.max(self.policyNet:forward(tuple.transitions), 2)

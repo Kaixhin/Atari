@@ -110,24 +110,17 @@ experience.create = function(opt)
     return indices, w
   end
 
+  -- Preallocate memory for experience tuples
+  local tuple = {
+    states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    actions = torch.ByteTensor(opt.batchSize),
+    rewards = opt.Tensor(opt.batchSize),
+    transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    terminals = torch.ByteTensor(opt.batchSize)
+  }
   -- Retrieves experience tuples (s, a, r, s', t)
-  function memory:retrieve(tuple, indices)
-    local batchSize
-    if not indices then
-      indices = tuple
-      batchSize = indices:size(1)
-      tuple = {
-        states = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
-        actions = torch.ByteTensor(batchSize),
-        rewards = opt.Tensor(batchSize),
-        transitions = opt.Tensor(batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
-        terminals = torch.ByteTensor(batchSize)
-      }
-    else
-      batchSize = indices:size(1)
-    end
-
-    for i = 1, batchSize do
+  function memory:retrieve(indices)
+    for i = 1, opt.batchSize do
       local index = indices[i]
       -- Retrieve action
       tuple.actions[i] = self.actions[index]
@@ -141,9 +134,10 @@ experience.create = function(opt)
       repeat
         -- Copy state
         tuple.states[i][histIndex] = self.states[index][castType](self.states[index]):div(nLevels) -- Convert from byte
-        -- Adjust index
+        -- Adjust indices
         index = circIndex(index - 1)
-      until self.terminals[index] == 1
+        histIndex = histIndex - 1
+      until histIndex == 0 or self.terminals[index] == 1
       -- Blank out rest of history
       for h = histIndex, 1, -1 do
         tuple.states[i][h]:zero()
@@ -159,7 +153,7 @@ experience.create = function(opt)
       end
     end
 
-    return tuple
+    return tuple.states, tuple.actions, tuple.rewards, tuple.transitions, tuple.terminals
   end
 
   -- Update experience priorities using TD-errors δ

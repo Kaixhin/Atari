@@ -5,7 +5,6 @@ local image = require 'image'
 
 local model = {}
 pcall(require, 'cudnn')
-local cudnn = cudnn or false -- cuDNN flag
 
 local bestModule = function(mod, ...)
   if mod == 'relu' then
@@ -33,12 +32,7 @@ local calcOutputSize = function(network, inputSize)
 end
 
 -- Processes a single frame for DQN input
-model.preprocess = function(res, observation, opt)
-  if not opt then
-    observation = res
-    res = observation:clone():zero() -- Create result tensor
-  end
-
+model.preprocess = function(observation, opt)
   -- Load frame
   local frame = observation:float() -- Convert from CudaTensor if necessary
   -- Perform colour conversion
@@ -47,12 +41,14 @@ model.preprocess = function(res, observation, opt)
   end
 
   -- Resize 210x160 screen
-  res = image.scale(frame, opt.width, opt.height)
-  return res
+  return image.scale(frame, opt.width, opt.height)
 end
 
 -- Creates a dueling DQN
 model.create = function(A, opt)
+  -- Set cuDNN flag
+  cudnn = opt.gpu > 0 and cudnn or false
+
   -- Number of discrete actions
   local m = _.size(A) 
 

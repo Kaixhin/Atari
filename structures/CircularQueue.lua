@@ -63,9 +63,8 @@ function CircularQueue:clear()
 end
 
 -- Reads entire queue as a large tensor
-function CircularQueue:readAll(res)
-  res = torch.concat(self.queue)
-  return res
+function CircularQueue:readAll()
+  return torch.concat(self.queue)
 end
 
 return CircularQueue
