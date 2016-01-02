@@ -16,7 +16,7 @@ function BinaryHeap:_init(init)
     self.size = init:size(1)
     -- Rebalance
     for i = math.ceil(self.size/2) - 1, 1, -1 do
-      self:rebalance(i)
+      self:downHeap(i)
     end
   end
 end
@@ -28,21 +28,34 @@ end
 -- Right_Child(i) = 2i+1
 --]]
 
--- Inserts a new value in place
+-- Inserts a new value
 function BinaryHeap:insert(val)
   -- Refuse to add values if no space left
   if self.size == self.array:size(1) then
     print('Error: no space left in heap to add value ' .. val)
     return
   end
-  self.size = self.size + 1
 
-  local i = self.size
-  -- Bubble the value up from the bottom
-  while i > 1 and self.array[math.floor(i/2)] < val do
-    self.array[i], i = self.array[math.floor(i/2)], math.floor(i/2)
+  -- Add value to end
+  self.size = self.size + 1
+  self.array[self.size] = val
+
+  -- Rebalance
+  self:upHeap(self.size)
+end
+
+-- Updates a value (and rebalances)
+function BinaryHeap:update(i, val)
+  if i > self.size then
+    print('Error: index ' .. i .. ' is greater than the current size of the heap')
+    return
   end
+
+  -- Replace value
   self.array[i] = val
+  -- Rebalance
+  self:downHeap(i)
+  self:upHeap(i)
 end
 
 -- Returns the maximum value
@@ -64,13 +77,28 @@ function BinaryHeap:pop()
   self.array[1] = self.array[self.size]
   self.size = self.size - 1
   -- Rebalance the tree
-  self:rebalance(1)
+  self:downHeap(1)
 
   return max
 end
 
--- Rebalances the heap
-function BinaryHeap:rebalance(i)
+-- Rebalances the heap (by moving large values up)
+function BinaryHeap:upHeap(i)
+  -- Calculate parent index
+  local p = math.floor(i/2)
+
+  if i > 1 then
+    -- If parent is smaller than child then swap
+    if self.array[p] < self.array[i] then
+      self.array[i], self.array[p] = self.array[p], self.array[i]
+      -- Continue rebalancing
+      self:upHeap(p)
+    end
+  end
+end
+
+-- Rebalances the heap (by moving small values down)
+function BinaryHeap:downHeap(i)
   -- Calculate left and right child indices
   local l, r = 2*i, 2*i + 1
 
@@ -88,7 +116,7 @@ function BinaryHeap:rebalance(i)
   -- Continue rebalancing if necessary
   if greatest ~= i then
     self.array[i], self.array[greatest] = self.array[greatest], self.array[i]
-    self:rebalance(greatest)
+    self:downHeap(greatest)
   end
 end
 
@@ -103,11 +131,11 @@ function BinaryHeap:__tostring()
     -- Add a new line and spacing for each new level
     local l = math.floor(math.log(i, 2))
     if level ~= l then
-      str = str .. '\n'
+      str = str .. '\n' .. string.rep('  ', math.pow(2, maxLevel - l))
       level = l
     end
     -- Print value and spacing
-    str = str .. string.format('%.2f ', self.array[i])
+    str = str .. string.format('%.2f ', self.array[i]) .. string.rep('    ', maxLevel - l)
   end
 
   return str

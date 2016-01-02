@@ -77,6 +77,45 @@ experience.create = function(opt)
     self.actions[self.index] = action
   end
 
+  -- Retrieves experience tuples (s, a, r, s', t)
+  function memory:retrieve(indices)
+    -- Blank out history in one go
+    experience.buffers.states:zero()
+
+    -- Iterate over indices
+    for i = 1, opt.batchSize do
+      local index = indices[i]
+      -- Retrieve action
+      experience.buffers.actions[i] = self.actions[index]
+      -- Retrieve rewards
+      experience.buffers.rewards[i] = self.rewards[index]
+      -- Retrieve terminal status
+      experience.buffers.terminals[i] = self.terminals[index]
+
+      -- Go back in history whilst episode exists
+      local histIndex = opt.histLen
+      repeat
+        -- Copy state
+        experience.buffers.states[i][histIndex] = self.states[index][castType](self.states[index])
+        -- Adjust indices
+        index = circIndex(index - 1)
+        histIndex = histIndex - 1
+      until histIndex == 0 or self.terminals[index] == 1
+
+      -- If not terminal, fill in transition history
+      if experience.buffers.terminals[i] == 0 then
+        -- Copy most recent state
+        for h = 2, opt.histLen do
+          experience.buffers.transitions[i][h] = experience.buffers.states[i][h - 1]
+        end
+        -- Get transition frame
+        experience.buffers.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index])
+      end
+    end
+
+    return experience.buffers.states, experience.buffers.actions, experience.buffers.rewards, experience.buffers.transitions, experience.buffers.terminals
+  end
+
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
   function memory:sample(nSamples, priorityType)
     local N = self:size()
@@ -117,46 +156,6 @@ experience.create = function(opt)
     end
 
     return indices, w
-  end
-
-
-  -- Retrieves experience tuples (s, a, r, s', t)
-  function memory:retrieve(indices)
-    -- Blank out history in one go
-    experience.buffers.states:zero()
-
-    -- Iterate over indices
-    for i = 1, opt.batchSize do
-      local index = indices[i]
-      -- Retrieve action
-      experience.buffers.actions[i] = self.actions[index]
-      -- Retrieve rewards
-      experience.buffers.rewards[i] = self.rewards[index]
-      -- Retrieve terminal status
-      experience.buffers.terminals[i] = self.terminals[index]
-
-      -- Go back in history whilst episode exists
-      local histIndex = opt.histLen
-      repeat
-        -- Copy state
-        experience.buffers.states[i][histIndex] = self.states[index][castType](self.states[index])
-        -- Adjust indices
-        index = circIndex(index - 1)
-        histIndex = histIndex - 1
-      until histIndex == 0 or self.terminals[index] == 1
-
-      -- If not terminal, fill in transition history
-      if experience.buffers.terminals[i] == 0 then
-        -- Copy most recent state
-        for h = 2, opt.histLen do
-          experience.buffers.transitions[i][h] = experience.buffers.states[i][h - 1]
-        end
-        -- Get transition frame
-        experience.buffers.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index])
-      end
-    end
-
-    return experience.buffers.states, experience.buffers.actions, experience.buffers.rewards, experience.buffers.transitions, experience.buffers.terminals
   end
 
   -- Update experience priorities using TD-errors δ
