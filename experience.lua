@@ -1,4 +1,5 @@
 local _ = require 'moses'
+local BinaryHeap = require 'structures/BinaryHeap'
 
 local experience = {}
 

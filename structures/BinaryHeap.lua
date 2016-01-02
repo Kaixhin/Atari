@@ -8,7 +8,7 @@ local BinaryHeap = classic.class('BinaryHeap')
 function BinaryHeap:_init(init)
   if type(init) == 'number' then
     -- init is treated as the length of the heap
-    self.array = torch.Tensor(init)
+    self.array = torch.Tensor(init, 2)
     self.size = 0
   else
     -- Otherwise assume tensor to build heap from
@@ -29,41 +29,43 @@ end
 --]]
 
 -- Inserts a new value
-function BinaryHeap:insert(val)
+function BinaryHeap:insert(priority, val)
   -- Refuse to add values if no space left
   if self.size == self.array:size(1) then
-    print('Error: no space left in heap to add value ' .. val)
+    print('Error: no space left in heap to add value ' .. val .. ' with priority ' .. priority)
     return
   end
 
   -- Add value to end
   self.size = self.size + 1
-  self.array[self.size] = val
+  self.array[self.size][1] = priority
+  self.array[self.size][2] = val
 
   -- Rebalance
   self:upHeap(self.size)
 end
 
 -- Updates a value (and rebalances)
-function BinaryHeap:update(i, val)
+function BinaryHeap:update(i, priority, val)
   if i > self.size then
     print('Error: index ' .. i .. ' is greater than the current size of the heap')
     return
   end
 
   -- Replace value
-  self.array[i] = val
+  self.array[i][1] = priority
+  self.array[i][2] = val
   -- Rebalance
   self:downHeap(i)
   self:upHeap(i)
 end
 
--- Returns the maximum value
+-- Returns the maximum priority with value
 function BinaryHeap:peek()
   return self.size ~= 0 and self.array[1] or nil
 end
 
--- Removes and returns the maximum value
+-- Removes and returns the maximum priority with value
 function BinaryHeap:pop()
   -- Return nil if no values
   if self.size == 0 then
@@ -71,7 +73,7 @@ function BinaryHeap:pop()
     return nil
   end
 
-  local max = self.array[1]
+  local max = self.array[1]:clone()
 
   -- Move the last value (not necessarily the smallest) to the root
   self.array[1] = self.array[self.size]
@@ -89,8 +91,8 @@ function BinaryHeap:upHeap(i)
 
   if i > 1 then
     -- If parent is smaller than child then swap
-    if self.array[p] < self.array[i] then
-      self.array[i], self.array[p] = self.array[p], self.array[i]
+    if self.array[p][1] < self.array[i][1] then
+      self.array[i], self.array[p] = self.array[p]:clone(), self.array[i]:clone()
       -- Continue rebalancing
       self:upHeap(p)
     end
@@ -104,20 +106,30 @@ function BinaryHeap:downHeap(i)
 
   -- Find the index of the greatest of these elements
   local greatest
-  if l <= self.size and self.array[l] > self.array[i] then
+  if l <= self.size and self.array[l][1] > self.array[i][1] then
     greatest = l
   else
     greatest = i
   end
-  if r <= self.size and self.array[r] > self.array[greatest] then
+  if r <= self.size and self.array[r][1] > self.array[greatest][1] then
     greatest = r
   end
 
   -- Continue rebalancing if necessary
   if greatest ~= i then
-    self.array[i], self.array[greatest] = self.array[greatest], self.array[i]
+    self.array[i], self.array[greatest] = self.array[greatest]:clone(), self.array[i]:clone()
     self:downHeap(greatest)
   end
+end
+
+-- Retrieves priorities
+function BinaryHeap:getPriorities()
+  return self.array:narrow(2, 1, 1)
+end
+
+-- Retrieves values
+function BinaryHeap:getValues()
+  return self.array:narrow(2, 2, 1)
 end
 
 -- Basic visualisation of heap
@@ -135,7 +147,7 @@ function BinaryHeap:__tostring()
       level = l
     end
     -- Print value and spacing
-    str = str .. string.format('%.2f ', self.array[i]) .. string.rep('    ', maxLevel - l)
+    str = str .. string.format('%.2f ', self.array[i][2]) .. string.rep('    ', maxLevel - l)
   end
 
   return str
