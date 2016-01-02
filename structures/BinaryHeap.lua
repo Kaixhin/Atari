@@ -1,14 +1,17 @@
 local classic = require 'classic'
 require 'classic.torch' -- Enables serialisation
 
--- Implements a Priority Queue using a (Maximum) Binary Heap
+-- Implements a Priority Queue using a non-standard (Maximum) Binary Heap
 local BinaryHeap = classic.class('BinaryHeap')
 
 -- Creates a new Binary Heap with a length or existing tensor
 function BinaryHeap:_init(init)
+  -- Use values as indices in a hash table
+  self.hash = {}
+
   if type(init) == 'number' then
     -- init is treated as the length of the heap
-    self.array = torch.Tensor(init, 2)
+    self.array = torch.Tensor(init, 2) -- Priorities are 1st, values (which are used as hash table keys) are 2nd
     self.size = 0
   else
     -- Otherwise assume tensor to build heap from
@@ -40,6 +43,8 @@ function BinaryHeap:insert(priority, val)
   self.size = self.size + 1
   self.array[self.size][1] = priority
   self.array[self.size][2] = val
+  -- Update hash table
+  self.hash[val] = self.size
 
   -- Rebalance
   self:upHeap(self.size)
@@ -55,9 +60,17 @@ function BinaryHeap:update(i, priority, val)
   -- Replace value
   self.array[i][1] = priority
   self.array[i][2] = val
+  -- Update hash table
+  self.hash[val] = i
+
   -- Rebalance
   self:downHeap(i)
   self:upHeap(i)
+end
+
+-- Updates a value by using the value (using the hash table)
+function BinaryHeap:updateByVal(valKey, priority, val)
+  self:update(self.hash[valKey], priority, val)
 end
 
 -- Returns the maximum priority with value
@@ -78,7 +91,10 @@ function BinaryHeap:pop()
   -- Move the last value (not necessarily the smallest) to the root
   self.array[1] = self.array[self.size]
   self.size = self.size - 1
-  -- Rebalance the tree
+  -- Update hash table
+  self.hash[self.array[1][2]] = 1
+
+  -- Rebalance
   self:downHeap(1)
 
   return max
@@ -93,6 +109,9 @@ function BinaryHeap:upHeap(i)
     -- If parent is smaller than child then swap
     if self.array[p][1] < self.array[i][1] then
       self.array[i], self.array[p] = self.array[p]:clone(), self.array[i]:clone()
+      -- Update hash table
+      self.hash[self.array[i][2]], self.hash[self.array[p][2]] = i, p
+
       -- Continue rebalancing
       self:upHeap(p)
     end
@@ -118,6 +137,9 @@ function BinaryHeap:downHeap(i)
   -- Continue rebalancing if necessary
   if greatest ~= i then
     self.array[i], self.array[greatest] = self.array[greatest]:clone(), self.array[i]:clone()
+    -- Update hash table
+    self.hash[self.array[i][2]], self.hash[self.array[greatest][2]] = i, greatest
+
     self:downHeap(greatest)
   end
 end
@@ -153,10 +175,9 @@ function BinaryHeap:__tostring()
   return str
 end
 
--- Allow peeking at the internal array...
+-- Index using hash table
 function BinaryHeap:__index(key)
-  -- Returns values even if array "empty", but does allow {} index
-  return self.array[key]
+  return self.array[self.hash[key]]
 end
 
 return BinaryHeap

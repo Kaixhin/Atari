@@ -36,7 +36,7 @@ experience.create = function(opt)
   memory.index = 1
   memory.isFull = false
   -- TD-error δ-based priorities
-  memory.priorities = torch.FloatTensor(opt.memSize):fill(0) -- Stored at time t
+  memory.priorities = BinaryHeap(opt.memSize) -- Stored at time t
   local smallConst = 1e-6 -- Account for half precision
   memory.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
 
@@ -62,8 +62,12 @@ experience.create = function(opt)
   function memory:store(reward, state, terminal, action)
     self.rewards[self.index] = reward
     -- Store with maximal priority
-    self.priorities[self.index] = self.maxPriority + smallConst
     self.maxPriority = self.maxPriority + smallConst
+    if self.isFull then
+      self.priorities:updateByVal(self.index, self.maxPriority, self.index)
+    else
+      self.priorities:insert(self.maxPriority, self.index)
+    end
 
     -- Increment index
     self.index = self.index + 1
@@ -167,7 +171,7 @@ experience.create = function(opt)
     end
 
     for p = 1, indices:size(1) do
-      self.priorities[indices[p]] = priorities[p] + smallConst -- Allows transitions to be sampled even if error is 0
+      self.priorities:updateByVal(indices[p], priorities[p] + smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0
     end
   end
 

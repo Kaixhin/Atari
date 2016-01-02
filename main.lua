@@ -29,7 +29,7 @@ cmd:option('-histLen', 4, 'Number of consecutive states processed')
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 cmd:option('-memNReplay', 1, 'Number of times to replay per learning step')
-cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-memPriority', 'proportional', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
