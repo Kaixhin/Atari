@@ -5,10 +5,9 @@ local experience = {}
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local nLevels = 255 -- Number of grayscale levels (used in byte <-> float conversion)
   local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
   -- Allocate memory for experience
-  memory.states = torch.ByteTensor(stateSize) -- Most efficient storage needed to cope with large memory
+  memory.states = torch.FloatTensor(stateSize)
   memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
   memory.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
@@ -54,7 +53,7 @@ experience.create = function(opt)
       self.index = 1 -- Reset index
     end
 
-    self.states[self.index] = state:float():mul(nLevels) -- Convert to byte
+    self.states[self.index] = state:float()
     self.terminals[self.index] = terminal and 1 or 0
     self.actions[self.index] = action
   end
@@ -133,7 +132,7 @@ experience.create = function(opt)
       local histIndex = opt.histLen
       repeat
         -- Copy state
-        tuple.states[i][histIndex] = self.states[index][castType](self.states[index]):div(nLevels) -- Convert from byte
+        tuple.states[i][histIndex] = self.states[index][castType](self.states[index])
         -- Adjust indices
         index = circIndex(index - 1)
         histIndex = histIndex - 1
@@ -149,7 +148,7 @@ experience.create = function(opt)
         for h = 2, opt.histLen do
           tuple.transitions[i][h] = tuple.states[i][h - 1]
         end
-        tuple.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index]):div(nLevels) -- Convert from byte
+        tuple.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index])
       end
     end
 

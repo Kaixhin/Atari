@@ -1,20 +1,21 @@
 local _ = require 'moses'
 local nn = require 'nn'
-require 'modules/GradientRescale'
 local image = require 'image'
+require 'modules/GradientRescale'
+local DuelAggregator = require 'modules/DuelAggregator'
 
 local model = {}
-pcall(require, 'cudnn')
 
+-- Returns optimal module based on type
 local bestModule = function(mod, ...)
   if mod == 'relu' then
-    if cudnn then
+    if model.hasCudnn then
       return cudnn.ReLU(...)
     else
       return nn.ReLU(...)
     end
   elseif mod == 'conv' then
-    if cudnn then
+    if model.hasCudnn then
       return cudnn.SpatialConvolution(...)
     else
       return nn.SpatialConvolution(...)
@@ -23,46 +24,40 @@ local bestModule = function(mod, ...)
 end
 
 -- Calculates the output size of a network (returns LongStorage)
-local calcOutputSize = function(network, inputSize)
+local calcOutputSize = function(network, inputSizes)
   if cudnn then
-    return network:cuda():forward(torch.CudaTensor(inputSize)):size()
+    return network:cuda():forward(torch.CudaTensor(torch.LongStorage(inputSizes))):size()
   else
-    return network:forward(torch.Tensor(inputSize)):size()
+    return network:forward(torch.Tensor(torch.LongStorage(inputSizes))):size()
   end
 end
 
 -- Processes a single frame for DQN input
-model.preprocess = function(observation, opt)
+model.preprocess = function(observation)
   -- Load frame
-  local frame = observation:float() -- Convert from CudaTensor if necessary
+  model.buffers.frame = observation:float() -- Convert from CudaTensor if necessary
   -- Perform colour conversion
-  if opt.colorSpace ~= 'rgb' then
-    frame = image['rgb2' .. opt.colorSpace](frame)
+  if model.colorSpace ~= 'rgb' then
+    model.buffers.convertedFrame = image['rgb2' .. model.colorSpace](model.buffers.frame)
   end
 
   -- Resize 210x160 screen
-  return image.scale(frame, opt.width, opt.height)
+  return image.scale(model.buffers.convertedFrame, model.width, model.height)
 end
 
--- Creates a dueling DQN
-model.create = function(A, opt)
-  -- Set cuDNN flag
-  cudnn = opt.gpu > 0 and cudnn or false
-
-  -- Number of discrete actions
-  local m = _.size(A) 
-
+-- Creates a dueling DQN based on a number of discrete actions
+model.create = function(m)
   -- Network starting with convolutional layers
   local net = nn.Sequential()
-  net:add(nn.View(opt.histLen*opt.nChannels, opt.height, opt.width)) -- Concatenate history in channel dimension
-  net:add(bestModule('conv', opt.histLen*opt.nChannels, 32, 8, 8, 4, 4))
+  net:add(nn.View(model.histLen*model.nChannels, model.height, model.width)) -- Concatenate history in channel dimension
+  net:add(bestModule('conv', model.histLen*model.nChannels, 32, 8, 8, 4, 4))
   net:add(bestModule('relu', true))
   net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))
   net:add(bestModule('relu', true))
   net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
   net:add(bestModule('relu', true))
   -- Calculate convolutional network output size
-  local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, torch.LongStorage({opt.histLen*opt.nChannels, opt.height, opt.width})):totable()))
+  local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, {model.histLen*model.nChannels, model.height, model.width}):totable()))
 
   -- Value approximator V^(s)
   local valStream = nn.Sequential()
@@ -81,55 +76,40 @@ model.create = function(A, opt)
   streams:add(valStream)
   streams:add(advStream)
   
-  -- Aggregator module
-  local aggregator = nn.Sequential()
-  local aggParallel = nn.ParallelTable()
-  -- Value duplicator (for each action)
-  local valDuplicator = nn.Sequential()
-  local valConcat = nn.ConcatTable()
-  for a = 1, m do
-    valConcat:add(nn.Identity())
-  end
-  valDuplicator:add(valConcat)
-  valDuplicator:add(nn.JoinTable(1, 1))
-  -- Add value duplicator
-  aggParallel:add(valDuplicator)
-  -- Advantage duplicator (for calculating and subtracting mean)
-  local advDuplicator = nn.Sequential()
-  local advConcat = nn.ConcatTable()
-  advConcat:add(nn.Identity())
-  -- Advantage mean duplicator
-  local advMeanDuplicator = nn.Sequential()
-  advMeanDuplicator:add(nn.Mean(1, 1))
-  local advMeanConcat = nn.ConcatTable()
-  for a = 1, m do
-    advMeanConcat:add(nn.Identity())
-  end
-  advMeanDuplicator:add(advMeanConcat)
-  advMeanDuplicator:add(nn.JoinTable(1, 1))
-  advConcat:add(advMeanDuplicator)
-  advDuplicator:add(advConcat)
-  -- Subtract mean from advantage values
-  advDuplicator:add(nn.CSubTable())
-  aggParallel:add(advDuplicator)
-  -- Calculate Q^ from V^ and A^
-  aggregator:add(aggParallel)
-  aggregator:add(nn.CAddTable())
-
   -- Network finishing with fully connected layers
   net:add(nn.View(convOutputSize))
   net:add(nn.GradientRescale(1 / math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
   -- Create dueling streams
   net:add(streams)
-  -- Join dueling streams
-  net:add(aggregator)
+  -- Add dueling streams aggregator module
+  net:add(DuelAggregator(m))
 
-  if opt.gpu > 0 then
+  if model.gpu > 0 then
     require 'cunn'
     net:cuda()
   end
 
   return net
+end
+
+-- Initialises model
+model.init = function(opt)
+  -- Extract relevant options
+  model.gpu = opt.gpu
+  model.colorSpace = opt.colorSpace
+  model.width = opt.width
+  model.height = opt.height
+  model.nChannels = opt.nChannels
+  model.histLen = opt.histLen
+
+  -- Create buffers
+  model.buffers = {
+    frame = torch.FloatTensor(3, 210, 160),
+    convertedFrame = torch.FloatTensor(model.nChannels, 210, 160)
+  }
+
+  -- Get cuDNN if available
+  model.hasCudnn = pcall(require, 'cudnn')
 end
 
 return model

@@ -10,13 +10,14 @@ local agent = {}
 -- Creates a DQN agent
 agent.create = function(gameEnv, opt)
   local DQN = {}
+  model.init(opt) -- Initialise model helper
 
   -- Actions
   local A = gameEnv:getActions()
   local m = _.size(A)
 
   -- Policy and target networks
-  DQN.policyNet = model.create(A, opt)
+  DQN.policyNet = model.create(m)
   DQN.targetNet = DQN.policyNet:clone() -- Create deep copy for target network
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.policyNet:getParameters()
@@ -61,7 +62,7 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    state = model.preprocess(observation:select(1, 1), opt)
+    state = model.preprocess(observation:select(1, 1))
 
     -- Store in buffer depending on terminal status
     if terminal then
