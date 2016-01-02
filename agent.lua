@@ -77,7 +77,6 @@ agent.create = function(gameEnv, opt)
     self.isTraining = false
     self.stateBuffer:clear() -- Clears state buffer
   end
-
   
   -- Observes the results of the previous transition and chooses the next action to perform
   function DQN:observe(reward, observation, terminal)

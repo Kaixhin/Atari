@@ -2,11 +2,30 @@ local _ = require 'moses'
 
 local experience = {}
 
+-- Converts a CDF from a PDF
+local pdfToCdf = function(pdf)
+  local c = 0
+  pdf:apply(function(x)
+    c = c + x
+    return c
+  end)
+end
+
 -- Creates experience replay memory
 experience.create = function(opt)
   local memory = {}
-  local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
+
+  -- Create buffers
+  experience.buffers = {
+    states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    actions = torch.ByteTensor(opt.batchSize),
+    rewards = opt.Tensor(opt.batchSize),
+    transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    terminals = torch.ByteTensor(opt.batchSize)
+  }
+
   -- Allocate memory for experience
+  local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
   memory.states = torch.FloatTensor(stateSize)
   memory.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
   memory.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
@@ -58,15 +77,6 @@ experience.create = function(opt)
     self.actions[self.index] = action
   end
 
-  -- Converts a CDF from a PDF
-  local pdfToCdf = function(pdf)
-    local c = 0
-    pdf:apply(function(x)
-      c = c + x
-      return c
-    end)
-  end
-
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
   function memory:sample(nSamples, priorityType)
     local N = self:size()
@@ -109,50 +119,44 @@ experience.create = function(opt)
     return indices, w
   end
 
-  -- Preallocate memory for experience tuples
-  local tuple = {
-    states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
-    actions = torch.ByteTensor(opt.batchSize),
-    rewards = opt.Tensor(opt.batchSize),
-    transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
-    terminals = torch.ByteTensor(opt.batchSize)
-  }
+
   -- Retrieves experience tuples (s, a, r, s', t)
   function memory:retrieve(indices)
+    -- Blank out history in one go
+    experience.buffers.states:zero()
+
+    -- Iterate over indices
     for i = 1, opt.batchSize do
       local index = indices[i]
       -- Retrieve action
-      tuple.actions[i] = self.actions[index]
+      experience.buffers.actions[i] = self.actions[index]
       -- Retrieve rewards
-      tuple.rewards[i] = self.rewards[index]
+      experience.buffers.rewards[i] = self.rewards[index]
       -- Retrieve terminal status
-      tuple.terminals[i] = self.terminals[index]
+      experience.buffers.terminals[i] = self.terminals[index]
 
       -- Go back in history whilst episode exists
       local histIndex = opt.histLen
       repeat
         -- Copy state
-        tuple.states[i][histIndex] = self.states[index][castType](self.states[index])
+        experience.buffers.states[i][histIndex] = self.states[index][castType](self.states[index])
         -- Adjust indices
         index = circIndex(index - 1)
         histIndex = histIndex - 1
       until histIndex == 0 or self.terminals[index] == 1
-      -- Blank out rest of history
-      for h = histIndex, 1, -1 do
-        tuple.states[i][h]:zero()
-      end
 
       -- If not terminal, fill in transition history
-      if tuple.terminals[i] == 0 then
+      if experience.buffers.terminals[i] == 0 then
         -- Copy most recent state
         for h = 2, opt.histLen do
-          tuple.transitions[i][h] = tuple.states[i][h - 1]
+          experience.buffers.transitions[i][h] = experience.buffers.states[i][h - 1]
         end
-        tuple.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index])
+        -- Get transition frame
+        experience.buffers.transitions[i][opt.histLen] = self.states[circIndex(indices[i] + 1)][castType](self.states[index])
       end
     end
 
-    return tuple.states, tuple.actions, tuple.rewards, tuple.transitions, tuple.terminals
+    return experience.buffers.states, experience.buffers.actions, experience.buffers.rewards, experience.buffers.transitions, experience.buffers.terminals
   end
 
   -- Update experience priorities using TD-errors δ
