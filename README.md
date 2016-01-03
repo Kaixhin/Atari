@@ -6,7 +6,7 @@ Persistent advantage learning [[1]](#references) dueling [[2]](#references) Doub
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
-In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the network before quitting.
+In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the network before quitting. The experience replay memory is very large (> 20GB) and may take a few minutes to save/load.
 
 ## Requirements
 

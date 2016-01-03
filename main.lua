@@ -118,6 +118,7 @@ opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 -- Initialise Arcade Learning Environment
 log.info('Setting up ALE')
 local gameEnv = environment.init(opt)
+local initStep = 1
 
 -- Create DQN agent
 log.info('Creating DQN')
@@ -127,11 +128,13 @@ if paths.filep(opt.network) then
   log.info('Loading pretrained network')
   DQN:load(opt.network)
 elseif paths.filep(paths.concat('experiments', opt._id, 'DQN.t7')) then
-  -- Ask to load saved agent if found in experiment folder
+  -- Ask to load saved agent if found in experiment folder (resuming training)
   log.info('Saved network found - load (y/n)?')
   if io.read() == 'y' then
     log.info('Loading pretrained network')
-    DQN:load(paths.concat('experiments', opt._id, 'DQN.t7'))
+    DQN:load(paths.concat('experiments', opt._id))
+    log.info('Loading saved step')
+    initStep = torch.load(paths.concat('experiments', opt._id, 'step.t7'))[1]
   end
 end
 
@@ -153,6 +156,8 @@ if opt.mode == 'train' then
     if io.read() == 'y' then
       log.info('Saving network')
       DQN:save(paths.concat('experiments', opt._id))
+      log.info('Saving step')
+      torch.save(paths.concat('experiments', opt._id, 'step.t7'), {opt.step}) -- Save step to resume training
     end
     log.warn('Exiting')
     os.exit(128 + signum)
@@ -181,7 +186,7 @@ if opt.mode == 'train' then
   local episode = 1
 
   -- Training loop
-  for step = 1, opt.steps do
+  for step = initStep, opt.steps do
     opt.step = step -- Pass step number to agent for use in training
 
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)

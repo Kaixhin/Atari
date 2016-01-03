@@ -2,7 +2,7 @@ local _ = require 'moses'
 require 'dpnn' -- for :gradParamClip()
 local optim = require 'optim'
 local model = require 'model'
-local experience = require 'experience'
+local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'
 
 local agent = {}
@@ -50,7 +50,7 @@ agent.create = function(gameEnv, opt)
   local theta, dTheta = DQN.policyNet:getParameters()
 
   -- Experience replay memory
-  DQN.memory = experience.create(opt)
+  DQN.memory = Experience(opt)
   -- State buffer
   DQN.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
 
@@ -249,12 +249,14 @@ agent.create = function(gameEnv, opt)
   -- Saves the network parameters θ
   function DQN:save(path)
     torch.save(paths.concat(path, 'DQN.t7'), theta)
+    torch.save(paths.concat(path, 'memory.t7'), self.memory)
   end
 
   -- Loads saved network parameters θ
   function DQN:load(path)
-    theta = torch.load(path)
+    theta = torch.load(paths.concat(path, 'DQN.t7'))
     self.targetNet = self.policyNet:clone()
+    self.memory = torch.load(paths.concat(path, 'memory.t7'))
   end
 
   return DQN
