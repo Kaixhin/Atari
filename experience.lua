@@ -22,7 +22,8 @@ experience.create = function(opt)
     actions = torch.ByteTensor(opt.batchSize),
     rewards = opt.Tensor(opt.batchSize),
     transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
-    terminals = torch.ByteTensor(opt.batchSize)
+    terminals = torch.ByteTensor(opt.batchSize),
+    priorities = opt.Tensor(opt.batchSize)
   }
 
   -- Allocate memory for experience
@@ -35,8 +36,9 @@ experience.create = function(opt)
   -- Internal pointer
   memory.index = 1
   memory.isFull = false
+  memory.size = 0
   -- TD-error δ-based priorities
-  memory.priorities = BinaryHeap(opt.memSize) -- Stored at time t
+  memory.priorityQueue = BinaryHeap(opt.memSize) -- Stored at time t
   local smallConst = 1e-6 -- Account for half precision
   memory.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
 
@@ -53,24 +55,20 @@ experience.create = function(opt)
     return ind == 0 and opt.memSize or ind -- Correct 0-index
   end
 
-  -- Returns number of saved tuples
-  function memory:size()
-    return self.isFull and opt.memSize or self.index - 1
-  end
-
   -- Stores experience tuple parts (including pre-emptive action)
   function memory:store(reward, state, terminal, action)
     self.rewards[self.index] = reward
     -- Store with maximal priority
     self.maxPriority = self.maxPriority + smallConst
     if self.isFull then
-      self.priorities:updateByVal(self.index, self.maxPriority, self.index)
+      self.priorityQueue:updateByVal(self.index, self.maxPriority, self.index)
     else
-      self.priorities:insert(self.maxPriority, self.index)
+      self.priorityQueue:insert(self.maxPriority, self.index)
     end
 
-    -- Increment index
+    -- Increment index and size
     self.index = self.index + 1
+    self.size = math.min(self.size + 1, opt.memSize)
     -- Circle back to beginning if memory limit reached
     if self.index > opt.memSize then
       self.isFull = true -- Full memory flag
@@ -122,16 +120,34 @@ experience.create = function(opt)
   end
 
   -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-  function memory:sample(nSamples, priorityType)
-    local N = self:size()
+  function memory:sample(priorityType)
+    local N = self.size
     local indices, w
 
     -- Priority 'none' = uniform sampling
     if priorityType == 'none' then
-      indices = torch.randperm(N):long()
-      indices = indices[{{1, nSamples}}]
-      w = torch.ones(nSamples) -- Set weights to 1 as no correction needed
-    else
+      indices = torch.randperm(N)[{{1, opt.batchSize}}]:long()
+      w = torch.ones(opt.batchSize) -- Set weights to 1 as no correction needed
+    elseif priorityType == 'rank' then
+      -- Create table to store indices (by rank)
+      local rankIndices = {} -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array here
+      -- Sample (rank) indices based on power-law distribution TODO: Cache partition indices for several values of N as α is static
+      local samplingRange = torch.pow(1/opt.alpha, torch.linspace(1, math.log(N, 1/opt.alpha), opt.batchSize+1)):long() -- Use logarithmic binning
+      -- Perform stratified sampling (transitions will have varying TD-error magnitudes |δ|)
+      for i = 1, opt.batchSize do
+        table.insert(rankIndices, torch.random(samplingRange[i], samplingRange[i+1]))
+      end
+      -- Retrieve actual transition indices
+      indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
+      
+      -- Importance-sampling weights w = (N * p(rank))^-β
+      w = torch.Tensor(rankIndices):pow(-opt.alpha):mul(N):pow(-opt.beta[opt.step]) -- p(x) = Cx^-α but C is not analytical for α < 1 so this is unnormalised
+      -- Find max importance-sampling weight for normalisation
+      local wMax = torch.max(w) -- p(x) was unnormalised so again just use max of sample to normalise
+      -- Normalise weights so updates only scale downwards (for stability)
+      w:div(wMax) -- Max weight will be 1
+    elseif priorityType == 'proportional' then
+      --[[
       -- Calculate sampling probability distribution P
       local P = torch.pow(self.priorities[{{1, N}}], opt.alpha) -- Use prioritised experience replay exponent α
       local Z = torch.sum(P) -- Calculate normalisation constant
@@ -154,6 +170,7 @@ experience.create = function(opt)
       end
       indices = indices:long() -- Convert to LongTensor for indexing
       w = w:index(1, indices) -- Index weights
+      --]]
     end
 
     if opt.gpu > 0 then
@@ -171,7 +188,7 @@ experience.create = function(opt)
     end
 
     for p = 1, indices:size(1) do
-      self.priorities:updateByVal(indices[p], priorities[p] + smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0
+      self.priorityQueue:updateByVal(indices[p], priorities[p] + smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0
     end
   end
 

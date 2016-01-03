@@ -29,7 +29,7 @@ cmd:option('-histLen', 4, 'Number of consecutive states processed')
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
 cmd:option('-memNReplay', 1, 'Number of times to replay per learning step')
-cmd:option('-memPriority', 'proportional', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
@@ -51,7 +51,7 @@ cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
-cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)')
+cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- Therefore valFreq steps could be considered an epoch
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
 -- ALEWrap options
@@ -159,10 +159,10 @@ if opt.mode == 'train' then
   end)
 
   -- Check prioritised experience replay options
-  if opt.memPriority == 'rank' then
-    log.info('Rank-based prioritised experience replay is not implemented, switching to proportional')
-    opt.memPriority = 'proportional'
-  elseif opt.memPriority ~= 'none' and opt.memPriority ~= 'proportional' then
+  if opt.memPriority == 'proportional' then
+    log.info('Proportional prioritised experience replay is not implemented, switching to rank-based')
+    opt.memPriority = 'rank'
+  elseif not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
     log.error('Unrecognised type of prioritised experience replay')
     error('Unrecognised type of prioritised experience replay')
   end
@@ -214,6 +214,7 @@ if opt.mode == 'train' then
       log.info('Learning started')
     end
 
+    -- TODO Replay valSize saved transitions and report average of max Q-value at each step
     if step % opt.valFreq == 0 and step >= opt.learnStart then
       -- TODO: Include TD-error δ squared loss as metric
       log.info('Validating')

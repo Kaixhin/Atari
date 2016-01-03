@@ -1,3 +1,4 @@
+local _ = require 'moses'
 local classic = require 'classic'
 require 'classic.torch' -- Enables serialisation
 
@@ -74,8 +75,13 @@ function BinaryHeap:updateByVal(valKey, priority, val)
 end
 
 -- Returns the maximum priority with value
-function BinaryHeap:peek()
+function BinaryHeap:findMax()
   return self.size ~= 0 and self.array[1] or nil
+end
+
+-- Returns the (approximate) minimum priority with value
+function BinaryHeap:findMin()
+  return self.size ~= 0 and self.array[self.size] or nil
 end
 
 -- Removes and returns the maximum priority with value
@@ -178,6 +184,11 @@ end
 -- Index using hash table
 function BinaryHeap:__index(key)
   return self.array[self.hash[key]]
+end
+
+-- Retrieves a value by using the value (using the hash table)
+function BinaryHeap:getValuesByVal(hashIndices)
+  return _.at(self.hash, unpack(hashIndices))
 end
 
 return BinaryHeap

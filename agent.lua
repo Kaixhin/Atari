@@ -124,7 +124,7 @@ agent.create = function(gameEnv, opt)
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
         for n = 1, opt.memNReplay do
           -- Optimise (learn) from experience tuples
-          self:optimise(self.memory:sample(opt.batchSize, opt.memPriority))
+          self:optimise(self.memory:sample(opt.memPriority))
         end
       end
 
