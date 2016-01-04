@@ -9,13 +9,13 @@ local model = {}
 -- Returns optimal module based on type
 local bestModule = function(mod, ...)
   if mod == 'relu' then
-    if model.hasCudnn then
+    if model.gpu > 0 and model.hasCudnn then
       return cudnn.ReLU(...)
     else
       return nn.ReLU(...)
     end
   elseif mod == 'conv' then
-    if model.hasCudnn then
+    if model.gpu > 0 and model.hasCudnn then
       return cudnn.SpatialConvolution(...)
     else
       return nn.SpatialConvolution(...)
@@ -25,7 +25,7 @@ end
 
 -- Calculates the output size of a network (returns LongStorage)
 local calcOutputSize = function(network, inputSizes)
-  if cudnn then
+  if model.gpu > 0 and cudnn then
     return network:cuda():forward(torch.CudaTensor(torch.LongStorage(inputSizes))):size()
   else
     return network:forward(torch.Tensor(torch.LongStorage(inputSizes))):size()
