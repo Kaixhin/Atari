@@ -226,11 +226,13 @@ agent.create = function(gameEnv, opt)
 
     -- Backpropagate gradients (network modifies internally)
     self.policyNet:backward(agent.buffers.states, agent.buffers.QCurr)
+    -- Divide gradient by batch size
+    dTheta:div(opt.batchSize)    
     -- Clip the norm of the gradients
     self.policyNet:gradParamClip(10)
     
     -- Calculate squared error loss (for optimiser)
-    local loss = torch.mean(agent.buffers.tdErr:pow(2))
+    local loss = torch.mean(agent.buffers.tdErr:pow(2)) / opt.batchSize
 
     return loss, dTheta
   end
