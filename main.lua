@@ -51,7 +51,7 @@ cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
-cmd:option('-progFreq', 100000, 'Number of steps to report progress')
+cmd:option('-progFreq', 10000, 'Number of steps to report progress')
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- Therefore valFreq steps could be considered an epoch
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')
@@ -63,9 +63,11 @@ cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
+cmd:option('-verbose', 'false', 'Log info for every training episode')
 local opt = cmd:parse(arg)
 -- Process boolean options (Torch fails to accept false on the command line)
-opt.doubleQ = opt.doubleQ and true or false
+opt.doubleQ = opt.doubleQ == 'true' or false
+opt.verbose = opt.verbose == 'true' or false
 
 -- Set ID as game name if not set
 if opt._id == '' then
@@ -197,8 +199,10 @@ if opt.mode == 'train' then
       screen, reward, terminal = DQN:act(actionIndex)
       cumulativeReward = cumulativeReward + reward
     else
-      -- Print score for episode
-      log.info('Episode ' .. episode .. ' | Score: ' .. cumulativeReward .. ' | Steps: ' .. step .. '/' .. opt.steps)
+      if opt.verbose then
+        -- Print score for episode
+        log.info('Episode ' .. episode .. ' | Score: ' .. cumulativeReward .. ' | Steps: ' .. step .. '/' .. opt.steps)
+      end
 
       -- Start a new episode
       episode = episode + 1
@@ -218,6 +222,12 @@ if opt.mode == 'train' then
     -- Trigger learning after a while (wait to accumulate experience)
     if step == opt.learnStart then
       log.info('Learning started')
+    end
+
+    -- Report progress
+    if step % opt.progFreq == 0 then
+      log.info('Steps: ' .. step .. '/' .. opt.steps)
+      -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
     -- TODO Replay valSize saved transitions and report average of max Q-value at each step
