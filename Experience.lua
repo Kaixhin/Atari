@@ -31,7 +31,9 @@ function Experience:_init(opt)
 
   -- Allocate memory for experience
   local stateSize = torch.LongStorage({opt.memSize, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
-  self.states = torch.FloatTensor(stateSize)
+  self.imgDiscLevels = 255 -- Number of discretisation levels for images (used for float <-> byte conversion)
+  -- For the standard DQN problem, float vs. byte storage is 24GB vs. 6GB memory, so this prevents/minimises slow swap usage
+  self.states = torch.ByteTensor(stateSize) -- ByteTensor to avoid massive memory usage
   self.actions = torch.ByteTensor(opt.memSize) -- Discrete action indices
   self.rewards = torch.FloatTensor(opt.memSize) -- Stored at time t
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
@@ -79,7 +81,7 @@ function Experience:store(reward, state, terminal, action)
     self.index = 1 -- Reset index
   end
 
-  self.states[self.index] = state:float()
+  self.states[self.index] = state:float():mul(self.imgDiscLevels) -- float -> byte
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
 end
@@ -103,7 +105,7 @@ function Experience:retrieve(indices)
     local histIndex = self.opt.histLen
     repeat
       -- Copy state
-      self.buffers.states[i][histIndex] = self.states[index][self.castType](self.states[index])
+      self.buffers.states[i][histIndex] = self.states[index][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       index = self.circIndex(index - 1)
       histIndex = histIndex - 1
@@ -116,7 +118,7 @@ function Experience:retrieve(indices)
         self.buffers.transitions[i][h] = self.buffers.states[i][h - 1]
       end
       -- Get transition frame
-      self.buffers.transitions[i][self.opt.histLen] = self.states[self.circIndex(indices[i] + 1)][self.castType](self.states[index])
+      self.buffers.transitions[i][self.opt.histLen] = self.states[self.circIndex(indices[i] + 1)][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
     end
   end
 

@@ -51,6 +51,7 @@ cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
+cmd:option('-progFreq', 100000, 'Number of steps to report progress')
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- Therefore valFreq steps could be considered an epoch
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 --cmd:option('-valSize', 500, 'Number of transitions to use for validation')

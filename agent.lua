@@ -19,8 +19,8 @@ agent.create = function(gameEnv, opt)
   -- Create buffers
   agent.buffers = {
     -- Processed screen and historical state
-    state = torch.FloatTensor(opt.nChannels, opt.height, opt.width),
-    history = opt.Tensor(opt.histLen, opt.nChannels, opt.height, opt.width),
+    observation = torch.FloatTensor(opt.nChannels, opt.height, opt.width),
+    state = opt.Tensor(opt.histLen, opt.nChannels, opt.height, opt.width),
     -- Experience tuples
     states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
     actions = torch.ByteTensor(opt.batchSize),
@@ -85,16 +85,16 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    agent.buffers.state = model.preprocess(observation:select(1, 1))
+    agent.buffers.observation = model.preprocess(observation:select(1, 1))
 
     -- Store in buffer depending on terminal status
     if terminal then
-      self.stateBuffer:pushReset(agent.buffers.state) -- Will clear buffer on next push
+      self.stateBuffer:pushReset(agent.buffers.observation) -- Will clear buffer on next push
     else
-      self.stateBuffer:push(agent.buffers.state)
+      self.stateBuffer:push(agent.buffers.observation)
     end
     -- Retrieve current and historical states from state buffer
-    agent.buffers.history = self.stateBuffer:readAll()
+    agent.buffers.state = self.stateBuffer:readAll()
 
     -- Set ε based on training vs. evaluation mode
     local epsilon = 0.001
@@ -110,7 +110,7 @@ agent.create = function(gameEnv, opt)
         aIndex = torch.random(1, m)
       else
         -- Choose best action
-        local __, ind = torch.max(self.policyNet:forward(agent.buffers.history), 1)
+        local __, ind = torch.max(self.policyNet:forward(agent.buffers.state), 1)
         aIndex = ind[1]
       end
     end
@@ -118,7 +118,7 @@ agent.create = function(gameEnv, opt)
     -- If training
     if self.isTraining then
       -- Store experience tuple parts (including pre-emptive action)
-      self.memory:store(reward, agent.buffers.state, terminal, aIndex)
+      self.memory:store(reward, agent.buffers.observation, terminal, aIndex)
 
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
