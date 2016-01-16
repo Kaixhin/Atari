@@ -17,16 +17,18 @@ Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requ
 - moses
 - logroll
 - luaposix
-- classic
-- xitari
-- alewrap
+- **classic**
+- **xitari**
+- **alewrap**
+- **rlenvs**
 
-classic, xitari and alewrap can (hopefully) be installed using the following commands:
+classic, xitari, alewrap and rlenvs can be installed using the following commands:
 
 ```sh
 luarocks install https://raw.githubusercontent.com/deepmind/classic/master/rocks/classic-scm-1.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/xitari/master/xitari-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewrap-0-0.rockspec
+luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/rlenvs-scm-1.rockspec
 ```
 
 ## Todo

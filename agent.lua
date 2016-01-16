@@ -13,8 +13,8 @@ agent.create = function(gameEnv, opt)
   model.init(opt) -- Initialise model helper
 
   -- Actions
-  local A = gameEnv:getActions()
-  local m = _.size(A)
+  local actionSpec = gameEnv:getActionSpec()
+  local m = actionSpec[3][2]
 
   -- Create buffers
   agent.buffers = {
@@ -143,7 +143,7 @@ agent.create = function(gameEnv, opt)
   -- Acts on the environment
   function DQN:act(aIndex)
     -- Perform step on environment
-    return gameEnv:step(A[aIndex], self.isTraining)
+    return gameEnv:step(aIndex)
   end
 
   -- Learns from experience

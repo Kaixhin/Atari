@@ -2,7 +2,7 @@ local signal = require 'posix.signal'
 local _ = require 'moses'
 require 'logroll'
 local image = require 'image'
-local environment = require 'environment'
+local Atari = require 'rlenvs.Atari'
 local agent = require 'agent'
 local evaluator = require 'evaluator'
 
@@ -120,7 +120,7 @@ opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
 -- Initialise Arcade Learning Environment
 log.info('Setting up ALE')
-local gameEnv = environment.init(opt)
+local gameEnv = Atari(opt)
 local initStep = 1
 
 -- Create DQN agent
@@ -143,7 +143,7 @@ end
 
 -- Start gaming
 log.info('Starting game: ' .. opt.game)
-local screen, reward, terminal = gameEnv:newGame()
+local reward, screen, terminal = 0, gameEnv:start(), false
 local cumulativeReward = reward
 local bestValScore = -math.huge -- Best validation score
 -- Activate display if using QT
@@ -183,7 +183,8 @@ if opt.mode == 'train' then
   -- Create β growth vector
   opt.beta = torch.linspace(opt.betaZero, 1, opt.steps)
 
-  -- Set agent (and hence environment steps) to training mode
+  -- Set environment and agent to training mode
+  gameEnv:training()
   DQN:training()
   -- Keep track of episodes
   local episode = 1
@@ -196,7 +197,7 @@ if opt.mode == 'train' then
     local actionIndex = DQN:observe(reward, screen, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      screen, reward, terminal = DQN:act(actionIndex)
+      reward, screen, terminal = DQN:act(actionIndex)
       cumulativeReward = cumulativeReward + reward
     else
       if opt.verbose then
@@ -206,11 +207,7 @@ if opt.mode == 'train' then
 
       -- Start a new episode
       episode = episode + 1
-      if opt.randomStarts > 0 then
-        screen, reward, terminal = gameEnv:nextRandomGame()
-      else
-        screen, reward, terminal = gameEnv:newGame()
-      end
+      reward, screen, terminal = 0, gameEnv:start(), false
       cumulativeReward = reward -- Refresh cumulative reward
     end
 
@@ -234,10 +231,11 @@ if opt.mode == 'train' then
     if step % opt.valFreq == 0 and step >= opt.learnStart then
       -- TODO: Include TD-error δ squared loss as metric
       log.info('Validating')
+      gameEnv:evaluate()
       DQN:evaluate()
 
       -- Start new game
-      screen, reward, terminal = gameEnv:newGame()
+      reward, screen, terminal = 0, gameEnv:start(), false
       local valEpisode = 1
       -- Reset cumulative reward
       cumulativeReward = reward
@@ -249,7 +247,7 @@ if opt.mode == 'train' then
         local actionIndex = DQN:observe(reward, screen, terminal)
         if not terminal then
           -- Act on environment
-          screen, reward, terminal = DQN:act(actionIndex)
+          reward, screen, terminal = DQN:act(actionIndex)
           -- Track scores
           cumulativeReward = cumulativeReward + reward
           valScore = valScore + reward
@@ -259,11 +257,7 @@ if opt.mode == 'train' then
 
           -- Start a new episode
           valEpisode = valEpisode + 1
-          if opt.randomStarts > 0 then
-            screen, reward, terminal = gameEnv:nextRandomGame()
-          else
-            screen, reward, terminal = gameEnv:newGame()
-          end
+          reward, screen, terminal = 0, gameEnv:start(), false
           cumulativeReward = reward -- Refresh cumulative reward
         end
 
@@ -287,13 +281,14 @@ if opt.mode == 'train' then
       log.info('Resuming training')
       DQN:training()
       -- Start new game (as previous episode was interrupted)
-      screen, reward, terminal = gameEnv:newGame()
+      reward, screen, terminal = 0, gameEnv:start(), false
       cumulativeReward = reward
     end
   end
 elseif opt.mode == 'eval' then
   log.info('Evaluation mode')
-  -- Set agent (and hence environment steps) to evaluation mode
+  -- Set environment and agent to evaluation mode
+  gameEnv:evaluate()
   DQN:evaluate()
 
   -- Play one game (episode)
@@ -301,7 +296,7 @@ elseif opt.mode == 'eval' then
     -- Observe and choose next action (index)
     local actionIndex = DQN:observe(reward, screen, terminal)
     -- Act on environment
-    screen, reward, terminal = DQN:act(actionIndex)
+    reward, screen, terminal = DQN:act(actionIndex)
     cumulativeReward = cumulativeReward + reward
 
     if qt then
