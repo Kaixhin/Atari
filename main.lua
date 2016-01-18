@@ -2,6 +2,7 @@ local signal = require 'posix.signal'
 local _ = require 'moses'
 require 'logroll'
 local image = require 'image'
+local gnuplot = require 'gnuplot'
 local agent = require 'agent'
 local evaluator = require 'evaluator'
 
@@ -10,7 +11,7 @@ local qt = pcall(require, 'qt')
 
 local cmd = torch.CmdLine()
 -- Base Torch7 options
-cmd:option('-seed', 123, 'Random seed')
+cmd:option('-seed', 1, 'Random seed')
 cmd:option('-threads', 4, 'Number of BLAS threads')
 cmd:option('-tensorType', 'torch.FloatTensor', 'Default tensor type')
 cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
@@ -80,6 +81,7 @@ if not paths.dirp('experiments') then
   paths.mkdir('experiments')
 end
 paths.mkdir(paths.concat('experiments', opt._id))
+
 -- Set up logs
 local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
 local plog = logroll.print_logger()
@@ -93,7 +95,7 @@ torch.setnumthreads(opt.threads)
 torch.setdefaulttensortype(opt.tensorType)
 -- Set manual seeds using random numbers to reduce correlations
 math.randomseed(opt.seed)
-torch.manualSeed(math.random(1, 1e6))
+torch.manualSeed(math.random(1, 1e3))
 
 -- Tensor creation function for removing need to cast to CUDA if GPU is enabled
 opt.Tensor = function(...)
@@ -229,6 +231,7 @@ if opt.mode == 'train' then
 
   -- Validation variables
   local valEpisode, valEpisodeReward, valTotalReward
+  local valScores = {}
   local bestValScore = -math.huge
 
   -- Training loop
@@ -245,7 +248,7 @@ if opt.mode == 'train' then
     else
       if opt.verbose then
         -- Print score for episode
-        log.info('Episode ' .. episode .. ' | Score: ' .. episodeReward .. ' | Steps: ' .. step .. '/' .. opt.steps)
+        log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeReward)
       end
 
       -- Start a new episode
@@ -266,7 +269,7 @@ if opt.mode == 'train' then
 
     -- Report progress
     if step % opt.progFreq == 0 then
-      log.info('Steps: ' .. step .. '/' .. opt.steps)
+      log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Epsilon: ' .. opt.epsilon[step])
       -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
@@ -293,9 +296,9 @@ if opt.mode == 'train' then
           -- Track reward
           valEpisodeReward = valEpisodeReward + reward
         else
-          if valEpisode % (opt.ale and 10 or 100) == 0 then
+          if valEpisode % (opt.ale and 10 or 1000) == 0 then
             -- Print score for episode
-            log.info('Val Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward .. ' | Steps: ' .. valStep .. '/' .. opt.valSteps)
+            log.info('[VALIDATION] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward)
           end
 
           -- Start a new episode
@@ -313,7 +316,12 @@ if opt.mode == 'train' then
 
       -- Print total and average score
       log.info('Total Score: ' .. valTotalReward)
-      log.info('Average Score: ' .. valTotalReward/math.min(valEpisode - 1, 1)) -- Only count reward for completed episodes
+      log.info('Average Score: ' .. valTotalReward/math.max(valEpisode - 1, 1)) -- Only count reward for completed episodes
+      table.insert(valScores, valTotalReward)
+      -- Plot total score
+      gnuplot.pngfigure(paths.concat('experiments', opt._id, 'score.png'))
+      gnuplot.plot(torch.Tensor(valScores))
+      gnuplot.plotflush()
 
       -- Use transitions sampled for validation to test performance
       local avgV, avgTdErr = DQN:report()

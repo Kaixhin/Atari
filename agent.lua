@@ -167,30 +167,31 @@ agent.create = function(gameEnv, opt)
     -- Retrieve experience tuples
     agent.buffers.states, agent.buffers.actions, agent.buffers.rewards, agent.buffers.transitions, agent.buffers.terminals = self.memory:retrieve(indices)
 
+    -- Calculate Q-values from transition using policy network
+    agent.buffers.QPrimes = self.policyNet:forward(agent.buffers.transitions) -- Evaluate Q-values of argmax actions using policy network
     -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
-    agent.buffers.APrimeMax, agent.buffers.APrimeMaxInds = torch.max(self.policyNet:forward(agent.buffers.transitions), 2)
+    agent.buffers.APrimeMax, agent.buffers.APrimeMaxInds = torch.max(agent.buffers.QPrimes, 2)
+
     -- Double Q-learning: Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
     if opt.doubleQ then
       -- Calculate Q-values from transition using target network
       agent.buffers.QPrimes = self.targetNet:forward(agent.buffers.transitions) -- Evaluate Q-values of argmax actions using target network
-    else
-      -- Calculate Q-values from transition using policy network
-      agent.buffers.QPrimes = self.policyNet:forward(agent.buffers.transitions) -- Evaluate Q-values of argmax actions using policy network
     end
-    -- Similar to evaluation of V(s) for δ := Y − V(s) now, will be updated to Y later
-    for q = 1, opt.batchSize do
-      agent.buffers.Y[q] = agent.buffers.QPrimes[q][agent.buffers.APrimeMaxInds[q][1]]
-    end    
-    -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget) in DDQN case
+
+    -- Initially set target Y = Q(s', argmax_a[Q(s', a; θpolicy)]; θ), where final θ is either θpolicy (DQN) or θtarget (DDQN)
+    for n = 1, opt.batchSize do
+      agent.buffers.Y[n] = agent.buffers.QPrimes[n][agent.buffers.APrimeMaxInds[n][1]]
+    end
+    -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θ)
     agent.buffers.Y:mul(opt.gamma):add(agent.buffers.rewards)
-    -- Set target Y to reward if the transition was terminal as V(terminal) = 0
+    -- Set target Y := r if the transition was terminal as V(terminal) = 0
     agent.buffers.Y[agent.buffers.terminals] = agent.buffers.rewards[agent.buffers.terminals] -- Little use optimising over batch processing if terminal states are rare
 
     -- Get all predicted Q-values from the current state
-    agent.buffers.QCurr = self.policyNet:forward(agent.buffers.states)
+    agent.buffers.QCurr = self.policyNet:forward(agent.buffers.states) -- Correct internal state of policy network before backprop
     -- Get prediction of current Q-values with given actions
-    for q = 1, opt.batchSize do
-      agent.buffers.QTaken[q] = agent.buffers.QCurr[q][agent.buffers.actions[q]]
+    for n = 1, opt.batchSize do
+      agent.buffers.QTaken[n] = agent.buffers.QCurr[n][agent.buffers.actions[n]]
     end
 
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
@@ -200,23 +201,26 @@ agent.create = function(gameEnv, opt)
     if opt.PALpha > 0 then
       -- Calculate Q(s, a) and V(s) using target network
       agent.buffers.Qs = self.targetNet:forward(agent.buffers.states)
-      for q = 1, opt.batchSize do
-        agent.buffers.Q[q] = agent.buffers.Qs[q][agent.buffers.actions[q]]
+      for n = 1, opt.batchSize do
+        agent.buffers.Q[n] = agent.buffers.Qs[n][agent.buffers.actions[n]]
       end
       agent.buffers.V = torch.max(agent.buffers.Qs, 2)
+
       -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
       agent.buffers.tdErrAL = agent.buffers.tdErr - agent.buffers.V:add(-agent.buffers.Q):mul(opt.PALpha) -- TODO: Torch.CudaTensor:csub is missing
+
       -- Calculate Q(s', a) and V(s') using target network
       if not opt.doubleQ then
         agent.buffers.QPrimes = self.targetNet:forward(agent.buffers.transitions) -- Evaluate Q-values of argmax actions using target network
       end
-      for q = 1, opt.batchSize do
-        agent.buffers.QPrime[q] = agent.buffers.QPrimes[q][agent.buffers.actions[q]]
+      for n = 1, opt.batchSize do
+        agent.buffers.QPrime[n] = agent.buffers.QPrimes[n][agent.buffers.actions[n]]
       end
       agent.buffers.VPrime = torch.max(agent.buffers.QPrimes, 2)
       -- Set values to 0 for terminal states
       agent.buffers.QPrime[agent.buffers.terminals] = 0
       agent.buffers.VPrime[agent.buffers.terminals] = 0
+
       -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
       agent.buffers.tdErr = torch.max(torch.cat(agent.buffers.tdErrAL, agent.buffers.tdErr:add(-(agent.buffers.VPrime:add(-agent.buffers.QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
     end
@@ -241,14 +245,14 @@ agent.create = function(gameEnv, opt)
     -- Zero QCurr outputs (no error)
     agent.buffers.QCurr:zero()
     -- Set TD-errors δ with given actions
-    for q = 1, opt.batchSize do
-      agent.buffers.QCurr[q][agent.buffers.actions[q]] = ISWeights[q] * agent.buffers.tdErr[q] -- Correct prioritisation bias with importance-sampling weights
+    for n = 1, opt.batchSize do
+      agent.buffers.QCurr[n][agent.buffers.actions[n]] = ISWeights[n] * agent.buffers.tdErr[n] -- Correct prioritisation bias with importance-sampling weights
     end
 
-    -- Backpropagate gradients (network modifies internally)
+    -- Backpropagate (network modifies gradients internally)
     self.policyNet:backward(agent.buffers.states, agent.buffers.QCurr)
     -- Divide gradient by batch size
-    dTheta:div(opt.batchSize)    
+    dTheta:div(opt.batchSize)
     -- Clip the norm of the gradients
     self.policyNet:gradParamClip(10)
 
@@ -285,15 +289,15 @@ agent.create = function(gameEnv, opt)
     table.insert(self.avgTdErr, torch.abs(agent.buffers.tdErr):mean())
 
     -- Plot losses
-    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'losses.svg'))
+    gnuplot.pngfigure(paths.concat('experiments', opt._id, 'losses.png'))
     gnuplot.plot(torch.Tensor(self.losses))
     gnuplot.plotflush()
     -- Plot V
-    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'V.svg'))
+    gnuplot.pngfigure(paths.concat('experiments', opt._id, 'V.png'))
     gnuplot.plot(torch.Tensor(self.avgV))
     gnuplot.plotflush()
     -- Plot TD-error δ
-    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'TDerror.svg'))
+    gnuplot.pngfigure(paths.concat('experiments', opt._id, 'TDerror.png'))
     gnuplot.plot(torch.Tensor(self.avgTdErr))
     gnuplot.plotflush()
 
