@@ -1,6 +1,7 @@
 local _ = require 'moses'
 require 'dpnn' -- for :gradParamClip()
 local optim = require 'optim'
+local gnuplot = require 'gnuplot'
 local model = require 'model'
 local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'
@@ -16,7 +17,7 @@ agent.create = function(gameEnv, opt)
   local actionSpec = gameEnv:getActionSpec()
   local m = actionSpec[3][2]
 
-  -- Create buffers
+  -- Create "buffers"
   agent.buffers = {
     -- Processed screen and historical state
     observation = torch.FloatTensor(opt.nChannels, opt.height, opt.width),
@@ -40,7 +41,10 @@ agent.create = function(gameEnv, opt)
     V = opt.Tensor(opt.batchSize, 1),
     tdErrAL = opt.Tensor(opt.batchSize),
     QPrime = opt.Tensor(opt.batchSize),
-    VPrime = opt.Tensor(opt.batchSize, 1)
+    VPrime = opt.Tensor(opt.batchSize, 1),
+    -- Losses
+    sqLoss = opt.Tensor(opt.batchSize),
+    absLoss = opt.Tensor(opt.batchSize)
   }
 
   -- Policy and target networks
@@ -61,10 +65,11 @@ agent.create = function(gameEnv, opt)
     learningRate = opt.eta, -- TODO: Learning rate annealing superseded by β annealing?
     momentum = opt.momentum
   }
-  -- Just for RMSprop, the default optimiser in DQN papers, set its momentum variable
-  if opt.optimiser == 'rmsprop' then
-    optimParams.alpha = opt.momentum
-  end
+
+  -- Validation variables
+  DQN.losses = {}
+  DQN.avgV = {} -- Running average of V
+  DQN.avgTdErr = {} -- Running average of TD-error δ
 
   -- Sets training mode
   function DQN:training()
@@ -85,7 +90,7 @@ agent.create = function(gameEnv, opt)
     reward = math.max(reward, opt.rewardClip)
 
     -- Process observation of current state
-    agent.buffers.observation = model.preprocess(observation:select(1, 1))
+    agent.buffers.observation = model.preprocess(observation)
 
     -- Store in buffer depending on terminal status
     if terminal then
@@ -119,6 +124,10 @@ agent.create = function(gameEnv, opt)
     if self.isTraining then
       -- Store experience tuple parts (including pre-emptive action)
       self.memory:store(reward, agent.buffers.observation, terminal, aIndex)
+
+      if opt.step == opt.learnStart then
+        -- TODO: Collect buffer of transitions to validate with of size opt.valSize
+      end
 
       -- Sample uniformly or with prioritised sampling
       if opt.step % opt.memSampleFreq == 0 and opt.step >= opt.learnStart then -- Assumes learnStart is greater than batchSize
@@ -187,7 +196,7 @@ agent.create = function(gameEnv, opt)
     -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
     agent.buffers.tdErr = agent.buffers.Y - agent.buffers.QTaken
 
-    -- Calculate advantage learning update
+    -- Calculate Advantage Learning update(s)
     if opt.PALpha > 0 then
       -- Calculate Q(s, a) and V(s) using target network
       agent.buffers.Qs = self.targetNet:forward(agent.buffers.states)
@@ -208,12 +217,24 @@ agent.create = function(gameEnv, opt)
       -- Set values to 0 for terminal states
       agent.buffers.QPrime[agent.buffers.terminals] = 0
       agent.buffers.VPrime[agent.buffers.terminals] = 0
-      -- Calculate Persistent Advantage learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
+      -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
       agent.buffers.tdErr = torch.max(torch.cat(agent.buffers.tdErrAL, agent.buffers.tdErr:add(-(agent.buffers.VPrime:add(-agent.buffers.QPrime):mul(opt.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
     end
 
-    -- Clip TD-errors δ (approximates Huber loss)
-    agent.buffers.tdErr:clamp(-opt.tdClip, opt.tdClip)
+    -- Calculate loss
+    local loss
+    if opt.tdClip > 0 then
+      -- Squared loss is used within clipping range, absolute loss is used outside (approximates Huber loss)
+      agent.buffers.sqLoss = torch.cmin(torch.abs(agent.buffers.tdErr), opt.tdClip)
+      agent.buffers.absLoss = torch.abs(agent.buffers.tdErr) - agent.buffers.sqLoss
+      loss = torch.mean(agent.buffers.sqLoss:pow(2):mul(0.5):add(agent.buffers.absLoss:mul(opt.tdClip)))
+
+      -- Clip TD-errors δ
+      agent.buffers.tdErr:clamp(-opt.tdClip, opt.tdClip)
+    else
+      -- Squared loss
+      loss = torch.mean(agent.buffers.tdErr:clone():pow(2):mul(0.5))
+    end
     -- Send TD-errors δ to be used as priorities
     self.memory:updatePriorities(indices, agent.buffers.tdErr)
     
@@ -230,9 +251,6 @@ agent.create = function(gameEnv, opt)
     dTheta:div(opt.batchSize)    
     -- Clip the norm of the gradients
     self.policyNet:gradParamClip(10)
-    
-    -- Calculate squared error loss (for optimiser)
-    local loss = torch.mean(agent.buffers.tdErr:pow(2)) / opt.batchSize
 
     return loss, dTheta
   end
@@ -244,8 +262,42 @@ agent.create = function(gameEnv, opt)
       return self:learn(x, indices, ISWeights)
     end
     
+    -- Optimise
     local __, loss = optim[opt.optimiser](feval, theta, optimParams)
+    -- Store loss
+    if opt.step % opt.progFreq == 0 then
+      table.insert(self.losses, loss[1])
+    end
+
     return loss[1]
+  end
+
+  -- Reports stats for validation
+  function DQN:report()
+    -- TODO: Replace this with going over validation transitions
+    self:learn(theta, torch.linspace(1, opt.batchSize, opt.batchSize):long(), opt.Tensor(opt.batchSize):fill(1))
+
+    -- Calculate V and TD-error δ
+    if opt.PALpha == 0 then
+      agent.buffers.VPrime = torch.max(agent.buffers.QPrimes, 2)
+    end
+    table.insert(self.avgV, torch.mean(agent.buffers.VPrime))
+    table.insert(self.avgTdErr, torch.abs(agent.buffers.tdErr):mean())
+
+    -- Plot losses
+    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'losses.svg'))
+    gnuplot.plot(torch.Tensor(self.losses))
+    gnuplot.plotflush()
+    -- Plot V
+    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'V.svg'))
+    gnuplot.plot(torch.Tensor(self.avgV))
+    gnuplot.plotflush()
+    -- Plot TD-error δ
+    gnuplot.svgfigure(paths.concat('experiments', opt._id, 'TDerror.svg'))
+    gnuplot.plot(torch.Tensor(self.avgTdErr))
+    gnuplot.plotflush()
+
+    return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
   end
 
   -- Saves the network parameters θ

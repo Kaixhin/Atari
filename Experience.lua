@@ -19,7 +19,7 @@ function Experience:_init(opt)
   -- Keep reference to opt
   self.opt = opt
 
-  -- Create buffers
+  -- Create "buffers"
   self.buffers = {
     states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
     actions = torch.ByteTensor(opt.batchSize),

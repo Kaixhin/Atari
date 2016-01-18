@@ -34,55 +34,76 @@ end
 
 -- Processes a single frame for DQN input
 model.preprocess = function(observation)
-  -- Load frame
-  model.buffers.frame = observation:float() -- Convert from CudaTensor if necessary
-  -- Perform colour conversion
-  if model.colorSpace ~= 'rgb' then
-    model.buffers.convertedFrame = image['rgb2' .. model.colorSpace](model.buffers.frame)
-  end
+  if model.ale then
+    -- Load frame
+    model.buffers.frame = observation:select(1, 1):float() -- Convert from CudaTensor if necessary
+    -- Perform colour conversion
+    if model.colorSpace ~= 'rgb' then
+      model.buffers.convertedFrame = image['rgb2' .. model.colorSpace](model.buffers.frame)
+    end
 
-  -- Resize 210x160 screen
-  return image.scale(model.buffers.convertedFrame, model.width, model.height)
+    -- Resize 210x160 screen
+    return image.scale(model.buffers.convertedFrame, model.width, model.height)
+  else
+    -- Return normal Catch screen
+    return observation
+  end
 end
 
 -- Creates a dueling DQN based on a number of discrete actions
 model.create = function(m)
+  -- Size of fully connected layers
+  local hiddenSize = model.ale and 512 or 32
+
   -- Network starting with convolutional layers
   local net = nn.Sequential()
   net:add(nn.View(model.histLen*model.nChannels, model.height, model.width)) -- Concatenate history in channel dimension
-  net:add(bestModule('conv', model.histLen*model.nChannels, 32, 8, 8, 4, 4))
-  net:add(bestModule('relu', true))
-  net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))
-  net:add(bestModule('relu', true))
-  net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
-  net:add(bestModule('relu', true))
+  if model.ale then
+    net:add(bestModule('conv', model.histLen*model.nChannels, 32, 8, 8, 4, 4))
+    net:add(bestModule('relu', true))
+    net:add(bestModule('conv', 32, 64, 4, 4, 2, 2))
+    net:add(bestModule('relu', true))
+    net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
+    net:add(bestModule('relu', true))
+  else
+    net:add(bestModule('conv', model.histLen*model.nChannels, 8, 3, 3, 2, 2))
+    net:add(bestModule('relu', true))
+    net:add(bestModule('conv', 8, 16, 3, 3, 1, 1))
+    net:add(bestModule('relu', true))
+  end
   -- Calculate convolutional network output size
   local convOutputSize = torch.prod(torch.Tensor(calcOutputSize(net, {model.histLen*model.nChannels, model.height, model.width}):totable()))
-
-  -- Value approximator V^(s)
-  local valStream = nn.Sequential()
-  valStream:add(nn.Linear(convOutputSize, 512))
-  valStream:add(bestModule('relu', true))
-  valStream:add(nn.Linear(512, 1)) -- Predicts value for state
-
-  -- Advantage approximator A^(s, a)
-  local advStream = nn.Sequential()
-  advStream:add(nn.Linear(convOutputSize, 512))
-  advStream:add(bestModule('relu', true))
-  advStream:add(nn.Linear(512, m)) -- Predicts action-conditional advantage
-
-  -- Streams container
-  local streams = nn.ConcatTable()
-  streams:add(valStream)
-  streams:add(advStream)
-  
-  -- Network finishing with fully connected layers
   net:add(nn.View(convOutputSize))
-  net:add(nn.GradientRescale(1 / math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
-  -- Create dueling streams
-  net:add(streams)
-  -- Add dueling streams aggregator module
-  net:add(DuelAggregator(m))
+
+  if model.duel then
+    -- Value approximator V^(s)
+    local valStream = nn.Sequential()
+    valStream:add(nn.Linear(convOutputSize, hiddenSize))
+    valStream:add(bestModule('relu', true))
+    valStream:add(nn.Linear(hiddenSize, 1)) -- Predicts value for state
+
+    -- Advantage approximator A^(s, a)
+    local advStream = nn.Sequential()
+    advStream:add(nn.Linear(convOutputSize, hiddenSize))
+    advStream:add(bestModule('relu', true))
+    advStream:add(nn.Linear(hiddenSize, m)) -- Predicts action-conditional advantage
+
+    -- Streams container
+    local streams = nn.ConcatTable()
+    streams:add(valStream)
+    streams:add(advStream)
+    
+    -- Network finishing with fully connected layers
+    net:add(nn.GradientRescale(1 / math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
+    -- Create dueling streams
+    net:add(streams)
+    -- Add dueling streams aggregator module
+    net:add(DuelAggregator(m))
+  else
+    net:add(nn.Linear(convOutputSize, hiddenSize))
+    net:add(bestModule('relu', true))
+    net:add(nn.Linear(hiddenSize, m))
+  end
 
   if model.gpu > 0 then
     require 'cunn'
@@ -101,12 +122,16 @@ model.init = function(opt)
   model.height = opt.height
   model.nChannels = opt.nChannels
   model.histLen = opt.histLen
+  model.duel = opt.duel
+  model.ale = opt.ale
 
-  -- Create buffers
-  model.buffers = {
-    frame = torch.FloatTensor(3, 210, 160),
-    convertedFrame = torch.FloatTensor(model.nChannels, 210, 160)
-  }
+  -- Create "buffers"
+  if opt.ale then
+    model.buffers = {
+      frame = torch.FloatTensor(opt.origChannels, opt.origHeight, opt.origWidth),
+      convertedFrame = torch.FloatTensor(model.nChannels, opt.origHeight, opt.origWidth)
+    }
+  end
 
   -- Get cuDNN if available
   model.hasCudnn = pcall(require, 'cudnn')
