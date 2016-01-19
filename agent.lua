@@ -57,7 +57,7 @@ agent.create = function(gameEnv, opt)
   local epsilonGrad = (opt.epsilonEnd - opt.epsilonStart)/opt.epsilonSteps
 
   -- Experience replay memory
-  DQN.memory = Experience(opt)
+  DQN.memory = Experience(opt.memSize, opt)
   -- State buffer
   DQN.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
 
@@ -69,6 +69,8 @@ agent.create = function(gameEnv, opt)
     momentum = opt.momentum
   }
 
+  -- Validation experience replay memory
+  DQN.valMemory = Experience(opt.valSize, opt)
   -- Validation variables
   DQN.losses = {}
   DQN.avgV = {} -- Running average of V
@@ -128,8 +130,9 @@ agent.create = function(gameEnv, opt)
       -- Store experience tuple parts (including pre-emptive action)
       self.memory:store(reward, agent.buffers.observation, terminal, aIndex)
 
-      if opt.step == opt.learnStart then
-        -- TODO: Collect buffer of transitions to validate with of size opt.valSize
+      -- Collect validation transitions at the start
+      if opt.step <= opt.valSize then
+        self.valMemory:store(reward, agent.buffers.observation, terminal, aIndex)
       end
 
       -- Sample uniformly or with prioritised sampling
@@ -282,15 +285,33 @@ agent.create = function(gameEnv, opt)
 
   -- Reports stats for validation
   function DQN:report()
-    -- TODO: Replace this with going over validation transitions
-    self:learn(theta, torch.linspace(1, opt.batchSize, opt.batchSize):long(), opt.Tensor(opt.batchSize):fill(1))
+    -- Validation variables
+    local totalV, totalTdErr = 0, 0
 
-    -- Calculate V and TD-error δ
-    if opt.PALpha == 0 then
-      agent.buffers.VPrime = torch.max(agent.buffers.QPrimes, 2)
+    -- Loop over validation transitions
+    local nBatches = math.ceil(opt.valSize / opt.batchSize)
+    local ISWeights = opt.Tensor(opt.batchSize):fill(1)
+    local startIndex, endIndex, batchSize, indices
+    for n = 1, nBatches do
+      startIndex = (n - 1)*opt.batchSize + 1
+      endIndex = n*opt.batchSize
+      batchSize = endIndex - startIndex + 1
+      indices = torch.linspace(startIndex, endIndex, batchSize):long()
+
+      -- Perform "learning" (without optimisation)
+      self:learn(theta, indices, ISWeights:narrow(1, 1, batchSize))
+
+      -- Calculate V and TD-error δ
+      if opt.PALpha == 0 then
+        agent.buffers.VPrime = torch.max(agent.buffers.QPrimes, 2)
+      end
+      totalV = totalV + torch.sum(agent.buffers.VPrime)
+      totalTdErr = totalTdErr + torch.abs(agent.buffers.tdErr):sum()
     end
-    table.insert(self.avgV, torch.mean(agent.buffers.VPrime))
-    table.insert(self.avgTdErr, torch.abs(agent.buffers.tdErr):mean())
+
+    -- Average and insert values
+    table.insert(self.avgV, totalV / opt.valSize)
+    table.insert(self.avgTdErr, totalTdErr / opt.valSize)
 
     -- Plot losses
     gnuplot.pngfigure(paths.concat('experiments', opt._id, 'losses.png'))

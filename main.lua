@@ -142,7 +142,7 @@ else
 
   -- Adjust other parameters to better suit Catch
   opt.memSize = opt.memSize / 10
-  opt.eta = opt.eta * 10
+  opt.eta = opt.eta * 1
   opt.epsilonEnd = 0.05
   opt.epsilonSteps = opt.epsilonSteps / 10
   opt.tau = opt.tau / 10
