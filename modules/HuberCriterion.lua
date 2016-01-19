@@ -4,36 +4,24 @@ function HuberCriterion:__init(delta)
   parent.__init(self)
   self.delta = delta or 1 -- Boundary
   self.alpha = torch.Tensor() -- Residual
-  self.sqMask = torch.ByteTensor()
-  self.absMask = torch.ByteTensor()
 end
 
 function HuberCriterion:updateOutput(input, target)
   -- Calculate residual
   self.alpha = target - input
 
-  -- Calculate masks
-  self.sqMask = torch.abs(self.alpha):le(self.delta)
-  self.absMask = torch.abs(self.alpha):gt(self.delta)
+  self.absAlpha = torch.abs(self.alpha)
+  self.diffAlpha = torch.cmin(self.absAlpha, self.delta)
 
-  -- Add squared loss
-  self.output = torch.sum(torch.pow(self.alpha[self.sqMask], 2):mul(0.5))
-  -- Add absolute loss
-  self.output = self.output + torch.sum(torch.mul(self.alpha[self.absMask], self.delta):add(-0.5 * math.pow(self.delta, 2)))
-
-  -- Average
-  self.output = self.output / target:size(1)
-
+  self.output = torch.cmul(self.diffAlpha, self.absAlpha:mul(2):add(-self.diffAlpha)):mul(0.5):mean()
+  
   return self.output
 end
 
 function HuberCriterion:updateGradInput(input, target)
   self.gradInput:resizeAs(target)
 
-  -- Calculate squared loss derivative
-  self.gradInput[self.sqMask] = self.alpha[self.sqMask]
-  -- Calculate absolute loss derivative
-  self.gradInput[self.absMask] = torch.sign(self.alpha[self.absMask]):mul(self.delta)
+  self.gradInput = self.alpha:sign():cmul(self.diffAlpha)
 
   return self.gradInput
 end
