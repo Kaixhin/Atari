@@ -54,6 +54,9 @@ function Experience:_init(opt)
   self.states[1]:zero() -- Blank out state
   self.actions[1] = 1 -- Action is no-op
 
+  -- Calculate β growth factor
+  self.betaGrad = (1 - opt.betaZero)/opt.steps
+
   -- Calculates circular indices
   self.circIndex = function(x)
     local ind = x % opt.memSize
@@ -147,7 +150,8 @@ function Experience:sample(priorityType)
     indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
     
     -- Importance-sampling weights w = (N * p(rank))^-β
-    w = torch.Tensor(rankIndices):pow(-self.opt.alpha):mul(N):pow(-self.opt.beta[self.opt.step]) -- p(x) = Cx^-α but C is not analytical for α < 1 so this is unnormalised
+    local beta = math.min(self.opt.betaZero + (opt.step - 1)*self.betaGrad, 1)
+    w = torch.Tensor(rankIndices):pow(-self.opt.alpha):mul(N):pow(-beta) -- p(x) = Cx^-α but C is not analytical for α < 1 so this is unnormalised
     -- Find max importance-sampling weight for normalisation
     local wMax = torch.max(w) -- p(x) was unnormalised so again just use max of sample to normalise
     -- Normalise weights so updates only scale downwards (for stability)
@@ -160,7 +164,8 @@ function Experience:sample(priorityType)
     P:div(Z) -- Normalise
 
     -- Calculate importance-sampling weights w
-    w = torch.mul(P, N):pow(-opt.beta[opt.step]) -- Use importance-sampling exponent β
+    local beta = math.min(self.opt.betaZero + (opt.step - 1)*self.betaGrad, 1)
+    w = torch.mul(P, N):pow(-beta) -- Use importance-sampling exponent β
     w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
 
     -- Create a cumulative distribution for inverse transform sampling

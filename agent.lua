@@ -53,6 +53,9 @@ agent.create = function(gameEnv, opt)
   -- Network parameters θ and gradients dθ
   local theta, dTheta = DQN.policyNet:getParameters()
 
+  -- Greediness ε decay factor
+  local epsilonGrad = (opt.epsilonEnd - opt.epsilonStart)/opt.epsilonSteps
+
   -- Experience replay memory
   DQN.memory = Experience(opt)
   -- State buffer
@@ -105,7 +108,7 @@ agent.create = function(gameEnv, opt)
     local epsilon = 0.001
     if self.isTraining then
       -- Use annealing ε
-      epsilon = opt.epsilon[opt.step]
+      epsilon = math.max(opt.epsilonStart + (opt.step - 1)*epsilonGrad, opt.epsilonEnd)
     end
 
     -- Choose action by ε-greedy exploration
@@ -246,7 +249,8 @@ agent.create = function(gameEnv, opt)
     agent.buffers.QCurr:zero()
     -- Set TD-errors δ with given actions
     for n = 1, opt.batchSize do
-      agent.buffers.QCurr[n][agent.buffers.actions[n]] = ISWeights[n] * agent.buffers.tdErr[n] -- Correct prioritisation bias with importance-sampling weights
+       -- Correct prioritisation bias with importance-sampling weights
+      agent.buffers.QCurr[n][agent.buffers.actions[n]] = ISWeights[n] * -agent.buffers.tdErr[n] -- Negative TD-error δ used for gradient descent target (rather than negative loss)
     end
 
     -- Backpropagate (network modifies gradients internally)

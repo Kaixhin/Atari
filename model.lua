@@ -66,9 +66,9 @@ model.create = function(m)
     net:add(bestModule('conv', 64, 64, 3, 3, 1, 1))
     net:add(bestModule('relu', true))
   else
-    net:add(bestModule('conv', model.histLen*model.nChannels, 8, 3, 3, 2, 2))
+    net:add(bestModule('conv', model.histLen*model.nChannels, 16, 3, 3, 2, 2, 1, 1))
     net:add(bestModule('relu', true))
-    net:add(bestModule('conv', 8, 16, 3, 3, 1, 1))
+    net:add(bestModule('conv', 16, 32, 3, 3, 1, 1, 1, 1))
     net:add(bestModule('relu', true))
   end
   -- Calculate convolutional network output size

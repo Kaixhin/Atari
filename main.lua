@@ -46,13 +46,13 @@ cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
 -- Training options
-cmd:option('-optimiser', 'adam', 'Training algorithm') -- Originally a "non-standard" RMSProp was used, as found in Generating Sequences With Recurrent Neural Networks
+cmd:option('-optimiser', 'adam', 'Training algorithm') -- optim does not currently have RMSProp with momentum, as found in Generating Sequences With Recurrent Neural Networks
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
-cmd:option('-progFreq', 10000, 'Number of steps to report progress')
+cmd:option('-progFreq', 10000, 'Interval of steps to report progress')
 cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- Therefore valFreq steps is sometimes called an epoch
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 cmd:option('-valSize', 500, 'Number of transitions to use for validation stats')
@@ -142,7 +142,8 @@ else
 
   -- Adjust other parameters to better suit Catch
   opt.memSize = opt.memSize / 10
-  opt.eta = opt.eta * 100
+  opt.eta = opt.eta * 10
+  opt.epsilonEnd = 0.05
   opt.epsilonSteps = opt.epsilonSteps / 10
   opt.tau = opt.tau / 10
   opt.steps = opt.steps / 10
@@ -184,7 +185,7 @@ log.info('Starting game: ' .. opt.game)
 local reward, screen, terminal = 0, gameEnv:start(), false
 
 -- Activate display if using QT
-local zoom = opt.ale and 1 or 10
+local zoom = opt.ale and 1 or 20
 local window = qt and image.display({image=screen, zoom=zoom})
 
 if opt.mode == 'train' then
@@ -212,14 +213,6 @@ if opt.mode == 'train' then
     log.error('Unrecognised type of prioritised experience replay')
     error('Unrecognised type of prioritised experience replay')
   end
-
-  -- Create ε decay vector
-  opt.epsilon = torch.linspace(opt.epsilonEnd, opt.epsilonStart, opt.epsilonSteps)
-  opt.epsilon:neg():add(opt.epsilonStart)
-  local epsilonFinal = torch.Tensor(opt.steps - opt.epsilonSteps):fill(opt.epsilonEnd)
-  opt.epsilon = torch.cat(opt.epsilon, epsilonFinal)
-  -- Create β growth vector
-  opt.beta = torch.linspace(opt.betaZero, 1, opt.steps)
 
   -- Set environment and agent to training mode
   if opt.ale then gameEnv:training() end
@@ -269,7 +262,7 @@ if opt.mode == 'train' then
 
     -- Report progress
     if step % opt.progFreq == 0 then
-      log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Epsilon: ' .. opt.epsilon[step])
+      log.info('Steps: ' .. step .. '/' .. opt.steps)
       -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
@@ -296,9 +289,9 @@ if opt.mode == 'train' then
           -- Track reward
           valEpisodeReward = valEpisodeReward + reward
         else
-          if valEpisode % (opt.ale and 10 or 1000) == 0 then
+          if valEpisode % (opt.ale and 10 or 625) == 0 then
             -- Print score for episode
-            log.info('[VALIDATION] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward)
+            log.info('[VAL] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward)
           end
 
           -- Start a new episode
