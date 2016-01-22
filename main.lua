@@ -144,10 +144,10 @@ else
 
   -- Adjust other parameters to better suit Catch
   opt.memSize = opt.memSize / 10
-  opt.eta = opt.eta * 1
+  opt.eta = opt.eta * 10
   opt.epsilonEnd = 0.05
   opt.epsilonSteps = opt.epsilonSteps / 10
-  opt.tau = opt.tau / 10
+  opt.tau = opt.tau / 100
   opt.steps = opt.steps / 10
   opt.learnStart = opt.learnStart / 10
 
@@ -171,8 +171,7 @@ elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
   if io.read() == 'y' then
     log.info('Loading saved agent')
     agent = torch.load(paths.concat('experiments', opt._id, 'agent.t7'))
-    -- Load environment and initial step from agent
-    gameEnv = agent.env
+    -- Load initial step from agent
     initStep = agent.opt.step
   end
 end
@@ -230,7 +229,7 @@ if opt.mode == 'train' then
     local actionIndex = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, screen, terminal = agent:act(actionIndex)
+      reward, screen, terminal = gameEnv:step(actionIndex)
       -- Track reward
       episodeReward = episodeReward + reward
     else
@@ -280,7 +279,7 @@ if opt.mode == 'train' then
         local actionIndex = agent:observe(reward, screen, terminal)
         if not terminal then
           -- Act on environment
-          reward, screen, terminal = agent:act(actionIndex)
+          reward, screen, terminal = gameEnv:step(actionIndex)
           -- Track reward
           valEpisodeReward = valEpisodeReward + reward
         else
@@ -351,7 +350,7 @@ elseif opt.mode == 'eval' then
     -- Observe and choose next action (index)
     local actionIndex = agent:observe(reward, screen, terminal)
     -- Act on environment
-    reward, screen, terminal = agent:act(actionIndex)
+    reward, screen, terminal = gameEnv:step(actionIndex)
     episodeReward = episodeReward + reward
 
     if qt then

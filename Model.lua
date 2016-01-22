@@ -58,7 +58,7 @@ function Model:preprocess(observation)
     local frame = observation:select(1, 1):float() -- Convert from CudaTensor if necessary
     -- Perform colour conversion
     if self.colorSpace ~= 'rgb' then
-      frame = image['rgb2' .. model.colorSpace](frame)
+      frame = image['rgb2' .. self.colorSpace](frame)
     end
 
     -- Resize 210x160 screen

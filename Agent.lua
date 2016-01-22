@@ -13,8 +13,6 @@ local Agent = classic.class('Agent')
 function Agent:_init(gameEnv, opt)
   -- Experiment ID
   self._id = opt._id
-  -- Store reference to environment
-  self.env = gameEnv
   -- Actions
   self.actionSpec = gameEnv:getActionSpec()
   self.m = self.actionSpec[3][2] -- Number of discrete actions
@@ -159,12 +157,6 @@ function Agent:observe(reward, observation, terminal)
   end
 
   return aIndex
-end
-
--- Acts on the environment
-function Agent:act(aIndex)
-  -- Perform step on environment
-  return self.env:step(aIndex)
 end
 
 -- Learns from experience

@@ -6,7 +6,7 @@ Prioritised experience replay [[1]](#references) persistent advantage learning [
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
-In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the DQN agent before quitting. Note that the weights for the network itself are not that large, but the experience replay memory is ~7GB.
+In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 
 ## Requirements
 
@@ -30,10 +30,6 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/xitari/master/xitari-
 luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewrap-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/rlenvs-scm-1.rockspec
 ```
-
-## Todo
-
-- Use "sum tree" binary heap for proportional prioritised experience replay
 
 ## Acknowledgements
 
