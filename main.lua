@@ -3,7 +3,7 @@ local _ = require 'moses'
 require 'logroll'
 local image = require 'image'
 local gnuplot = require 'gnuplot'
-local agent = require 'agent'
+local Agent = require 'Agent'
 local evaluator = require 'evaluator'
 
 -- Detect QT for image display
@@ -35,18 +35,18 @@ cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best 
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
-cmd:option('-eta', 7e-5, 'Learning rate η') -- Accounts for prioritied experience sampling but not duel
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
-cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε')
+cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned for DDQN
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel than for standard DQN
 cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip')
 cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
 cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
-cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
+cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
-cmd:option('-optimiser', 'adam', 'Training algorithm') -- optim does not currently have RMSProp with momentum, as found in Generating Sequences With Recurrent Neural Networks
+cmd:option('-optimiser', 'adam', 'Training algorithm') -- optim currently uses the original RMSProp, not the one found in "Generating Sequences With Recurrent Neural Networks"
+cmd:option('-eta', 6.25e-5, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well)
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
@@ -63,7 +63,7 @@ cmd:option('-poolFrmsType', 'max', 'Type of pooling over frames: max|mean')
 cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
-cmd:option('-network', '', 'Saved DQN file to load (DQN.t7)')
+cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
 local opt = cmd:parse(arg)
 -- Process boolean options (Torch fails to accept false on the command line)
@@ -89,6 +89,8 @@ log = logroll.combine(flog, plog)
 
 -- Torch setup
 log.info('Setting up Torch7')
+-- Use enhanced garbage collector
+torch.setheaptracking(true)
 -- Set number of BLAS threads
 torch.setnumthreads(opt.threads)
 -- Set default Tensor type (float is more efficient than double)
@@ -134,7 +136,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  gameEnv = Catch()
+  gameEnv = Catch({difficulty = 'hard'})
   stateSpec = gameEnv:getStateSpec()
   
   -- Adjust height and width
@@ -148,10 +150,6 @@ else
   opt.tau = opt.tau / 10
   opt.steps = opt.steps / 10
   opt.learnStart = opt.learnStart / 10
-  -- TODO REMOVE (FOR DEBUGGING)
-  opt.duel = false
-  opt.doubleQ = false
-  opt.PALpha = 0
 
   -- Mention CPU vs GPU
   if opt.gpu > 0 then
@@ -162,21 +160,20 @@ local initStep = 1
 
 -- Create DQN agent
 log.info('Creating DQN')
-local DQN = agent.create(gameEnv, opt)
+local agent = Agent(gameEnv, opt)
 if paths.filep(opt.network) then
   -- Load saved agent if specified
-  log.info('Loading pretrained network')
-  DQN:load(opt.network)
-elseif paths.filep(paths.concat('experiments', opt._id, 'DQN.t7')) then
+  log.info('Loading pretrained network weights')
+  agent:loadWeights(opt.network)
+elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
   -- Ask to load saved agent if found in experiment folder (resuming training)
-  log.info('Saved network found - load (y/n)?')
+  log.info('Saved agent found - load (y/n)?')
   if io.read() == 'y' then
-    log.info('Loading pretrained network')
-    DQN:load(paths.concat('experiments', opt._id))
-    if opt.mode == 'train' then
-      log.info('Loading saved step')
-      initStep = torch.load(paths.concat('experiments', opt._id, 'step.t7'))[1]
-    end
+    log.info('Loading saved agent')
+    agent = torch.load(paths.concat('experiments', opt._id, 'agent.t7'))
+    -- Load environment and initial step from agent
+    gameEnv = agent.env
+    initStep = agent.opt.step
   end
 end
 
@@ -194,12 +191,10 @@ if opt.mode == 'train' then
   -- Set up SIGINT (Ctrl+C) handler to save network before quitting
   signal.signal(signal.SIGINT, function(signum)
     log.warn('SIGINT received')
-    log.info('Save network (y/n)?')
+    log.info('Save agent (y/n)?')
     if io.read() == 'y' then
-      log.info('Saving network')
-      DQN:save(paths.concat('experiments', opt._id))
-      log.info('Saving step')
-      torch.save(paths.concat('experiments', opt._id, 'step.t7'), {opt.step}) -- Save step to resume training
+      log.info('Saving agent')
+      torch.save(paths.concat('experiments', opt._id, 'agent.t7'), agent) -- Save step to resume training
     end
     log.warn('Exiting')
     os.exit(128 + signum)
@@ -216,7 +211,7 @@ if opt.mode == 'train' then
 
   -- Set environment and agent to training mode
   if opt.ale then gameEnv:training() end
-  DQN:training()
+  agent:training()
 
   -- Training variables (reported in verbose mode)
   local episode = 1
@@ -230,12 +225,12 @@ if opt.mode == 'train' then
   -- Training loop
   for step = initStep, opt.steps do
     opt.step = step -- Pass step number to agent for use in training
-
+    
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
-    local actionIndex = DQN:observe(reward, screen, terminal) -- As results received, learn in training mode
+    local actionIndex = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, screen, terminal = DQN:act(actionIndex)
+      reward, screen, terminal = agent:act(actionIndex)
       -- Track reward
       episodeReward = episodeReward + reward
     else
@@ -270,7 +265,7 @@ if opt.mode == 'train' then
     if step % opt.valFreq == 0 and step >= opt.learnStart then
       log.info('Validating')
       if opt.ale then gameEnv:evaluate() end
-      DQN:evaluate()
+      agent:evaluate()
 
       -- Start new game
       reward, screen, terminal = 0, gameEnv:start(), false
@@ -282,10 +277,10 @@ if opt.mode == 'train' then
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
-        local actionIndex = DQN:observe(reward, screen, terminal)
+        local actionIndex = agent:observe(reward, screen, terminal)
         if not terminal then
           -- Act on environment
-          reward, screen, terminal = DQN:act(actionIndex)
+          reward, screen, terminal = agent:act(actionIndex)
           -- Track reward
           valEpisodeReward = valEpisodeReward + reward
         else
@@ -309,16 +304,17 @@ if opt.mode == 'train' then
 
       -- Print total and average score
       log.info('Total Score: ' .. valTotalReward)
-      log.info('Average Score: ' .. valTotalReward/math.max(valEpisode - 1, 1)) -- Only count reward for completed episodes
-      table.insert(valScores, valTotalReward)
+      valTotalReward = valTotalReward/math.max(valEpisode - 1, 1) -- Only count reward for completed episodes
+      log.info('Average Score: ' .. valTotalReward)
+      valScores[#valScores + 1] = valTotalReward
       -- Plot total score
-      gnuplot.pngfigure(paths.concat('experiments', opt._id, 'score.png'))
+      gnuplot.pngfigure(paths.concat('experiments', opt._id, 'scores.png'))
       gnuplot.plot(torch.Tensor(valScores))
       gnuplot.plotflush()
 
       -- Use transitions sampled for validation to test performance
-      local avgV, avgTdErr = DQN:report()
-      log.info('Average V(s): ' .. avgV)
+      local avgV, avgTdErr = agent:report()
+      log.info('Average V: ' .. avgV)
       log.info('Average δ: ' .. avgTdErr)
 
       -- Save if best score achieved
@@ -326,24 +322,26 @@ if opt.mode == 'train' then
         log.info('New best score')
         bestValScore = valTotalReward
 
-        log.info('Saving network')
-        DQN:save(paths.concat('experiments', opt._id))
+        log.info('Saving best weights')
+        agent:saveWeights(paths.concat('experiments', opt._id, 'weights.t7'))
       end
 
       log.info('Resuming training')
       if opt.ale then gameEnv:training() end
-      DQN:training()
+      agent:training()
 
       -- Start new game (as previous one was interrupted)
       reward, screen, terminal = 0, gameEnv:start(), false
       episodeReward = reward
     end
   end
+
+  log.info('Finished training')
 elseif opt.mode == 'eval' then
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
   if opt.ale then gameEnv:evaluate() end
-  DQN:evaluate()
+  agent:evaluate()
 
   -- Report episode reward
   local episodeReward = reward
@@ -351,9 +349,9 @@ elseif opt.mode == 'eval' then
   -- Play one game (episode)
   while not terminal do
     -- Observe and choose next action (index)
-    local actionIndex = DQN:observe(reward, screen, terminal)
+    local actionIndex = agent:observe(reward, screen, terminal)
     -- Act on environment
-    reward, screen, terminal = DQN:act(actionIndex)
+    reward, screen, terminal = agent:act(actionIndex)
     episodeReward = episodeReward + reward
 
     if qt then

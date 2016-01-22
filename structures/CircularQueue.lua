@@ -13,7 +13,7 @@ function CircularQueue:_init(length, createTensor, tensorSizes)
 
   -- Initialise zero tensors
   for i = 1, self.length do
-    table.insert(self.queue, createTensor(torch.LongStorage(tensorSizes)):fill(0))
+    self.queue[#self.queue + 1] = createTensor(torch.LongStorage(tensorSizes)):fill(0)
   end
 
   -- Work out tensor type

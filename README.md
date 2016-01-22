@@ -2,15 +2,15 @@
 
 **Work In Progress**
 
-Persistent advantage learning [[1]](#references) dueling [[2]](#references) Double [[3]](#references) DQN [[4]](#references) with prioritised experience replay [[5]](#references) for the Arcade Learning Environment [[6]](#references). Or PALDDDQNwPER for short...
+Prioritised experience replay [[1]](#references) persistent advantage learning [[2]](#references) dueling [[3]](#references) double [[4]](#references) deep Q-network [[5]](#references) for the Arcade Learning Environment [[6]](#references). Or PERPAL(triple-D)QN for short...
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`.
 
-In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the network before quitting. The experience replay memory is very large (> 20GB) and may take a few minutes to save/load.
+In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the DQN agent before quitting. Note that the weights for the network itself are not that large, but the experience replay memory is ~7GB.
 
 ## Requirements
 
-Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requires the following extra packages:
+Requires [Torch7](http://torch.ch/), and uses CUDA/cuDNN if available. Also requires the following extra luarocks packages:
 
 - torchx
 - dpnn
@@ -33,7 +33,6 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 
 ## Todo
 
-- Collect validation set transitions
 - Use "sum tree" binary heap for proportional prioritised experience replay
 
 ## Acknowledgements
@@ -42,9 +41,9 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 
 ## References
 
-[1] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)  
-[2] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
-[3] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
-[4] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
-[5] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
+[1] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
+[2] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)  
+[3] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
+[4] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
+[5] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
 [6] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  

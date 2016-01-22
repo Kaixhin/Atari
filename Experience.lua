@@ -3,7 +3,7 @@ local classic = require 'classic'
 local BinaryHeap = require 'structures/BinaryHeap'
 require 'classic.torch' -- Enables serialisation
 
-local Experience = classic.class("Experience")
+local Experience = classic.class('Experience')
 
 -- Converts a CDF from a PDF
 local pdfToCdf = function(pdf)
@@ -25,10 +25,10 @@ function Experience:_init(capacity, opt)
   self.alpha = opt.alpha
   self.betaZero = opt.betaZero
   -- Keep reference to opt for opt.step
-  self.opt = opt
+  self.opt = opt -- TODO: Keep internal step counter
 
-  -- Create "buffers"
-  self.buffers = {
+  -- Create transition tuples buffer
+  self.transTuples = {
     states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
     actions = torch.ByteTensor(opt.batchSize),
     rewards = opt.Tensor(opt.batchSize),
@@ -101,40 +101,40 @@ end
 function Experience:retrieve(indices)
   local batchSize = indices:size(1)
   -- Blank out history in one go
-  self.buffers.states:zero()
+  self.transTuples.states:zero()
 
   -- Iterate over indices
   for i = 1, batchSize do
     local index = indices[i]
     -- Retrieve action
-    self.buffers.actions[i] = self.actions[index]
+    self.transTuples.actions[i] = self.actions[index]
     -- Retrieve rewards
-    self.buffers.rewards[i] = self.rewards[index]
+    self.transTuples.rewards[i] = self.rewards[index]
     -- Retrieve terminal status
-    self.buffers.terminals[i] = self.terminals[index]
+    self.transTuples.terminals[i] = self.terminals[index]
 
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.buffers.states[i][histIndex] = self.states[index][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[i][histIndex] = self.states[index][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       index = self:circIndex(index - 1)
       histIndex = histIndex - 1
     until histIndex == 0 or self.terminals[index] == 1
 
     -- If not terminal, fill in transition history
-    if self.buffers.terminals[i] == 0 then
+    if self.transTuples.terminals[i] == 0 then
       -- Copy most recent state
       for h = 2, self.histLen do
-        self.buffers.transitions[i][h] = self.buffers.states[i][h - 1]
+        self.transTuples.transitions[i][h] = self.transTuples.states[i][h - 1]
       end
       -- Get transition frame
-      self.buffers.transitions[i][self.histLen] = self.states[self:circIndex(indices[i] + 1)][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[i][self.histLen] = self.states[self:circIndex(indices[i] + 1)][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
     end
   end
 
-  return self.buffers.states, self.buffers.actions, self.buffers.rewards, self.buffers.transitions, self.buffers.terminals
+  return self.transTuples.states, self.transTuples.actions, self.transTuples.rewards, self.transTuples.transitions, self.transTuples.terminals
 end
 
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
@@ -153,7 +153,7 @@ function Experience:sample(priorityType)
     local samplingRange = torch.pow(1/self.alpha, torch.linspace(1, math.log(N, 1/self.alpha), self.batchSize+1)):long() -- Use logarithmic binning
     -- Perform stratified sampling (transitions will have varying TD-error magnitudes |δ|)
     for i = 1, self.batchSize do
-      table.insert(rankIndices, torch.random(samplingRange[i], samplingRange[i+1]))
+      rankIndices[#rankIndices + 1] = torch.random(samplingRange[i], samplingRange[i+1])
     end
     -- Retrieve actual transition indices
     indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
