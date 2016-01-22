@@ -85,9 +85,7 @@ function Model:create(m)
     net:add(self:bestModule('conv', 64, 64, 3, 3, 1, 1))
     net:add(self:bestModule('relu', true))
   else
-    net:add(self:bestModule('conv', self.histLen*self.nChannels, 8, 5, 5, 2, 2, 2, 2))
-    net:add(self:bestModule('relu', true))
-    net:add(self:bestModule('conv', 8, 16, 3, 3, 1, 1, 1, 1))
+    net:add(self:bestModule('conv', self.histLen*self.nChannels, 16, 5, 5, 2, 2, 2, 2))
     net:add(self:bestModule('relu', true))
   end
   -- Calculate convolutional network output size
@@ -123,6 +121,8 @@ function Model:create(m)
     net:add(self:bestModule('relu', true))
     net:add(nn.Linear(hiddenSize, m))
   end
+  -- Reverse gradient so that gradient descent optimisers can be used
+  net:add(nn.GradientReversal())
 
   if self.gpu > 0 then
     require 'cunn'

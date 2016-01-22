@@ -251,7 +251,7 @@ function Agent:learn(x, indices, ISWeights)
   -- Set TD-errors δ with given actions
   for n = 1, self.batchSize do
      -- Correct prioritisation bias with importance-sampling weights
-    self.QCurr[n][actions[n]] = ISWeights[n] * -self.tdErr[n] -- Negative TD-error δ used for gradient descent optimiser
+    self.QCurr[n][actions[n]] = ISWeights[n] * self.tdErr[n]
   end
 
   -- Backpropagate (network modifies gradients internally)
