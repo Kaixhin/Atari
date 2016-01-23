@@ -6,6 +6,7 @@ local Model = require 'Model'
 local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'
 require 'classic.torch' -- Enables serialisation
+require 'modules/rmspropm' -- Add RMSProp with momentum
 
 local Agent = classic.class('Agent')
 

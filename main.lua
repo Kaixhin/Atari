@@ -45,7 +45,7 @@ cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
-cmd:option('-optimiser', 'adam', 'Training algorithm') -- optim currently uses the original RMSProp, not the one found in "Generating Sequences With Recurrent Neural Networks"
+cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
 cmd:option('-eta', 6.25e-5, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well)
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
