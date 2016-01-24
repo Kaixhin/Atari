@@ -10,8 +10,8 @@ function optim.rmspropm(opfunc, x, config, state)
   -- Evaluate f(x) and df/dx
   local fx, dfdx = opfunc(x)
 
-  -- Initialise  storage
-  if not state.m then
+  -- Initialise storage
+  if not state.g then
     state.g = torch.Tensor():typeAs(x):resizeAs(dfdx):zero()
     state.gSq = torch.Tensor():typeAs(x):resizeAs(dfdx):zero()
     state.tmp = torch.Tensor():typeAs(x):resizeAs(dfdx)

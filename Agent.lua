@@ -117,8 +117,13 @@ function Agent:observe(reward, observation, terminal)
   -- Set ε based on training vs. evaluation mode
   local epsilon = 0.001
   if self.isTraining then
-    -- Use annealing ε
-    epsilon = math.max(self.epsilonStart + (self.opt.step - 1)*self.epsilonGrad, self.epsilonEnd)
+    -- Keep ε constant before learning starts
+    if self.opt.step >= self.learnStart then
+      -- Use annealing ε
+      epsilon = math.max(self.epsilonStart + (self.opt.step - self.learnStart - 1)*self.epsilonGrad, self.epsilonEnd)
+    else
+      epsilon = self.epsilonStart
+    end
   end
 
   -- Choose action by ε-greedy exploration
@@ -130,6 +135,7 @@ function Agent:observe(reward, observation, terminal)
       -- Choose best action
       local __, ind = torch.max(self.policyNet:forward(state), 1)
       aIndex = ind[1]
+      -- TODO: See if random tie-breaking is needed (given outputs are floats)
     end
   end
 
@@ -314,15 +320,22 @@ function Agent:report()
 
   -- Plot losses
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
-  gnuplot.plot(torch.Tensor(self.losses))
+  gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.opt.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
+  gnuplot.xlabel('Step (x' .. self.progFreq .. ')')
+  gnuplot.ylabel('Loss')
   gnuplot.plotflush()
   -- Plot V
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'Vs.png'))
-  gnuplot.plot(torch.Tensor(self.avgV))
+  gnuplot.plot('V', torch.linspace(1, #self.avgV, #self.avgV), torch.Tensor(self.avgV), '-')
+  gnuplot.xlabel('Epoch')
+  gnuplot.ylabel('V')
+  gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
   -- Plot TD-error δ
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'TDErrors.png'))
-  gnuplot.plot(torch.Tensor(self.avgTdErr))
+  gnuplot.plot('TD-Error', torch.linspace(1, #self.avgTdErr, #self.avgTdErr), torch.Tensor(self.avgTdErr), '-')
+  gnuplot.xlabel('Epoch')
+  gnuplot.ylabel('TD-Error')
   gnuplot.plotflush()
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]

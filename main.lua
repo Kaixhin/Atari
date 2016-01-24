@@ -46,14 +46,14 @@ cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
-cmd:option('-eta', 6.25e-5, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well)
+cmd:option('-eta', 0.002, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well) x batch size (this code divides grads by batch size)
 cmd:option('-momentum', 0.95, 'SGD momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps to report progress')
-cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- Therefore valFreq steps is sometimes called an epoch
+cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 cmd:option('-valSize', 500, 'Number of transitions to use for validation stats')
 -- ALEWrap options
@@ -143,13 +143,15 @@ else
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
   -- Adjust other parameters to better suit Catch
-  opt.memSize = opt.memSize / 10
-  opt.eta = opt.eta * 10
+  opt.memSize = 1e5
+  opt.eta = 0.005
   opt.epsilonEnd = 0.05
-  opt.epsilonSteps = opt.epsilonSteps / 10
-  opt.tau = opt.tau / 100
-  opt.steps = opt.steps / 10
-  opt.learnStart = opt.learnStart / 10
+  opt.epsilonSteps = 1e5
+  opt.tau = 30
+  opt.steps = 1e6
+  opt.learnStart = 5000
+  opt.valFreq = 200000
+  opt.valSteps = 8000
 
   -- Mention CPU vs GPU
   if opt.gpu > 0 then
@@ -260,7 +262,6 @@ if opt.mode == 'train' then
       -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
-    -- TODO Replay valSize saved transitions and report average of max Q-value at each step
     if step % opt.valFreq == 0 and step >= opt.learnStart then
       log.info('Validating')
       if opt.ale then gameEnv:evaluate() end
@@ -283,7 +284,7 @@ if opt.mode == 'train' then
           -- Track reward
           valEpisodeReward = valEpisodeReward + reward
         else
-          if valEpisode % (opt.ale and 10 or 625) == 0 then
+          if valEpisode % (opt.ale and 10 or 100) == 0 then
             -- Print score for episode
             log.info('[VAL] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward)
           end
@@ -308,7 +309,10 @@ if opt.mode == 'train' then
       valScores[#valScores + 1] = valTotalReward
       -- Plot total score
       gnuplot.pngfigure(paths.concat('experiments', opt._id, 'scores.png'))
-      gnuplot.plot(torch.Tensor(valScores))
+      gnuplot.plot('Score', torch.linspace(1, #valScores, #valScores), torch.Tensor(valScores), '-')
+      gnuplot.xlabel('Epoch')
+      gnuplot.ylabel('Average Score')
+      gnuplot.movelegend('left', 'top')
       gnuplot.plotflush()
 
       -- Use transitions sampled for validation to test performance
