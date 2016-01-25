@@ -121,8 +121,6 @@ function Model:create(m)
     net:add(self:bestModule('relu', true))
     net:add(nn.Linear(hiddenSize, m))
   end
-  -- Reverse gradient so that gradient descent optimisers can be used
-  net:add(nn.GradientReversal())
 
   if self.gpu > 0 then
     require 'cunn'

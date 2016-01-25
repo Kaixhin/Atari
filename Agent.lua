@@ -258,7 +258,7 @@ function Agent:learn(x, indices, ISWeights)
   -- Set TD-errors δ with given actions
   for n = 1, self.batchSize do
      -- Correct prioritisation bias with importance-sampling weights
-    self.QCurr[n][actions[n]] = ISWeights[n] * self.tdErr[n]
+    self.QCurr[n][actions[n]] = ISWeights[n] * -self.tdErr[n] -- Negate target to use gradient descent optimisers
   end
 
   -- Backpropagate (network modifies gradients internally)
@@ -266,7 +266,7 @@ function Agent:learn(x, indices, ISWeights)
   -- Divide gradient by batch size
   self.dTheta:div(self.batchSize)
   -- Clip the norm of the gradients
-  self.policyNet:gradParamClip(10)
+  self.policyNet:gradParamClip(10) -- TODO: Check if should be 10/batchSize since grads are normalised in this code
 
   return loss, self.dTheta
 end

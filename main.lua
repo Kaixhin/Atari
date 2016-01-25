@@ -136,7 +136,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  gameEnv = Catch({difficulty = 'hard'})
+  gameEnv = Catch()
   stateSpec = gameEnv:getStateSpec()
   
   -- Adjust height and width
@@ -151,7 +151,7 @@ else
   opt.steps = 1e6
   opt.learnStart = 5000
   opt.valFreq = 200000
-  opt.valSteps = 8000
+  opt.valSteps = 12000
 
   -- Mention CPU vs GPU
   if opt.gpu > 0 then
