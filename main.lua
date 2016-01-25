@@ -183,7 +183,7 @@ log.info('Starting game: ' .. opt.game)
 local reward, screen, terminal = 0, gameEnv:start(), false
 
 -- Activate display if using QT
-local zoom = opt.ale and 1 or 20
+local zoom = opt.ale and 1 or 2
 local window = qt and image.display({image=screen, zoom=zoom})
 
 if opt.mode == 'train' then

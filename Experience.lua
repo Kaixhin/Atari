@@ -43,7 +43,7 @@ function Experience:_init(capacity, opt)
   -- For the standard DQN problem, float vs. byte storage is 24GB vs. 6GB memory, so this prevents/minimises slow swap usage
   self.states = torch.ByteTensor(stateSize) -- ByteTensor to avoid massive memory usage
   self.actions = torch.ByteTensor(capacity) -- Discrete action indices
-  self.rewards = torch.FloatTensor(capacity) -- Stored at time t
+  self.rewards = torch.FloatTensor(capacity) -- Stored at time t (not t + 1)
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
   self.terminals = torch.ByteTensor(capacity):fill(1) -- Filling with 1 prevents going back in history initially
   -- Internal pointer
@@ -105,32 +105,32 @@ function Experience:retrieve(indices)
 
   -- Iterate over indices
   for i = 1, batchSize do
-    local index = indices[i]
+    local memIndex = indices[i]
     -- Retrieve action
-    self.transTuples.actions[i] = self.actions[index]
+    self.transTuples.actions[i] = self.actions[memIndex]
     -- Retrieve rewards
-    self.transTuples.rewards[i] = self.rewards[index]
+    self.transTuples.rewards[i] = self.rewards[memIndex]
     -- Retrieve terminal status
-    self.transTuples.terminals[i] = self.terminals[index]
+    self.transTuples.terminals[i] = self.terminals[memIndex]
 
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[i][histIndex] = self.states[index][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[i][histIndex] = self.states[memIndex][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
       -- Adjust indices
-      index = self:circIndex(index - 1)
+      memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
-    until histIndex == 0 or self.terminals[index] == 1
+    until histIndex == 0 or self.terminals[memIndex] == 1
 
     -- If not terminal, fill in transition history
     if self.transTuples.terminals[i] == 0 then
       -- Copy most recent state
       for h = 2, self.histLen do
-        self.transTuples.transitions[i][h] = self.transTuples.states[i][h - 1]
+        self.transTuples.transitions[i][h - 1] = self.transTuples.states[i][h]
       end
       -- Get transition frame
-      self.transTuples.transitions[i][self.histLen] = self.states[self:circIndex(indices[i] + 1)][self.castType](self.states[index]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[i][self.histLen] = self.states[self:circIndex(indices[i] + 1)][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
     end
   end
 
