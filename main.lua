@@ -1,20 +1,24 @@
+----- General Setup -----
+
 local signal = require 'posix.signal'
 local _ = require 'moses'
-require 'logroll'
 local image = require 'image'
 local gnuplot = require 'gnuplot'
 local Agent = require 'Agent'
 local evaluator = require 'evaluator'
+require 'logroll'
 
 -- Detect QT for image display
 local qt = pcall(require, 'qt')
+-- Detect and use GPU 1 by default
+local cuda = pcall(require, 'cutorch')
 
 local cmd = torch.CmdLine()
 -- Base Torch7 options
 cmd:option('-seed', 1, 'Random seed')
 cmd:option('-threads', 4, 'Number of BLAS threads')
 cmd:option('-tensorType', 'torch.FloatTensor', 'Default tensor type')
-cmd:option('-gpu', 1, 'GPU device ID (0 to disable)')
+cmd:option('-gpu', cuda and 1 or 0, 'GPU device ID (0 to disable)')
 -- Game
 cmd:option('-game', 'catch', 'Name of Atari ROM (stored in "roms" directory)') -- Uses "Catch" env by default
 -- Training vs. evaluate mode
@@ -25,42 +29,42 @@ cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
 -- Agent options
 cmd:option('-histLen', 4, 'Number of consecutive states processed')
-cmd:option('-duel', 'true', 'Use dueling networks architecture')
+cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
-cmd:option('-memSampleFreq', 4, 'Memory sample frequency')
-cmd:option('-memNReplay', 1, 'Number of times to replay per learning step')
+cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
+cmd:option('-memNSamples', 1, 'Number of times to sample per learning step')
 cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
-cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned for DDQN
+cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned for DDQN (1/5 that of DQN)
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
-cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Larger for duel than for standard DQN
-cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip')
+cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Tuned for duel (3x that of DQN)
+cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable)')
 cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
-cmd:option('-doubleQ', 'true', 'Use Double-Q learning')
+cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
 cmd:option('-eta', 0.002, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well) x batch size (this code divides grads by batch size)
-cmd:option('-momentum', 0.95, 'SGD momentum')
+cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 -- Evaluation options
-cmd:option('-progFreq', 10000, 'Interval of steps to report progress')
-cmd:option('-valFreq', 250000, 'Validation frequency (by number of steps)') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
+cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
+cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
-cmd:option('-valSize', 500, 'Number of transitions to use for validation stats')
+cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
 -- ALEWrap options
 cmd:option('-actRep', 4, 'Times to repeat action') -- Independent of history length
-cmd:option('-randomStarts', 30, 'Play no-op action between 1 and randomStarts number of times at the start of each training episode')
-cmd:option('-poolFrmsType', 'max', 'Type of pooling over frames: max|mean')
-cmd:option('-poolFrmsSize', 2, 'Size of pooling over frames')
+cmd:option('-randomStarts', 30, 'Max number of no-op actions played before presenting the start of each training episode')
+cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
+cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
@@ -107,7 +111,6 @@ end
 -- GPU setup
 if opt.gpu > 0 then
   log.info('Setting up GPU')
-  require 'cutorch'
   cutorch.setDevice(opt.gpu)
   cutorch.manualSeedAll(torch.random())
   -- Replace tensor creation function
@@ -116,53 +119,52 @@ if opt.gpu > 0 then
   end
 end
 
--- Work out number of colour channels
+----- Environment + Agent Setup -----
+
+-- Calculate number of colour channels
 if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
   log.error('Unsupported colour space for conversion')
   error('Unsupported colour space for conversion')
 end
 opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
--- Initialise Arcade Learning Environment (or Catch)
+-- Initialise Catch or Arcade Learning Environment
 opt.ale = opt.game ~= 'catch'
 log.info('Setting up ' .. (opt.ale and 'Arcade Learning Environment' or 'Catch'))
-local gameEnv, stateSpec
+local env, stateSpec
 if opt.ale then
   local Atari = require 'rlenvs.Atari'
-  gameEnv = Atari(opt)
-  stateSpec = gameEnv:getStateSpec()
+  env = Atari(opt)
+  stateSpec = env:getStateSpec()
 
-  -- Provide original channels, height and width
+  -- Provide original channels, height and width for resizing from
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  gameEnv = Catch()
-  stateSpec = gameEnv:getStateSpec()
+  env = Catch()
+  stateSpec = env:getStateSpec()
   
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
-  -- Adjust other parameters to better suit Catch
-  opt.memSize = 1e5
+  -- TODO: Adjust parameters to better suit Catch
+  opt.memSize = 1e4
   opt.eta = 0.005
-  opt.epsilonEnd = 0.05
-  opt.epsilonSteps = 1e5
-  opt.tau = 30
-  opt.steps = 1e6
-  opt.learnStart = 5000
-  opt.valFreq = 200000
-  opt.valSteps = 12000
-
-  -- Mention CPU vs GPU
-  if opt.gpu > 0 then
-    log.info('Note: due to its small size, Catch\'s DQN performs better on a CPU')
-  end
+  opt.epsilonSteps = 1e4
+  opt.tau = 4
+  opt.steps = 1e5
+  opt.learnStart = 500
+  opt.progFreq = 1000
+  opt.valFreq = 12500
+  opt.valSteps = 2400
 end
+
+-- Initial step to resume training from
 local initStep = 1
 
 -- Create DQN agent
 log.info('Creating DQN')
-local agent = Agent(gameEnv, opt)
+local agent = Agent(env, opt)
 if paths.filep(opt.network) then
   -- Load saved agent if specified
   log.info('Loading pretrained network weights')
@@ -178,15 +180,19 @@ elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
   end
 end
 
+----- Training / Evaluation -----
+
 -- Start gaming
 log.info('Starting game: ' .. opt.game)
-local reward, screen, terminal = 0, gameEnv:start(), false
+local reward, screen, terminal = 0, env:start(), false
+local action
 
 -- Activate display if using QT
-local zoom = opt.ale and 1 or 2
+local zoom = opt.ale and 1 or 4
 local window = qt and image.display({image=screen, zoom=zoom})
 
 if opt.mode == 'train' then
+
   log.info('Training mode')
 
   -- Set up SIGINT (Ctrl+C) handler to save network before quitting
@@ -211,15 +217,15 @@ if opt.mode == 'train' then
   end
 
   -- Set environment and agent to training mode
-  if opt.ale then gameEnv:training() end
+  if opt.ale then env:training() end
   agent:training()
 
   -- Training variables (reported in verbose mode)
   local episode = 1
-  local episodeReward = reward
+  local episodeScore = reward
 
   -- Validation variables
-  local valEpisode, valEpisodeReward, valTotalReward
+  local valEpisode, valEpisodeScore, valTotalScore
   local valScores = {}
   local bestValScore = -math.huge
 
@@ -228,22 +234,22 @@ if opt.mode == 'train' then
     opt.step = step -- Pass step number to agent for use in training
     
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
-    local actionIndex = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
+    action = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, screen, terminal = gameEnv:step(actionIndex)
-      -- Track reward
-      episodeReward = episodeReward + reward
+      reward, screen, terminal = env:step(action)
+      -- Track score
+      episodeScore = episodeScore + reward
     else
       if opt.verbose then
         -- Print score for episode
-        log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeReward)
+        log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeScore)
       end
 
       -- Start a new episode
       episode = episode + 1
-      reward, screen, terminal = 0, gameEnv:start(), false
-      episodeReward = reward -- Reset episode reward
+      reward, screen, terminal = 0, env:start(), false
+      episodeScore = reward -- Reset episode score
     end
 
     -- Update display
@@ -262,38 +268,40 @@ if opt.mode == 'train' then
       -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
-    if step % opt.valFreq == 0 and step >= opt.learnStart then
+    -- Validate
+    if step >= opt.learnStart and step % opt.valFreq == 0 then
       log.info('Validating')
-      if opt.ale then gameEnv:evaluate() end
+      -- Set environment and agent to evaluation mode
+      if opt.ale then env:evaluate() end
       agent:evaluate()
 
       -- Start new game
-      reward, screen, terminal = 0, gameEnv:start(), false
+      reward, screen, terminal = 0, env:start(), false
 
       -- Reset validation variables
       valEpisode = 1
-      valEpisodeReward = 0
-      valTotalReward = 0
+      valEpisodeScore = 0
+      valTotalScore = 0
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
-        local actionIndex = agent:observe(reward, screen, terminal)
+        action = agent:observe(reward, screen, terminal)
         if not terminal then
           -- Act on environment
-          reward, screen, terminal = gameEnv:step(actionIndex)
-          -- Track reward
-          valEpisodeReward = valEpisodeReward + reward
+          reward, screen, terminal = env:step(action)
+          -- Track score
+          valEpisodeScore = valEpisodeScore + reward
         else
-          if valEpisode % (opt.ale and 10 or 100) == 0 then
-            -- Print score for episode
-            log.info('[VAL] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeReward)
+          -- Print score every 10 episodes
+          if valEpisode % 10 == 0 then
+            log.info('[VAL] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeScore)
           end
 
           -- Start a new episode
           valEpisode = valEpisode + 1
-          reward, screen, terminal = 0, gameEnv:start(), false
-          valTotalReward = valTotalReward + valEpisodeReward -- Only add to total reward at end of episode
-          valEpisodeReward = reward -- Reset episode reward
+          reward, screen, terminal = 0, env:start(), false
+          valTotalScore = valTotalScore + valEpisodeScore -- Only add to total score at end of episode
+          valEpisodeScore = reward -- Reset episode score
         end
 
         -- Update display
@@ -302,12 +310,17 @@ if opt.mode == 'train' then
         end
       end
 
+      -- If no episodes completed then use score from incomplete episode
+      if valEpisode == 1 then
+        valTotalScore = valEpisodeScore
+      end
+
       -- Print total and average score
-      log.info('Total Score: ' .. valTotalReward)
-      valTotalReward = valTotalReward/math.max(valEpisode - 1, 1) -- Only count reward for completed episodes
-      log.info('Average Score: ' .. valTotalReward)
-      valScores[#valScores + 1] = valTotalReward
-      -- Plot total score
+      log.info('Total Score: ' .. valTotalScore)
+      valTotalScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
+      log.info('Average Score: ' .. valTotalScore)
+      valScores[#valScores + 1] = valTotalScore
+      -- Plot average score
       gnuplot.pngfigure(paths.concat('experiments', opt._id, 'scores.png'))
       gnuplot.plot('Score', torch.linspace(1, #valScores, #valScores), torch.Tensor(valScores), '-')
       gnuplot.xlabel('Epoch')
@@ -321,45 +334,49 @@ if opt.mode == 'train' then
       log.info('Average δ: ' .. avgTdErr)
 
       -- Save if best score achieved
-      if valTotalReward > bestValScore then
-        log.info('New best score')
-        bestValScore = valTotalReward
+      if valTotalScore > bestValScore then
+        log.info('New best average score')
+        bestValScore = valTotalScore
 
-        log.info('Saving best weights')
+        log.info('Saving weights')
         agent:saveWeights(paths.concat('experiments', opt._id, 'weights.t7'))
       end
 
       log.info('Resuming training')
-      if opt.ale then gameEnv:training() end
+      -- Set environment and agent to training mode
+      if opt.ale then env:training() end
       agent:training()
 
       -- Start new game (as previous one was interrupted)
-      reward, screen, terminal = 0, gameEnv:start(), false
-      episodeReward = reward
+      reward, screen, terminal = 0, env:start(), false
+      episodeScore = reward
     end
   end
 
   log.info('Finished training')
+
 elseif opt.mode == 'eval' then
+
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
-  if opt.ale then gameEnv:evaluate() end
+  if opt.ale then env:evaluate() end
   agent:evaluate()
 
-  -- Report episode reward
-  local episodeReward = reward
+  -- Report episode score
+  local episodeScore = reward
 
   -- Play one game (episode)
   while not terminal do
     -- Observe and choose next action (index)
-    local actionIndex = agent:observe(reward, screen, terminal)
+    action = agent:observe(reward, screen, terminal)
     -- Act on environment
-    reward, screen, terminal = gameEnv:step(actionIndex)
-    episodeReward = episodeReward + reward
+    reward, screen, terminal = env:step(action)
+    episodeScore = episodeScore + reward
 
     if qt then
       image.display({image=screen, zoom=zoom, win=window})
     end
   end
-  log.info('Final Score: ' .. episodeReward)
+  log.info('Final Score: ' .. episodeScore)
+
 end

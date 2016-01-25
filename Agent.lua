@@ -11,11 +11,11 @@ require 'modules/rmspropm' -- Add RMSProp with momentum
 local Agent = classic.class('Agent')
 
 -- Creates a DQN agent
-function Agent:_init(gameEnv, opt)
+function Agent:_init(env, opt)
   -- Experiment ID
   self._id = opt._id
   -- Actions
-  self.actionSpec = gameEnv:getActionSpec()
+  self.actionSpec = env:getActionSpec()
   self.m = self.actionSpec[3][2] -- Number of discrete actions
 
   -- Initialise model helper
@@ -23,6 +23,7 @@ function Agent:_init(gameEnv, opt)
   -- Create policy and target networks
   self.policyNet = self.model:create(self.m)
   self.targetNet = self.policyNet:clone() -- Create deep copy for target network
+  self.targetNet:evaluate() -- Target network always in evaluation mode
   self.tau = opt.tau
   self.doubleQ = opt.doubleQ
   -- Network parameters θ and gradients dθ
@@ -42,7 +43,7 @@ function Agent:_init(gameEnv, opt)
   -- Experience replay memory
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
-  self.memNReplay = opt.memNReplay
+  self.memNSamples = opt.memNSamples
   self.memPriority = opt.memPriority
 
   -- Training mode
@@ -87,20 +88,24 @@ end
 -- Sets training mode
 function Agent:training()
   self.isTraining = true
+  self.policyNet:training()
   self.stateBuffer:clear() -- Clears state buffer
 end
 
 -- Sets evaluation mode
 function Agent:evaluate()
   self.isTraining = false
+  self.policyNet:evaluate()
   self.stateBuffer:clear() -- Clears state buffer
 end
   
 -- Observes the results of the previous transition and chooses the next action to perform
 function Agent:observe(reward, observation, terminal)
   -- Clip reward for stability
-  reward = math.min(reward, -self.rewardClip)
-  reward = math.max(reward, self.rewardClip)
+  if self.rewardClip > 0 then
+    reward = math.min(reward, -self.rewardClip)
+    reward = math.max(reward, self.rewardClip)
+  end
 
   -- Process observation of current state
   observation = self.model:preprocess(observation)
@@ -151,7 +156,7 @@ function Agent:observe(reward, observation, terminal)
 
     -- Sample uniformly or with prioritised sampling
     if self.opt.step % self.memSampleFreq == 0 and self.opt.step >= self.learnStart then -- Assumes learnStart is greater than batchSize
-      for n = 1, self.memNReplay do
+      for n = 1, self.memNSamples do
         -- Optimise (learn) from experience tuples
         self:optimise(self.memory:sample(self.memPriority))
       end
@@ -160,6 +165,7 @@ function Agent:observe(reward, observation, terminal)
     -- Update target network every τ steps
     if self.opt.step % self.tau == 0 and self.opt.step >= self.learnStart then
       self.targetNet = self.policyNet:clone()
+      self.targetNet:evaluate()
     end
   end
 
@@ -349,7 +355,8 @@ end
 -- Loads network parameters θ
 function Agent:loadWeights(path)
   self.theta = torch.load(path)
-  self.targetNew = self.policyNet:clone()
+  self.targetNet = self.policyNet:clone()
+  self.targetNet:evaluate()
 end
 
 return Agent

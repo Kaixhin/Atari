@@ -85,7 +85,9 @@ function Model:create(m)
     net:add(self:bestModule('conv', 64, 64, 3, 3, 1, 1))
     net:add(self:bestModule('relu', true))
   else
-    net:add(self:bestModule('conv', self.histLen*self.nChannels, 16, 5, 5, 2, 2, 2, 2))
+    net:add(self:bestModule('conv', self.histLen*self.nChannels, 32, 5, 5, 2, 2))
+    net:add(self:bestModule('relu', true))
+    net:add(self:bestModule('conv', 32, 64, 3, 3, 1, 1))
     net:add(self:bestModule('relu', true))
   end
   -- Calculate convolutional network output size
@@ -121,6 +123,7 @@ function Model:create(m)
     net:add(self:bestModule('relu', true))
     net:add(nn.Linear(hiddenSize, m))
   end
+  -- TODO: Check need for shared bias at last layer (as used in tuned DDQN)
 
   if self.gpu > 0 then
     require 'cunn'
