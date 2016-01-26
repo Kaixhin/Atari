@@ -82,7 +82,15 @@ function Agent:_init(env, opt)
   self.avgTdErr = {} -- Running average of TD-error δ
   self.valScores = {} -- Validation scores (passed from main script)
 
+  -- Tensor creation
   self.Tensor = opt.Tensor
+
+  -- Saliency display
+  self.saliency = opt.saliency
+  self.origWidth = opt.origWidth
+  self.origHeight = opt.origHeight
+  self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
+  self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -139,11 +147,21 @@ function Agent:observe(reward, observation, terminal)
   if not terminal then
     if math.random() < epsilon then 
       aIndex = torch.random(1, self.m)
+
+      -- Reset saliency if action not chosen by network
+      if self.saliency then
+        self.inputGrads:zero()
+      end
     else
       -- Choose best action
       local __, ind = torch.max(self.policyNet:forward(state), 1)
       aIndex = ind[1]
       -- TODO: See if random tie-breaking is needed (given outputs are floats)
+
+      -- Compute saliency
+      if self.saliency then
+        self:computeSaliency(state, aIndex)
+      end
     end
   end
 
@@ -356,6 +374,14 @@ function Agent:report()
   gnuplot.plotflush()
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
+end
+
+-- Computes a saliency map (assuming a forward pass of a single state)
+function Agent:computeSaliency(state, index)
+  local maxTarget = self.Tensor(self.m):fill(0)
+  maxTarget[index] = 10
+  self.inputGrads = self.policyNet:backward(state, maxTarget)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads):mean(1), self.origWidth, self.origHeight)
 end
 
 -- Saves the network parameters θ

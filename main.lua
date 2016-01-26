@@ -70,12 +70,14 @@ cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
+cmd:option('-saliency', 'false', 'Display saliency maps (requires QT)')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
+opt.saliency = opt.saliency == 'true' or false
 
 -- Calculate number of colour channels
 if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
@@ -139,6 +141,21 @@ end
 -- Set up singleton global object for transferring step
 local globals = Singleton({step = 1}) -- Initial step
 
+-- Computes saliency map for display
+local createSaliencyMap = function(state, agent)
+  local screen = state
+  
+  -- Convert Catch screen to RGB
+  if opt.game == 'catch' then
+    screen = torch.repeatTensor(state, 3, 1, 1)
+  end
+
+  -- Use red channel for saliency map
+  screen:select(1, 1):copy(agent.saliencyMap)
+
+  return screen
+end
+
 ----- Environment + Agent Setup -----
 
 -- Initialise Catch or Arcade Learning Environment
@@ -157,6 +174,9 @@ else
   env = Catch()
   stateSpec = env:getStateSpec()
   
+  -- Provide original channels, height and width for resizing from
+  opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
+
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
@@ -197,11 +217,12 @@ end
 
 -- Start gaming
 log.info('Starting game: ' .. opt.game)
-local reward, screen, terminal = 0, env:start(), false
+local reward, state, terminal = 0, env:start(), false
 local action
 
 -- Activate display if using QT
 local zoom = opt.ale and 1 or 4
+local screen = state -- Use separate screen for displaying saliency maps
 local window = qt and image.display({image=screen, zoom=zoom})
 
 
@@ -239,10 +260,10 @@ if opt.mode == 'train' then
     globals.step = step -- Pass step number to globals for use in training
     
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
-    action = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
+    action = agent:observe(reward, state, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, screen, terminal = env:step(action)
+      reward, state, terminal = env:step(action)
       -- Track score
       episodeScore = episodeScore + reward
     else
@@ -253,12 +274,13 @@ if opt.mode == 'train' then
 
       -- Start a new episode
       episode = episode + 1
-      reward, screen, terminal = 0, env:start(), false
+      reward, state, terminal = 0, env:start(), false
       episodeScore = reward -- Reset episode score
     end
 
     -- Update display
     if qt then
+      screen = opt.saliency and createSaliencyMap(state, agent) or state
       image.display({image=screen, zoom=zoom, win=window})
     end
 
@@ -281,7 +303,7 @@ if opt.mode == 'train' then
       agent:evaluate()
 
       -- Start new game
-      reward, screen, terminal = 0, env:start(), false
+      reward, state, terminal = 0, env:start(), false
 
       -- Reset validation variables
       valEpisode = 1
@@ -290,10 +312,10 @@ if opt.mode == 'train' then
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
-        action = agent:observe(reward, screen, terminal)
+        action = agent:observe(reward, state, terminal)
         if not terminal then
           -- Act on environment
-          reward, screen, terminal = env:step(action)
+          reward, state, terminal = env:step(action)
           -- Track score
           valEpisodeScore = valEpisodeScore + reward
         else
@@ -304,13 +326,14 @@ if opt.mode == 'train' then
 
           -- Start a new episode
           valEpisode = valEpisode + 1
-          reward, screen, terminal = 0, env:start(), false
+          reward, state, terminal = 0, env:start(), false
           valTotalScore = valTotalScore + valEpisodeScore -- Only add to total score at end of episode
           valEpisodeScore = reward -- Reset episode score
         end
 
         -- Update display
         if qt then
+          screen = opt.saliency and createSaliencyMap(state, agent) or state
           image.display({image=screen, zoom=zoom, win=window})
         end
       end
@@ -347,7 +370,7 @@ if opt.mode == 'train' then
       agent:training()
 
       -- Start new game (as previous one was interrupted)
-      reward, screen, terminal = 0, env:start(), false
+      reward, state, terminal = 0, env:start(), false
       episodeScore = reward
     end
   end
@@ -367,12 +390,13 @@ elseif opt.mode == 'eval' then
   -- Play one game (episode)
   while not terminal do
     -- Observe and choose next action (index)
-    action = agent:observe(reward, screen, terminal)
+    action = agent:observe(reward, state, terminal)
     -- Act on environment
-    reward, screen, terminal = env:step(action)
+    reward, state, terminal = env:step(action)
     episodeScore = episodeScore + reward
 
     if qt then
+      screen = opt.saliency and createSaliencyMap(state, agent) or state
       image.display({image=screen, zoom=zoom, win=window})
     end
   end
