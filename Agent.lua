@@ -5,6 +5,7 @@ local gnuplot = require 'gnuplot'
 local Model = require 'Model'
 local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'
+local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 require 'modules/rmspropm' -- Add RMSProp with momentum
 
@@ -79,10 +80,12 @@ function Agent:_init(env, opt)
   self.losses = {}
   self.avgV = {} -- Running average of V
   self.avgTdErr = {} -- Running average of TD-error δ
+  self.valScores = {} -- Validation scores (passed from main script)
 
   self.Tensor = opt.Tensor
-  -- Keep reference to opt for opt.step
-  self.opt = opt -- TODO: Keep internal step counter
+
+  -- Get singleton instance for step
+  self.globals = Singleton.getInstance()
 end
 
 -- Sets training mode
@@ -123,9 +126,9 @@ function Agent:observe(reward, observation, terminal)
   local epsilon = 0.001
   if self.isTraining then
     -- Keep ε constant before learning starts
-    if self.opt.step >= self.learnStart then
+    if self.globals.step >= self.learnStart then
       -- Use annealing ε
-      epsilon = math.max(self.epsilonStart + (self.opt.step - self.learnStart - 1)*self.epsilonGrad, self.epsilonEnd)
+      epsilon = math.max(self.epsilonStart + (self.globals.step - self.learnStart - 1)*self.epsilonGrad, self.epsilonEnd)
     else
       epsilon = self.epsilonStart
     end
@@ -150,12 +153,12 @@ function Agent:observe(reward, observation, terminal)
     self.memory:store(reward, observation, terminal, aIndex)
 
     -- Collect validation transitions at the start
-    if self.opt.step <= self.valSize then
+    if self.globals.step <= self.valSize then
       self.valMemory:store(reward, observation, terminal, aIndex)
     end
 
     -- Sample uniformly or with prioritised sampling
-    if self.opt.step % self.memSampleFreq == 0 and self.opt.step >= self.learnStart then -- Assumes learnStart is greater than batchSize
+    if self.globals.step % self.memSampleFreq == 0 and self.globals.step >= self.learnStart then -- Assumes learnStart is greater than batchSize
       for n = 1, self.memNSamples do
         -- Optimise (learn) from experience tuples
         self:optimise(self.memory:sample(self.memPriority))
@@ -163,7 +166,7 @@ function Agent:observe(reward, observation, terminal)
     end
 
     -- Update target network every τ steps
-    if self.opt.step % self.tau == 0 and self.opt.step >= self.learnStart then
+    if self.globals.step % self.tau == 0 and self.globals.step >= self.learnStart then
       self.targetNet = self.policyNet:clone()
       self.targetNet:evaluate()
     end
@@ -272,7 +275,7 @@ function Agent:learn(x, indices, ISWeights)
   -- Divide gradient by batch size
   self.dTheta:div(self.batchSize)
   -- Clip the norm of the gradients
-  self.policyNet:gradParamClip(10) -- TODO: Check if should be 10/batchSize since grads are normalised in this code
+  self.policyNet:gradParamClip(10/self.batchSize) -- TODO: Check if indeed should be 10/batchSize since grads are normalised in this code
 
   return loss, self.dTheta
 end
@@ -287,7 +290,7 @@ function Agent:optimise(indices, ISWeights)
   -- Optimise
   local __, loss = optim[self.optimiser](feval, self.theta, self.optimParams)
   -- Store loss
-  if self.opt.step % self.progFreq == 0 then
+  if self.globals.step % self.progFreq == 0 then
     self.losses[#self.losses + 1] = loss[1]
   end
 
@@ -326,22 +329,30 @@ function Agent:report()
 
   -- Plot losses
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
-  gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.opt.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
+  gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
   gnuplot.xlabel('Step (x' .. self.progFreq .. ')')
   gnuplot.ylabel('Loss')
   gnuplot.plotflush()
   -- Plot V
+  local epochIndices = torch.linspace(1, #self.avgV, #self.avgV)
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'Vs.png'))
-  gnuplot.plot('V', torch.linspace(1, #self.avgV, #self.avgV), torch.Tensor(self.avgV), '-')
+  gnuplot.plot('V', epochIndices, torch.Tensor(self.avgV), '-')
   gnuplot.xlabel('Epoch')
   gnuplot.ylabel('V')
   gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
   -- Plot TD-error δ
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'TDErrors.png'))
-  gnuplot.plot('TD-Error', torch.linspace(1, #self.avgTdErr, #self.avgTdErr), torch.Tensor(self.avgTdErr), '-')
+  gnuplot.plot('TD-Error', epochIndices, torch.Tensor(self.avgTdErr), '-')
   gnuplot.xlabel('Epoch')
   gnuplot.ylabel('TD-Error')
+  gnuplot.plotflush()
+  -- Plot average score
+  gnuplot.pngfigure(paths.concat('experiments', self._id, 'scores.png'))
+  gnuplot.plot('Score', epochIndices, torch.Tensor(self.valScores), '-')
+  gnuplot.xlabel('Epoch')
+  gnuplot.ylabel('Average Score')
+  gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]

@@ -1,6 +1,7 @@
 local _ = require 'moses'
 local classic = require 'classic'
 local BinaryHeap = require 'structures/BinaryHeap'
+local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 
 local Experience = classic.class('Experience')
@@ -24,8 +25,6 @@ function Experience:_init(capacity, opt)
   self.memPriority = opt.memPriority
   self.alpha = opt.alpha
   self.betaZero = opt.betaZero
-  -- Keep reference to opt for opt.step
-  self.opt = opt -- TODO: Keep internal step counter
 
   -- Create transition tuples buffer
   self.transTuples = {
@@ -64,6 +63,9 @@ function Experience:_init(capacity, opt)
 
   -- Calculate β growth factor
   self.betaGrad = (1 - opt.betaZero)/opt.steps
+
+  -- Get singleton instance for step
+  self.globals = Singleton.getInstance()
 end
 
 -- Calculates circular indices
@@ -159,7 +161,7 @@ function Experience:sample(priorityType)
     indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
     
     -- Importance-sampling weights w = (N * p(rank))^-β
-    local beta = math.min(self.betaZero + (self.opt.step - 1)*self.betaGrad, 1)
+    local beta = math.min(self.betaZero + (self.globals.step - 1)*self.betaGrad, 1)
     w = torch.Tensor(rankIndices):pow(-self.alpha):mul(N):pow(-beta) -- p(x) = Cx^-α but C is not analytical for α < 1 so this is unnormalised
     -- Find max importance-sampling weight for normalisation
     local wMax = torch.max(w) -- p(x) was unnormalised so again just use max of sample to normalise
@@ -173,7 +175,7 @@ function Experience:sample(priorityType)
     P:div(Z) -- Normalise
 
     -- Calculate importance-sampling weights w
-    local beta = math.min(self.betaZero + (self.opt.step - 1)*self.betaGrad, 1)
+    local beta = math.min(self.betaZero + (self.globals.step - 1)*self.betaGrad, 1)
     w = torch.mul(P, N):pow(-beta) -- Use importance-sampling exponent β
     w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
 

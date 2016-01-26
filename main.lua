@@ -4,6 +4,7 @@ local signal = require 'posix.signal'
 local _ = require 'moses'
 local image = require 'image'
 local gnuplot = require 'gnuplot'
+local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
 local evaluator = require 'evaluator'
 require 'logroll'
@@ -70,10 +71,25 @@ cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults 
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
 local opt = cmd:parse(arg)
+
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
+
+-- Calculate number of colour channels
+if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
+  log.error('Unsupported colour space for conversion')
+  error('Unsupported colour space for conversion')
+end
+opt.nChannels = opt.colorSpace == 'y' and 1 or 3
+
+-- Check prioritised experience replay options
+if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
+  log.error('Unrecognised type of prioritised experience replay')
+  error('Unrecognised type of prioritised experience replay')
+end
+
 
 -- Set ID as game name if not set
 if opt._id == '' then
@@ -90,6 +106,7 @@ paths.mkdir(paths.concat('experiments', opt._id))
 local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
 local plog = logroll.print_logger()
 log = logroll.combine(flog, plog)
+
 
 -- Torch setup
 log.info('Setting up Torch7')
@@ -119,14 +136,10 @@ if opt.gpu > 0 then
   end
 end
 
------ Environment + Agent Setup -----
+-- Set up singleton global object for transferring step
+local globals = Singleton({step = 1}) -- Initial step
 
--- Calculate number of colour channels
-if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
-  log.error('Unsupported colour space for conversion')
-  error('Unsupported colour space for conversion')
-end
-opt.nChannels = opt.colorSpace == 'y' and 1 or 3
+----- Environment + Agent Setup -----
 
 -- Initialise Catch or Arcade Learning Environment
 opt.ale = opt.game ~= 'catch'
@@ -159,8 +172,6 @@ else
   opt.valSteps = 2400
 end
 
--- Initial step to resume training from
-local initStep = 1
 
 -- Create DQN agent
 log.info('Creating DQN')
@@ -175,8 +186,10 @@ elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
   if io.read() == 'y' then
     log.info('Loading saved agent')
     agent = torch.load(paths.concat('experiments', opt._id, 'agent.t7'))
-    -- Load initial step from agent
-    initStep = agent.opt.step
+
+    -- Reset globals (step) from agent
+    Singleton.setInstance(agent.globals)
+    globals = Singleton.getInstance()
   end
 end
 
@@ -191,6 +204,7 @@ local action
 local zoom = opt.ale and 1 or 4
 local window = qt and image.display({image=screen, zoom=zoom})
 
+
 if opt.mode == 'train' then
 
   log.info('Training mode')
@@ -201,20 +215,11 @@ if opt.mode == 'train' then
     log.info('Save agent (y/n)?')
     if io.read() == 'y' then
       log.info('Saving agent')
-      torch.save(paths.concat('experiments', opt._id, 'agent.t7'), agent) -- Save step to resume training
+      torch.save(paths.concat('experiments', opt._id, 'agent.t7'), agent) -- Save agent to resume training
     end
     log.warn('Exiting')
     os.exit(128 + signum)
   end)
-
-  -- Check prioritised experience replay options
-  if opt.memPriority == 'proportional' then
-    log.info('Proportional prioritised experience replay is not implemented, switching to rank-based')
-    opt.memPriority = 'rank'
-  elseif not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
-    log.error('Unrecognised type of prioritised experience replay')
-    error('Unrecognised type of prioritised experience replay')
-  end
 
   -- Set environment and agent to training mode
   if opt.ale then env:training() end
@@ -226,12 +231,12 @@ if opt.mode == 'train' then
 
   -- Validation variables
   local valEpisode, valEpisodeScore, valTotalScore
-  local valScores = {}
-  local bestValScore = -math.huge
+  local bestValScore = _.max(agent.valScores) or -math.huge -- Retrieve best validation score from agent if available
 
   -- Training loop
+  local initStep = globals.step -- Extract step
   for step = initStep, opt.steps do
-    opt.step = step -- Pass step number to agent for use in training
+    globals.step = step -- Pass step number to globals for use in training
     
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
     action = agent:observe(reward, screen, terminal) -- As results received, learn in training mode
@@ -319,14 +324,8 @@ if opt.mode == 'train' then
       log.info('Total Score: ' .. valTotalScore)
       valTotalScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
       log.info('Average Score: ' .. valTotalScore)
-      valScores[#valScores + 1] = valTotalScore
-      -- Plot average score
-      gnuplot.pngfigure(paths.concat('experiments', opt._id, 'scores.png'))
-      gnuplot.plot('Score', torch.linspace(1, #valScores, #valScores), torch.Tensor(valScores), '-')
-      gnuplot.xlabel('Epoch')
-      gnuplot.ylabel('Average Score')
-      gnuplot.movelegend('left', 'top')
-      gnuplot.plotflush()
+      -- Pass to agent (for storage and plotting)
+      agent.valScores[#agent.valScores + 1] = valTotalScore
 
       -- Use transitions sampled for validation to test performance
       local avgV, avgTdErr = agent:report()
