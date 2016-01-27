@@ -35,6 +35,7 @@ function Experience:_init(capacity, opt)
     terminals = torch.ByteTensor(opt.batchSize),
     priorities = opt.Tensor(opt.batchSize)
   }
+  self.indices = torch.LongTensor(opt.batchSize)
 
   -- Allocate memory for experience
   local stateSize = torch.LongStorage({capacity, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
@@ -49,7 +50,6 @@ function Experience:_init(capacity, opt)
   self.index = 1
   self.isFull = false
   self.size = 0
-  -- TODO: Prevent retrieving history ahead of pointer (invalid sample)
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
   self.smallConst = 1e-6 -- Account for half precision
@@ -62,7 +62,6 @@ function Experience:_init(capacity, opt)
   self.states[1]:zero() -- Blank out state
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
-  -- TODO: Prevent sampling from 1 initially (invalid sample)
 
   -- Calculate β growth factor
   self.betaGrad = (1 - opt.betaZero)/opt.steps
@@ -109,50 +108,74 @@ function Experience:retrieve(indices)
   self.transTuples.states:zero()
 
   -- Iterate over indices
-  for i = 1, batchSize do
-    local memIndex = indices[i]
+  for n = 1, batchSize do
+    local memIndex = indices[n]
     -- Retrieve action
-    self.transTuples.actions[i] = self.actions[memIndex]
+    self.transTuples.actions[n] = self.actions[memIndex]
     -- Retrieve rewards
-    self.transTuples.rewards[i] = self.rewards[memIndex]
+    self.transTuples.rewards[n] = self.rewards[memIndex]
     -- Retrieve terminal status
-    self.transTuples.terminals[i] = self.terminals[memIndex]
+    self.transTuples.terminals[n] = self.terminals[memIndex]
 
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[i][histIndex] = self.states[memIndex][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[n][histIndex] = self.states[memIndex][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
     until histIndex == 0 or self.terminals[memIndex] == 1
 
     -- If not terminal, fill in transition history
-    if self.transTuples.terminals[i] == 0 then
+    if self.transTuples.terminals[n] == 0 then
       -- Copy most recent state
       for h = 2, self.histLen do
-        self.transTuples.transitions[i][h - 1] = self.transTuples.states[i][h]
+        self.transTuples.transitions[n][h - 1] = self.transTuples.states[n][h]
       end
       -- Get transition frame
-      local memTIndex = self:circIndex(indices[i] + 1)
-      self.transTuples.transitions[i][self.histLen] = self.states[memTIndex][self.castType](self.states[memTIndex]):div(self.imgDiscLevels) -- byte -> float
+      local memTIndex = self:circIndex(indices[n] + 1)
+      self.transTuples.transitions[n][self.histLen] = self.states[memTIndex][self.castType](self.states[memTIndex]):div(self.imgDiscLevels) -- byte -> float
     end
   end
 
   return self.transTuples.states, self.transTuples.actions, self.transTuples.rewards, self.transTuples.transitions, self.transTuples.terminals
 end
 
+-- Determines if an index points to a valid transition state
+function Experience:validateTransition(index)
+  -- Calculate beginning of state and end of transition for checking overlap with head of buffer
+  local minIndex, maxIndex = index - self.histLen, self:circIndex(index + 1)
+  -- State must be valid "transition" itself (can't come from terminal state), plus cannot overlap with head of buffer
+  return self.terminals[self:circIndex(index - 1)] == 0 and (self.index <= minIndex or self.index >= maxIndex)
+end
+
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
 function Experience:sample(priorityType)
   local N = self.size
-  local indices, w
+  local w
 
   -- Priority 'none' = uniform sampling
   if priorityType == 'none' then
-    indices = torch.randperm(N)[{{1, self.batchSize}}]:long()
+
+    -- Keep uniformly picking random indices until indices filled
+    for n = 1, self.batchSize do
+      local index
+      local isValid = false
+
+      -- Generate random index until valid transition found
+      while not isValid do
+        index = torch.random(1, N)
+        isValid = self:validateTransition(index)
+      end
+
+      -- Store index
+      self.indices[n] = index
+    end
     w = torch.ones(self.batchSize) -- Set weights to 1 as no correction needed
+
   elseif priorityType == 'rank' then
+
     -- Create table to store indices (by rank)
     local rankIndices = {} -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array here
     -- Sample (rank) indices based on power-law distribution TODO: Cache partition indices for several values of N as α is static
@@ -162,7 +185,7 @@ function Experience:sample(priorityType)
       rankIndices[#rankIndices + 1] = torch.random(samplingRange[i], samplingRange[i+1])
     end
     -- Retrieve actual transition indices
-    indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
+    self.indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
     
     -- Importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - 1)*self.betaGrad, 1)
@@ -171,7 +194,9 @@ function Experience:sample(priorityType)
     local wMax = torch.max(w) -- p(x) was unnormalised so again just use max of sample to normalise
     -- Normalise weights so updates only scale downwards (for stability)
     w:div(wMax) -- Max weight will be 1
+
   elseif priorityType == 'proportional' then
+
     --[[
     -- Calculate sampling probability distribution P
     local P = torch.pow(self.priorities[{{1, N}}], self.alpha) -- Use prioritised experience replay exponent α
@@ -185,7 +210,7 @@ function Experience:sample(priorityType)
 
     -- Create a cumulative distribution for inverse transform sampling
     pdfToCdf(P) -- Convert distribution
-    indices = torch.sort(torch.Tensor(nSamples):uniform()) -- Generate uniform numbers for sampling
+    self.indices = torch.sort(torch.Tensor(nSamples):uniform()) -- Generate uniform numbers for sampling
     -- Perform linear search to sample
     local minIndex = 1
     for i = 1, nSamples do
@@ -197,13 +222,14 @@ function Experience:sample(priorityType)
     indices = indices:long() -- Convert to LongTensor for indexing
     w = w:index(1, indices) -- Index weights
     --]]
+
   end
 
   if self.gpu > 0 then
     w = w:cuda()
   end
 
-  return indices, w
+  return self.indices, w
 end
 
 -- Update experience priorities using TD-errors δ

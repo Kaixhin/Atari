@@ -91,6 +91,7 @@ if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
   log.error('Unrecognised type of prioritised experience replay')
   error('Unrecognised type of prioritised experience replay')
 end
+opt.memPriority = 'none' -- TODO: Remove once other types are supported
 
 
 -- Set ID as game name if not set

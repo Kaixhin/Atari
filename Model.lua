@@ -110,4 +110,14 @@ function Model:create(m)
   return net
 end
 
+-- Switches the backward computation of ReLUs for guided backpropagation
+function Model:guideBackprop(net)
+
+end
+
+-- Switches the backward computation of ReLUs for normal backpropagation
+function Model:unguideBackprop(net)
+
+end
+
 return Model
