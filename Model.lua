@@ -25,32 +25,6 @@ function Model:_init(opt)
   self.hasCudnn = pcall(require, 'cudnn')
 end
 
--- Returns optimal module based on type
-function Model:bestModule(mod, ...)
-  if mod == 'relu' then
-    if self.gpu > 0 and self.hasCudnn then
-      return cudnn.ReLU(...)
-    else
-      return nn.ReLU(...)
-    end
-  elseif mod == 'conv' then
-    if self.gpu > 0 and self.hasCudnn then
-      return cudnn.SpatialConvolution(...)
-    else
-      return nn.SpatialConvolution(...)
-    end
-  end
-end
-
--- Calculates the output size of a network (returns LongStorage)
-function Model:calcOutputSize(network, inputSizes)
-  if self.gpu > 0 and cudnn then
-    return network:cuda():forward(torch.CudaTensor(torch.LongStorage(inputSizes))):size()
-  else
-    return network:forward(torch.Tensor(torch.LongStorage(inputSizes))):size()
-  end
-end
-
 -- Processes a single frame for DQN input
 function Model:preprocess(observation)
   if self.ale then
@@ -78,33 +52,33 @@ function Model:create(m)
   local net = nn.Sequential()
   net:add(nn.View(self.histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
-    net:add(self:bestModule('conv', self.histLen*self.nChannels, 32, 8, 8, 4, 4))
-    net:add(self:bestModule('relu', true))
-    net:add(self:bestModule('conv', 32, 64, 4, 4, 2, 2))
-    net:add(self:bestModule('relu', true))
-    net:add(self:bestModule('conv', 64, 64, 3, 3, 1, 1))
-    net:add(self:bestModule('relu', true))
+    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 8, 8, 4, 4))
+    net:add(nn.ReLU(true))
+    net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
+    net:add(nn.ReLU(true))
+    net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
+    net:add(nn.ReLU(true))
   else
-    net:add(self:bestModule('conv', self.histLen*self.nChannels, 32, 5, 5, 2, 2))
-    net:add(self:bestModule('relu', true))
-    net:add(self:bestModule('conv', 32, 64, 3, 3, 1, 1))
-    net:add(self:bestModule('relu', true))
+    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 5, 5, 2, 2))
+    net:add(nn.ReLU(true))
+    net:add(nn.SpatialConvolution(32, 64, 3, 3, 1, 1))
+    net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
-  local convOutputSize = torch.prod(torch.Tensor(self:calcOutputSize(net, {self.histLen*self.nChannels, self.height, self.width}):totable()))
+  local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
   net:add(nn.View(convOutputSize))
 
   if self.duel then
     -- Value approximator V^(s)
     local valStream = nn.Sequential()
     valStream:add(nn.Linear(convOutputSize, hiddenSize))
-    valStream:add(self:bestModule('relu', true))
+    valStream:add(nn.ReLU(true))
     valStream:add(nn.Linear(hiddenSize, 1)) -- Predicts value for state
 
     -- Advantage approximator A^(s, a)
     local advStream = nn.Sequential()
     advStream:add(nn.Linear(convOutputSize, hiddenSize))
-    advStream:add(self:bestModule('relu', true))
+    advStream:add(nn.ReLU(true))
     advStream:add(nn.Linear(hiddenSize, m)) -- Predicts action-conditional advantage
 
     -- Streams container
@@ -120,13 +94,16 @@ function Model:create(m)
     net:add(DuelAggregator(m))
   else
     net:add(nn.Linear(convOutputSize, hiddenSize))
-    net:add(self:bestModule('relu', true))
+    net:add(nn.ReLU(true))
     net:add(nn.Linear(hiddenSize, m))
   end
   -- TODO: Check need for shared bias at last layer (as used in tuned DDQN)
 
   if self.gpu > 0 then
     require 'cunn'
+    if self.hasCudnn then
+      cudnn.convert(net, cudnn)
+    end
     net:cuda()
   end
 

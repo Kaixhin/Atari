@@ -151,7 +151,7 @@ function Agent:observe(reward, observation, terminal)
 
       -- Reset saliency if action not chosen by network
       if self.saliency then
-        self.inputGrads:zero()
+        self.saliencyMap:zero()
       end
     else
       -- Choose best action
