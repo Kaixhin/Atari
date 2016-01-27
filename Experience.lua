@@ -49,6 +49,7 @@ function Experience:_init(capacity, opt)
   self.index = 1
   self.isFull = false
   self.size = 0
+  -- TODO: Prevent retrieving history ahead of pointer (invalid sample)
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
   self.smallConst = 1e-6 -- Account for half precision
@@ -61,6 +62,7 @@ function Experience:_init(capacity, opt)
   self.states[1]:zero() -- Blank out state
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
+  -- TODO: Prevent sampling from 1 initially (invalid sample)
 
   -- Calculate β growth factor
   self.betaGrad = (1 - opt.betaZero)/opt.steps

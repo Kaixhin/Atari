@@ -90,6 +90,7 @@ function Agent:_init(env, opt)
   self.origWidth = opt.origWidth
   self.origHeight = opt.origHeight
   self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
+  self.histLen = opt.histLen
   self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
 
   -- Get singleton instance for step
@@ -345,6 +346,7 @@ function Agent:report()
   self.avgV[#self.avgV + 1] = totalV / self.valSize
   self.avgTdErr[#self.avgTdErr + 1] = totalTdErr / self.valSize
 
+  -- TODO Reduce memory consumption for gnuplot
   -- Plot losses
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
   gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
@@ -379,9 +381,9 @@ end
 -- Computes a saliency map (assuming a forward pass of a single state)
 function Agent:computeSaliency(state, index)
   local maxTarget = self.Tensor(self.m):fill(0)
-  maxTarget[index] = 10
+  maxTarget[index] = 2
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads):mean(1), self.origWidth, self.origHeight)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen)), self.origWidth, self.origHeight)
 end
 
 -- Saves the network parameters θ
