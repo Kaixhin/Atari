@@ -59,6 +59,7 @@ function Experience:_init(capacity, opt)
 
   -- Initialise first time step
   self.states[1]:zero() -- Blank out state
+  self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
 
   -- Calculate β growth factor
@@ -132,7 +133,8 @@ function Experience:retrieve(indices)
         self.transTuples.transitions[i][h - 1] = self.transTuples.states[i][h]
       end
       -- Get transition frame
-      self.transTuples.transitions[i][self.histLen] = self.states[self:circIndex(indices[i] + 1)][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
+      local memTIndex = self:circIndex(indices[i] + 1)
+      self.transTuples.transitions[i][self.histLen] = self.states[memTIndex][self.castType](self.states[memTIndex]):div(self.imgDiscLevels) -- byte -> float
     end
   end
 
