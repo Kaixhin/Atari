@@ -92,6 +92,12 @@ function Agent:_init(env, opt)
   self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
   self.histLen = opt.histLen
   self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
+  -- Guided backpropagation for saliency display
+  self.guided = opt.guided
+  if opt.guided then
+    -- Switch to GuidedReLUs
+    self.model:guideNetwork()
+  end
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -380,10 +386,23 @@ end
 
 -- Computes a saliency map (assuming a forward pass of a single state)
 function Agent:computeSaliency(state, index)
+  if self.guided then
+    -- Switch to guided backpropagation
+    self.model:guideBackprop()
+  end
+
+  -- Create artificial high target
   local maxTarget = self.Tensor(self.m):fill(0)
   maxTarget[index] = 2
+
+  -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen)), self.origWidth, self.origHeight)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen):float()), self.origWidth, self.origHeight)
+
+  if self.guided then
+    -- Switch to normal backpropagation
+    self.model:normaliseBackprop()
+  end
 end
 
 -- Saves the network parameters θ

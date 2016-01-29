@@ -71,6 +71,7 @@ cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults 
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
 cmd:option('-saliency', 'false', 'Display saliency maps (requires QT)')
+cmd:option('-guided', 'false', 'Use guided backpropagation when creating saliency maps')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
@@ -78,6 +79,7 @@ opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.saliency = opt.saliency == 'true' or false
+opt.guided = opt.guided == 'true' or false
 
 -- Calculate number of colour channels
 if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
@@ -183,9 +185,11 @@ else
 
   -- TODO: Adjust parameters to better suit Catch
   opt.memSize = 1e4
-  opt.eta = 0.005
+  opt.optimiser = 'adam'
+  opt.eta = 0.01
+  opt.epsilonEnd = 0.05
   opt.epsilonSteps = 1e4
-  opt.tau = 4
+  opt.tau = 40
   opt.steps = 1e5
   opt.learnStart = 500
   opt.progFreq = 1000
@@ -211,6 +215,14 @@ elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
     -- Reset globals (step) from agent
     Singleton.setInstance(agent.globals)
     globals = Singleton.getInstance()
+
+    -- Switch to guided backpropagation if specified
+    if opt.guided then
+      agent.guided = true
+      agent.model.guided = true
+      agent.model:guideNetwork()
+    end
+    -- TODO: Reverse if now false
   end
 end
 

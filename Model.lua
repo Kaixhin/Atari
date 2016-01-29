@@ -5,6 +5,7 @@ local image = require 'image'
 local DuelAggregator = require 'modules/DuelAggregator'
 require 'classic.torch' -- Enables serialisation
 require 'dpnn' -- Adds gradParamClip method
+require 'modules/GuidedReLU'
 require 'modules/GradientRescale'
 
 local Model = classic.class('Model')
@@ -20,6 +21,7 @@ function Model:_init(opt)
   self.histLen = opt.histLen
   self.duel = opt.duel
   self.ale = opt.ale
+  self.guided = opt.guided
 
   -- Get cuDNN if available
   self.hasCudnn = pcall(require, 'cudnn')
@@ -99,6 +101,7 @@ function Model:create(m)
   end
   -- TODO: Check need for shared bias at last layer (as used in tuned DDQN)
 
+  -- GPU conversion
   if self.gpu > 0 then
     require 'cunn'
     if self.hasCudnn then
@@ -107,17 +110,51 @@ function Model:create(m)
     net:cuda()
   end
 
+  -- Save reference to network
+  self.net = net
+
   return net
 end
 
--- Switches the backward computation of ReLUs for guided backpropagation
-function Model:guideBackprop(net)
+-- Switches ReLUs with GuidedReLUs
+function Model:guideNetwork()
+  local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
+  -- List of ReLUs for guided backpropagation
+  local relus, relucontainers = self.net:findModules(backend .. '.ReLU')
 
+  -- Replace ReLUs
+  for i = 1, #relus do
+    -- Create new GuidedReLU
+    local layer = nn.GuidedReLU()
+
+    -- Copy everything over
+    for key, val in pairs(relus[i]) do
+      layer[key] = val
+    end
+
+    -- Replace ReLU with GuidedReLU
+    for j = 1, #(relucontainers[i].modules) do
+      if relucontainers[i].modules[j] == relus[i] then
+        relucontainers[i].modules[j] = layer
+      end
+    end
+  end
+
+  self.relus = self.net:findModules('nn.GuidedReLU')
+end
+
+-- Switches the backward computation of ReLUs for guided backpropagation
+function Model:guideBackprop()
+  for i, v in ipairs(self.relus) do
+    v:guideBackprop()
+  end
 end
 
 -- Switches the backward computation of ReLUs for normal backpropagation
-function Model:unguideBackprop(net)
-
+function Model:normaliseBackprop()
+  for i, v in ipairs(self.relus) do
+    v:normaliseBackprop()
+  end
 end
 
 return Model
