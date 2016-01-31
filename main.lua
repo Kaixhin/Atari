@@ -70,31 +70,13 @@ cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
-cmd:option('-saliency', 'false', 'Display saliency maps (requires QT)')
-cmd:option('-guided', 'false', 'Use guided backpropagation when creating saliency maps')
+cmd:option('-saliency', 'none', 'Display saliency maps (requires QT): none|normal|guided|deconvnet')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
-opt.saliency = opt.saliency == 'true' or false
-opt.guided = opt.guided == 'true' or false
-
--- Calculate number of colour channels
-if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
-  log.error('Unsupported colour space for conversion')
-  error('Unsupported colour space for conversion')
-end
-opt.nChannels = opt.colorSpace == 'y' and 1 or 3
-
--- Check prioritised experience replay options
-if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
-  log.error('Unrecognised type of prioritised experience replay')
-  error('Unrecognised type of prioritised experience replay')
-end
-opt.memPriority = 'none' -- TODO: Remove once other types are supported
-
 
 -- Set ID as game name if not set
 if opt._id == '' then
@@ -111,6 +93,27 @@ paths.mkdir(paths.concat('experiments', opt._id))
 local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
 local plog = logroll.print_logger()
 log = logroll.combine(flog, plog)
+
+-- Calculate number of colour channels
+if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
+  log.error('Unsupported colour space for conversion')
+  error('Unsupported colour space for conversion')
+end
+opt.nChannels = opt.colorSpace == 'y' and 1 or 3
+
+-- Check prioritised experience replay options
+if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
+  log.error('Unrecognised type of prioritised experience replay')
+  error('Unrecognised type of prioritised experience replay')
+end
+opt.memPriority = 'none' -- TODO: Remove once other types are supported
+
+-- Check saliency map options
+if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
+  log.error('Unrecognised method for visualising saliency maps')
+  error('Unrecognised method for visualising saliency maps')
+end
+
 
 
 -- Torch setup
@@ -216,13 +219,8 @@ elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
     Singleton.setInstance(agent.globals)
     globals = Singleton.getInstance()
 
-    -- Switch to guided backpropagation if specified
-    if opt.guided then
-      agent.guided = true
-      agent.model.guided = true
-      agent.model:guideNetwork()
-    end
-    -- TODO: Reverse if now false
+    -- Switch saliency style
+    agent:setSaliency(opt.saliency)
   end
 end
 
@@ -293,7 +291,7 @@ if opt.mode == 'train' then
 
     -- Update display
     if qt then
-      screen = opt.saliency and createSaliencyMap(state, agent) or state
+      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
       image.display({image=screen, zoom=zoom, win=window})
     end
 
@@ -346,7 +344,7 @@ if opt.mode == 'train' then
 
         -- Update display
         if qt then
-          screen = opt.saliency and createSaliencyMap(state, agent) or state
+          screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
           image.display({image=screen, zoom=zoom, win=window})
         end
       end
@@ -409,7 +407,7 @@ elseif opt.mode == 'eval' then
     episodeScore = episodeScore + reward
 
     if qt then
-      screen = opt.saliency and createSaliencyMap(state, agent) or state
+      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
       image.display({image=screen, zoom=zoom, win=window})
     end
   end

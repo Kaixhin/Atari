@@ -12,15 +12,16 @@ end
 function GuidedReLU:updateGradInput(input, gradOutput)
   parent.updateGradInput(self, input, gradOutput)
   if self.guide then
-    self.gradInput:cmul(torch.gt(gradOutput, 0):float())
+    -- Only backpropagate positive error signals
+    self.gradInput:cmul(torch.gt(gradOutput, 0):typeAs(gradOutput))
   end
   return self.gradInput
 end
 
-function GuidedReLU:guideBackprop()
+function GuidedReLU:salientBackprop()
   self.guide = true
 end
 
-function GuidedReLU:normaliseBackprop()
+function GuidedReLU:normalBackprop()
   self.guide = false
 end

@@ -4,7 +4,7 @@
 
 Prioritised experience replay [[1]](#references) persistent advantage learning [[2]](#references) dueling [[3]](#references) double [[4]](#references) deep Q-network [[5]](#references) for the Arcade Learning Environment [[6]](#references). Or PERPAL(triple-D)QN for short...
 
-Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[7]](#references), optionally using guided backpropagation [[8]](#references).
+Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[7]](#references), optionally using guided [[8]](#references) or "deconvnet" [[9]](#references) backpropagation.
 
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 
@@ -45,3 +45,4 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 [6] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  
 [7] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
 [8] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
+[9] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  

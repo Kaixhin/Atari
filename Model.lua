@@ -6,6 +6,7 @@ local DuelAggregator = require 'modules/DuelAggregator'
 require 'classic.torch' -- Enables serialisation
 require 'dpnn' -- Adds gradParamClip method
 require 'modules/GuidedReLU'
+require 'modules/DeconvnetReLU'
 require 'modules/GradientRescale'
 
 local Model = classic.class('Model')
@@ -21,7 +22,6 @@ function Model:_init(opt)
   self.histLen = opt.histLen
   self.duel = opt.duel
   self.ale = opt.ale
-  self.guided = opt.guided
 
   -- Get cuDNN if available
   self.hasCudnn = pcall(require, 'cudnn')
@@ -116,23 +116,45 @@ function Model:create(m)
   return net
 end
 
--- Switches ReLUs with GuidedReLUs
-function Model:guideNetwork()
-  local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
-  -- List of ReLUs for guided backpropagation
-  local relus, relucontainers = self.net:findModules(backend .. '.ReLU')
+-- Set ReLUs up for specified saliency visualisation type
+function Model:setSaliency(saliency)
+  -- Set saliency
+  self.saliency = saliency
+
+  -- nn vs. cuDNN backend
+  --local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
+  -- Find ReLUs on existing model
+  local relus, relucontainers = self.net:findModules('nn.ReLU')
+  if #relus == 0 then
+    relus, relucontainers = self.net:findModules('cudnn.ReLU')
+  end
+  if #relus == 0 then
+    relus, relucontainers = self.net:findModules('nn.GuidedReLU')
+  end
+  if #relus == 0 then
+    relus, relucontainers = self.net:findModules('nn.DeconvnetReLU')
+  end
+
+  -- Work out which ReLU to use now
+  local layerConstructor = (self.gpu > 0 and self.hasCudnn) and cudnn.ReLU or nn.ReLU
+  self.relus = {} --- Clear special ReLU list to iterate over for salient backpropagation
+  if saliency == 'guided' then
+    layerConstructor = nn.GuidedReLU
+  elseif saliency == 'deconvnet' then
+    layerConstructor = nn.DeconvnetReLU
+  end
 
   -- Replace ReLUs
   for i = 1, #relus do
-    -- Create new GuidedReLU
-    local layer = nn.GuidedReLU()
+    -- Create new special ReLU
+    local layer = layerConstructor()
 
     -- Copy everything over
     for key, val in pairs(relus[i]) do
       layer[key] = val
     end
 
-    -- Replace ReLU with GuidedReLU
+    -- Find ReLU in containing module and replace
     for j = 1, #(relucontainers[i].modules) do
       if relucontainers[i].modules[j] == relus[i] then
         relucontainers[i].modules[j] = layer
@@ -140,20 +162,21 @@ function Model:guideNetwork()
     end
   end
 
-  self.relus = self.net:findModules('nn.GuidedReLU')
+  -- Create special ReLU list to iterate over for salient backpropagation
+  self.relus = self.net:findModules(saliency == 'guided' and 'nn.GuidedReLU' or 'nn.DeconvnetReLU')
 end
 
--- Switches the backward computation of ReLUs for guided backpropagation
-function Model:guideBackprop()
+-- Switches the backward computation of special ReLUs for salient backpropagation
+function Model:salientBackprop()
   for i, v in ipairs(self.relus) do
-    v:guideBackprop()
+    v:salientBackprop()
   end
 end
 
--- Switches the backward computation of ReLUs for normal backpropagation
-function Model:normaliseBackprop()
+-- Switches the backward computation of special ReLUs for normal backpropagation
+function Model:normalBackprop()
   for i, v in ipairs(self.relus) do
-    v:normaliseBackprop()
+    v:normalBackprop()
   end
 end
 

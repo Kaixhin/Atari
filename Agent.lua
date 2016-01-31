@@ -86,18 +86,12 @@ function Agent:_init(env, opt)
   self.Tensor = opt.Tensor
 
   -- Saliency display
-  self.saliency = opt.saliency
+  self:setSaliency(opt.saliency) -- Set saliency option on agent and model
   self.origWidth = opt.origWidth
   self.origHeight = opt.origHeight
   self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
   self.histLen = opt.histLen
   self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
-  -- Guided backpropagation for saliency display
-  self.guided = opt.guided
-  if opt.guided then
-    -- Switch to GuidedReLUs
-    self.model:guideNetwork()
-  end
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -156,7 +150,7 @@ function Agent:observe(reward, observation, terminal)
       aIndex = torch.random(1, self.m)
 
       -- Reset saliency if action not chosen by network
-      if self.saliency then
+      if self.saliency ~= 'none' then
         self.saliencyMap:zero()
       end
     else
@@ -166,7 +160,7 @@ function Agent:observe(reward, observation, terminal)
       -- TODO: See if random tie-breaking is needed (given outputs are floats)
 
       -- Compute saliency
-      if self.saliency then
+      if self.saliency ~= 'none' then
         self:computeSaliency(state, aIndex)
       end
     end
@@ -384,12 +378,16 @@ function Agent:report()
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
 end
 
+-- Sets saliency style
+function Agent:setSaliency(saliency)
+  self.saliency = saliency
+  self.model:setSaliency(saliency)
+end
+
 -- Computes a saliency map (assuming a forward pass of a single state)
 function Agent:computeSaliency(state, index)
-  if self.guided then
-    -- Switch to guided backpropagation
-    self.model:guideBackprop()
-  end
+  -- Switch to possibly special backpropagation
+  self.model:salientBackprop()
 
   -- Create artificial high target
   local maxTarget = self.Tensor(self.m):fill(0)
@@ -399,10 +397,8 @@ function Agent:computeSaliency(state, index)
   self.inputGrads = self.policyNet:backward(state, maxTarget)
   self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen):float()), self.origWidth, self.origHeight)
 
-  if self.guided then
-    -- Switch to normal backpropagation
-    self.model:normaliseBackprop()
-  end
+  -- Switch back to normal backpropagation
+  self.model:normalBackprop()
 end
 
 -- Saves the network parameters θ
