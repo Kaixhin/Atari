@@ -449,7 +449,7 @@ elseif opt.mode == 'eval' then
     -- Use FFmpeg to create a video from the screens
     log.info('Creating video')
     local fps = opt.game == 'catch' and 10 or 60
-    os.execute('ffmpeg -framerate ' .. fps .. ' -start_number 1 -i scratch/' .. opt.game .. '_%06d.jpg videos/' .. opt.game .. '.webm')
+    os.execute('ffmpeg -framerate ' .. fps .. ' -start_number 1 -i scratch/' .. opt.game .. '_%06d.jpg -c:v libvpx-vp9 -crf 0 -b:v 0 videos/' .. opt.game .. '.webm')
     log.info('Created video')
 
     -- Clear scratch space
