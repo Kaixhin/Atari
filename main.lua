@@ -71,12 +71,14 @@ cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults 
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every training episode')
 cmd:option('-saliency', 'none', 'Display saliency maps (requires QT): none|normal|guided|deconvnet')
+cmd:option('-record', 'false', 'Record screen (only in eval mode)')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
+opt.record = opt.record == 'true' or false
 
 -- Set ID as game name if not set
 if opt._id == '' then
@@ -113,7 +115,6 @@ if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
   log.error('Unrecognised method for visualising saliency maps')
   error('Unrecognised method for visualising saliency maps')
 end
-
 
 
 -- Torch setup
@@ -154,6 +155,8 @@ local createSaliencyMap = function(state, agent)
   -- Convert Catch screen to RGB
   if opt.game == 'catch' then
     screen = torch.repeatTensor(state, 3, 1, 1)
+  else
+    screen = screen:select(1, 1)
   end
 
   -- Use red channel for saliency map
@@ -264,9 +267,11 @@ if opt.mode == 'train' then
   -- Validation variables
   local valEpisode, valEpisodeScore, valTotalScore
   local bestValScore = _.max(agent.valScores) or -math.huge -- Retrieve best validation score from agent if available
+  local valStepStrFormat = '%0' .. (math.floor(math.log10(opt.valSteps)) + 1) .. 'd' -- String format for padding step with zeros
 
   -- Training loop
   local initStep = globals.step -- Extract step
+  local stepStrFormat = '%0' .. (math.floor(math.log10(opt.steps)) + 1) .. 'd' -- String format for padding step with zeros
   for step = initStep, opt.steps do
     globals.step = step -- Pass step number to globals for use in training
     
@@ -280,7 +285,7 @@ if opt.mode == 'train' then
     else
       if opt.verbose then
         -- Print score for episode
-        log.info('Steps: ' .. step .. '/' .. opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeScore)
+        log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeScore)
       end
 
       -- Start a new episode
@@ -302,7 +307,7 @@ if opt.mode == 'train' then
 
     -- Report progress
     if step % opt.progFreq == 0 then
-      log.info('Steps: ' .. step .. '/' .. opt.steps)
+      log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. opt.steps)
       -- TODO: Report absolute weight and weight gradient values per module in policy network
     end
 
@@ -332,7 +337,7 @@ if opt.mode == 'train' then
         else
           -- Print score every 10 episodes
           if valEpisode % 10 == 0 then
-            log.info('[VAL] Steps: ' .. valStep .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeScore)
+            log.info('[VAL] Steps: ' .. string.format(valStepStrFormat, valStep) .. '/' .. opt.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeScore)
           end
 
           -- Start a new episode
@@ -398,7 +403,17 @@ elseif opt.mode == 'eval' then
   -- Report episode score
   local episodeScore = reward
 
+  -- Set up recording
+  if opt.record then
+    -- Recreate scratch directory
+    paths.rmall('scratch', 'yes')
+    paths.mkdir('scratch')
+
+    log.info('Recording screen')
+  end
+
   -- Play one game (episode)
+  local step = 1
   while not terminal do
     -- Observe and choose next action (index)
     action = agent:observe(reward, state, terminal)
@@ -406,11 +421,39 @@ elseif opt.mode == 'eval' then
     reward, state, terminal = env:step(action)
     episodeScore = episodeScore + reward
 
-    if qt then
-      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
-      image.display({image=screen, zoom=zoom, win=window})
+    if qt or opt.record then
+      -- Extract screen in RGB format for saving images for FFmpeg
+      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or (opt.game == 'catch' and torch.repeatTensor(state, 3, 1, 1) or state:select(1, 1))
+      if qt then
+        image.display({image=screen, zoom=zoom, win=window})
+      end
+      if opt.record then
+        image.save(paths.concat('scratch', opt.game .. '_' .. string.format('%06d', step) .. '.jpg'), screen)
+      end
     end
+
+    -- Increment evaluation step counter
+    step = step + 1
   end
   log.info('Final Score: ' .. episodeScore)
+
+  -- Export recording as video
+  if opt.record then
+    log.info('Recorded screen')
+
+    -- Create videos directory
+    if not paths.dirp('videos') then
+      paths.mkdir('videos')
+    end
+
+    -- Use FFmpeg to create a video from the screens
+    log.info('Creating video')
+    local fps = opt.game == 'catch' and 10 or 60
+    os.execute('ffmpeg -framerate ' .. fps .. ' -start_number 1 -i scratch/' .. opt.game .. '_%06d.jpg videos/' .. opt.game .. '.webm')
+    log.info('Created video')
+
+    -- Clear scratch space
+    paths.rmall('scratch', 'yes')
+  end
 
 end

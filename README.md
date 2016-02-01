@@ -4,9 +4,11 @@
 
 Prioritised experience replay [[1]](#references) persistent advantage learning [[2]](#references) dueling [[3]](#references) double [[4]](#references) deep Q-network [[5]](#references) for the Arcade Learning Environment [[6]](#references). Or PERPAL(triple-D)QN for short...
 
-Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[7]](#references), optionally using guided [[8]](#references) or "deconvnet" [[9]](#references) backpropagation.
+Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[7]](#references), optionally using guided [[8]](#references) or "deconvnet" [[9]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
+
+In evaluation mode you can create recordings with `-record true` (requires FFmpeg); this does not require using `qlua`. Recordings will be stored in the videos directory.
 
 ## Requirements
 

@@ -43,3 +43,7 @@ luac.out
 roms/*.bin
 # Experiments
 experiments
+# Scratch space (for recordings)
+scratch/*.jpg
+# Videos
+videos/*.webm
