@@ -63,8 +63,6 @@ function Model:create(m)
   else
     net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 5, 5, 2, 2))
     net:add(nn.ReLU(true))
-    net:add(nn.SpatialConvolution(32, 64, 3, 3, 1, 1))
-    net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
   local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
@@ -116,13 +114,27 @@ function Model:create(m)
   return net
 end
 
+-- Return list of convolutional filters as list of images
+function Model:getFilters()
+  local filters = {}
+
+  -- nn vs. cuDNN backend
+  local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
+  -- Find convolutional layers
+  local convs = self.net:findModules(backend .. '.SpatialConvolution')
+  for i, v in ipairs(convs) do
+    -- Add filter to list (with each layer on a separate row)
+    filters[#filters + 1] = image.toDisplayTensor(v.weight:view(v.nOutputPlane*v.nInputPlane, v.kH, v.kW), 1, v.nInputPlane, true)
+  end
+
+  return filters
+end
+
 -- Set ReLUs up for specified saliency visualisation type
 function Model:setSaliency(saliency)
   -- Set saliency
   self.saliency = saliency
 
-  -- nn vs. cuDNN backend
-  --local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
   -- Find ReLUs on existing model
   local relus, relucontainers = self.net:findModules('nn.ReLU')
   if #relus == 0 then

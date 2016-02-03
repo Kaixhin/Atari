@@ -204,7 +204,7 @@ function Agent:learn(x, indices, ISWeights)
   self.dTheta:zero()
 
   -- Retrieve experience tuples
-  local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices)
+  local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
 
   -- Calculate Q-values from transition using policy network
   self.QPrimes = self.policyNet:forward(transitions) -- Evaluate Q-values of argmax actions using policy network
@@ -294,7 +294,7 @@ function Agent:learn(x, indices, ISWeights)
   -- Divide gradient by batch size
   self.dTheta:div(self.batchSize)
   -- Clip the norm of the gradients
-  self.policyNet:gradParamClip(10/self.batchSize) -- TODO: Check if indeed should be 10/batchSize since grads are normalised in this code
+  self.policyNet:gradParamClip(10/self.batchSize) -- Clipping is normalised by batch size
 
   return loss, self.dTheta
 end
@@ -376,6 +376,15 @@ function Agent:report()
   gnuplot.plotflush()
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
+end
+
+-- Saves network convolutional filters as images
+function Agent:visualiseFilters()
+  local filters = self.model:getFilters()
+
+  for i, v in ipairs(filters) do
+    image.save(paths.concat('experiments', self._id, 'conv_layer_' .. i .. '.png'), v)
+  end
 end
 
 -- Sets saliency style

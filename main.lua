@@ -51,7 +51,7 @@ cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
-cmd:option('-eta', 0.002, 'Learning rate η') -- Prioritied experience replay learning rate (does not account for duel as well) x batch size (this code divides grads by batch size)
+cmd:option('-eta', 0.002, 'Learning rate η') -- Prioritied experience replay learning rate (x0.25, does not account for duel as well) x batch size (this code divides grads by batch size)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
@@ -69,7 +69,7 @@ cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
 -- Experiment options
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
-cmd:option('-verbose', 'false', 'Log info for every training episode')
+cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
 cmd:option('-saliency', 'none', 'Display saliency maps (requires QT): none|normal|guided|deconvnet')
 cmd:option('-record', 'false', 'Record screen (only in eval mode)')
 local opt = cmd:parse(arg)
@@ -192,7 +192,7 @@ else
   -- TODO: Adjust parameters to better suit Catch
   opt.memSize = 1e4
   opt.optimiser = 'adam'
-  opt.eta = 0.01
+  opt.eta = 0.005
   opt.epsilonEnd = 0.05
   opt.epsilonSteps = 1e4
   opt.tau = 40
@@ -365,6 +365,9 @@ if opt.mode == 'train' then
       log.info('Average Score: ' .. valTotalScore)
       -- Pass to agent (for storage and plotting)
       agent.valScores[#agent.valScores + 1] = valTotalScore
+
+      -- Visualise convolutional filters
+      agent:visualiseFilters()
 
       -- Use transitions sampled for validation to test performance
       local avgV, avgTdErr = agent:report()

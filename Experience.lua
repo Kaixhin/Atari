@@ -55,9 +55,6 @@ function Experience:_init(capacity, opt)
   self.smallConst = 1e-6 -- Account for half precision
   self.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
 
-  -- Work out tensor type to cast to for retrieveal
-  self.castType = string.match(opt.Tensor():type(), 'torch.(.*)Tensor'):lower()
-
   -- Initialise first time step
   self.states[1]:zero() -- Blank out state
   self.terminals[1] = 0
@@ -114,20 +111,20 @@ function Experience:retrieve(indices)
     self.transTuples.actions[n] = self.actions[memIndex]
     -- Retrieve rewards
     self.transTuples.rewards[n] = self.rewards[memIndex]
-    -- Retrieve terminal status
-    self.transTuples.terminals[n] = self.terminals[memIndex]
+    -- Retrieve terminal status (of transition)
+    self.transTuples.terminals[n] = self.terminals[self:circIndex(memIndex + 1)]
 
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[n][histIndex] = self.states[memIndex][self.castType](self.states[memIndex]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[n][histIndex] = self.states[memIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
     until histIndex == 0 or self.terminals[memIndex] == 1
 
-    -- If not terminal, fill in transition history
+    -- If transition not terminal, fill in transition history
     if self.transTuples.terminals[n] == 0 then
       -- Copy most recent state
       for h = 2, self.histLen do
@@ -135,7 +132,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = self.states[memTIndex][self.castType](self.states[memTIndex]):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen] = self.states[memTIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
     end
   end
 
@@ -146,8 +143,8 @@ end
 function Experience:validateTransition(index)
   -- Calculate beginning of state and end of transition for checking overlap with head of buffer
   local minIndex, maxIndex = index - self.histLen, self:circIndex(index + 1)
-  -- State must be valid "transition" itself (can't come from terminal state), plus cannot overlap with head of buffer
-  return self.terminals[self:circIndex(index - 1)] == 0 and (self.index <= minIndex or self.index >= maxIndex)
+  -- State must not be terminal, plus cannot overlap with head of buffer
+  return self.terminals[index] == 0 and (self.index <= minIndex or self.index >= maxIndex)
 end
 
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling

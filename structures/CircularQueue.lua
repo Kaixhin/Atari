@@ -15,9 +15,6 @@ function CircularQueue:_init(length, createTensor, tensorSizes)
   for i = 1, self.length do
     self.queue[#self.queue + 1] = createTensor(torch.LongStorage(tensorSizes)):fill(0)
   end
-
-  -- Work out tensor type
-  self.tensorType = string.match(self.queue[1]:type(), 'torch.(.*)Tensor'):lower()
 end
 
 -- Pushes a new element to the end of the queue and moves all others down
@@ -38,7 +35,7 @@ function CircularQueue:push(tensor)
   end
 
   -- Add new element (casting if needed)
-  self.queue[self.length] = tensor[self.tensorType](tensor)
+  self.queue[self.length] = tensor:typeAs(self.queue[1])
 end
 
 -- Pushes a new element to the end of the queue and sets reset flag
@@ -49,7 +46,7 @@ function CircularQueue:pushReset(tensor)
   end
 
   -- Add new element (casting if needed)
-  self.queue[self.length] = tensor[self.tensorType](tensor)
+  self.queue[self.length] = tensor:typeAs(self.queue[1])
 
   -- Set reset flag
   self.reset = true
