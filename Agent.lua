@@ -80,7 +80,7 @@ function Agent:_init(env, opt)
   self.valSize = opt.valSize
   self.valMemory = Experience(opt.valSize, opt) -- Validation experience replay memory
   self.losses = {}
-  self.avgV = {} -- Running average of V
+  self.avgV = {} -- Running average of V(s')
   self.avgTdErr = {} -- Running average of TD-error δ
   self.valScores = {} -- Validation scores (passed from main script)
 
@@ -233,12 +233,11 @@ function Agent:learn(x, indices, ISWeights)
 
   -- Initially set target Y = Q(s', argmax_a[Q(s', a; θpolicy)]; θ), where final θ is either θpolicy (DQN) or θtarget (DDQN)
   for n = 1, self.batchSize do
+    self.QPrimes[n]:mul(1 - terminals[n]) -- Zero Q(s' a) when s' is terminal
     self.Y[n] = self.QPrimes[n][self.APrimeMaxInds[n][1]]
   end
   -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θ)
   self.Y:mul(self.gamma):add(rewards)
-  -- Set target Y := r if the transition was terminal as V(terminal) = 0
-  self.Y[terminals] = rewards[terminals] -- Little use optimising over batch processing if terminal states are rare
 
   -- Get all predicted Q-values from the current state
   self.QCurr = self.policyNet:forward(states) -- Correct internal state of policy network before backprop
@@ -257,7 +256,7 @@ function Agent:learn(x, indices, ISWeights)
     for n = 1, self.batchSize do
       self.Q[n] = self.Qs[n][actions[n]]
     end
-    self.V = torch.max(self.Qs, 2)
+    self.V = torch.max(self.Qs, 2) -- Current states cannot be terminal
 
     -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
     self.tdErrAL = self.tdErr - self.V:add(-self.Q):mul(self.PALpha) -- TODO: Torch.CudaTensor:csub is missing
@@ -265,14 +264,14 @@ function Agent:learn(x, indices, ISWeights)
     -- Calculate Q(s', a) and V(s') using target network
     if not self.doubleQ then
       self.QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+      for n = 1, self.batchSize do
+        self.QPrimes[n]:mul(1 - terminals[n]) -- Zero Q(s' a) when s' is terminal
+      end
     end
     for n = 1, self.batchSize do
       self.QPrime[n] = self.QPrimes[n][actions[n]]
     end
     self.VPrime = torch.max(self.QPrimes, 2)
-    -- Set values to 0 for terminal states
-    self.QPrime[terminals] = 0
-    self.VPrime[terminals] = 0
 
     -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
     self.tdErr = torch.max(torch.cat(self.tdErrAL, self.tdErr:add(-(self.VPrime:add(-self.QPrime):mul(self.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
@@ -348,7 +347,7 @@ function Agent:report()
     -- Perform "learning" (without optimisation)
     self:learn(self.theta, indices, ISWeights:narrow(1, 1, batchSize))
 
-    -- Calculate V and TD-error δ
+    -- Calculate V(s') and TD-error δ
     if self.PALpha == 0 then
       self.VPrime = torch.max(self.QPrimes, 2)
     end

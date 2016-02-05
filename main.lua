@@ -128,7 +128,7 @@ torch.setnumthreads(opt.threads)
 torch.setdefaulttensortype(opt.tensorType)
 -- Set manual seeds using random numbers to reduce correlations
 math.randomseed(opt.seed)
-torch.manualSeed(math.random(1, 1e3))
+torch.manualSeed(math.random(1, math.pow(2, 32)))
 
 -- Tensor creation function for removing need to cast to CUDA if GPU is enabled
 opt.Tensor = function(...)
