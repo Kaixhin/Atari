@@ -156,9 +156,21 @@ function Agent:observe(reward, observation, terminal)
         self.saliencyMap:zero()
       end
     else
-      -- Choose best action
-      local __, ind = torch.max(self.policyNet:forward(state), 1)
-      aIndex = ind[1]
+      -- Evaluate state
+      local Qs = self.policyNet:forward(state)
+      local maxQ = Qs[1]
+      local bestAs = {1}
+      -- Find best actions
+      for a = 2, self.m do
+        if Qs[a] > maxQ then
+          maxQ = Qs[a]
+          bestAs = {a}
+        elseif Qs[a] == maxQ then
+          bestAs[#bestAs + 1] = a
+        end
+      end
+      -- Perform random tie-breaking (if more than one argmax action)
+      aIndex = bestAs[torch.random(1, #bestAs)]
 
       -- Compute saliency
       if self.saliency ~= 'none' then
