@@ -146,7 +146,7 @@ function Agent:observe(reward, observation, terminal)
   end
 
   -- Choose action by ε-greedy exploration
-  local aIndex = 1 -- In a terminal state, choose no-op by default
+  local aIndex = 1 -- In a terminal state, choose no-op/first action by default
   if not terminal then
     if math.random() < epsilon then 
       aIndex = torch.random(1, self.m)
@@ -190,7 +190,7 @@ function Agent:observe(reward, observation, terminal)
     end
 
     -- Sample uniformly or with prioritised sampling
-    if self.globals.step % self.memSampleFreq == 0 and self.globals.step >= self.learnStart then -- Assumes learnStart is greater than batchSize
+    if self.globals.step % self.memSampleFreq == 0 and self.globals.step >= self.learnStart then
       for n = 1, self.memNSamples do
         -- Optimise (learn) from experience tuples
         self:optimise(self.memory:sample(self.memPriority))

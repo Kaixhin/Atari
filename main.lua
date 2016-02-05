@@ -104,6 +104,12 @@ if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpa
 end
 opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
+-- Check start of learning occurs after at least one minibatch of data has been collected
+if opt.learnStart <= opt.batchSize then
+  log.error('learnStart must be greater than batchSize')
+  error('learnStart must be greater than batchSize')
+end
+
 -- Check prioritised experience replay options
 if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
   log.error('Unrecognised type of prioritised experience replay')
