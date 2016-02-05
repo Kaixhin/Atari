@@ -51,11 +51,12 @@ cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
-cmd:option('-eta', 0.002, 'Learning rate η') -- Prioritied experience replay learning rate (x0.25, does not account for duel as well) x batch size (this code divides grads by batch size)
+cmd:option('-eta', 0.00025/4, 'Learning rate η') -- Prioritied experience replay learning rate (x0.25, does not account for duel as well)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
+cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
 cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
@@ -191,16 +192,13 @@ else
 
   -- TODO: Adjust parameters to better suit Catch
   opt.memSize = 1e4
-  opt.optimiser = 'adam'
-  opt.eta = 0.005
   opt.epsilonEnd = 0.05
   opt.epsilonSteps = 1e4
   opt.tau = 40
-  opt.steps = 1e5
+  opt.steps = 2e5
   opt.learnStart = 500
-  opt.progFreq = 1000
-  opt.valFreq = 12500
-  opt.valSteps = 2400
+  opt.valFreq = 25000
+  opt.valSteps = 4800
 end
 
 

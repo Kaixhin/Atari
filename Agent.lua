@@ -17,7 +17,8 @@ function Agent:_init(env, opt)
   self._id = opt._id
   -- Actions
   self.actionSpec = env:getActionSpec()
-  self.m = self.actionSpec[3][2] -- Number of discrete actions
+  self.m = self.actionSpec[3][2] - self.actionSpec[3][1] + 1 -- Number of discrete actions
+  self.actionOffset = 1 - self.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
 
   -- Initialise model helper
   self.model = Model(opt)
@@ -52,6 +53,7 @@ function Agent:_init(env, opt)
   self.batchSize = opt.batchSize
   self.learnStart = opt.learnStart
   self.progFreq = opt.progFreq
+  self.gradClip = opt.gradClip
   -- Optimiser parameters
   self.optimiser = opt.optimiser
   self.optimParams = {
@@ -157,7 +159,6 @@ function Agent:observe(reward, observation, terminal)
       -- Choose best action
       local __, ind = torch.max(self.policyNet:forward(state), 1)
       aIndex = ind[1]
-      -- TODO: See if random tie-breaking is needed (given outputs are floats)
 
       -- Compute saliency
       if self.saliency ~= 'none' then
@@ -191,7 +192,8 @@ function Agent:observe(reward, observation, terminal)
     end
   end
 
-  return aIndex
+  -- Return action index with offset applied
+  return aIndex - self.actionOffset
 end
 
 -- Learns from experience
@@ -291,10 +293,10 @@ function Agent:learn(x, indices, ISWeights)
 
   -- Backpropagate (network modifies gradients internally)
   self.policyNet:backward(states, self.QCurr)
-  -- Divide gradient by batch size
-  self.dTheta:div(self.batchSize)
-  -- Clip the norm of the gradients
-  self.policyNet:gradParamClip(10/self.batchSize) -- Clipping is normalised by batch size
+  -- Clip the L2 norm of the gradients
+  if self.gradClip > 0 then
+    self.policyNet:gradParamClip(self.gradClip)
+  end
 
   return loss, self.dTheta
 end
