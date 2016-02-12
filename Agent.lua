@@ -103,14 +103,18 @@ end
 function Agent:training()
   self.isTraining = true
   self.policyNet:training()
-  self.stateBuffer:clear() -- Clears state buffer
+  -- Clear state buffer
+  self.stateBuffer:clear()
 end
 
 -- Sets evaluation mode
 function Agent:evaluate()
   self.isTraining = false
   self.policyNet:evaluate()
-  self.stateBuffer:clear() -- Clears state buffer
+  -- Clear state buffer
+  self.stateBuffer:clear()
+  -- Set previously stored state as invalid (as no transition stored)
+  self.memory:setInvalid()
 end
   
 -- Observes the results of the previous transition and chooses the next action to perform
@@ -136,12 +140,12 @@ function Agent:observe(reward, observation, terminal)
   -- Set ε based on training vs. evaluation mode
   local epsilon = 0.001
   if self.isTraining then
-    -- Keep ε constant before learning starts
-    if self.globals.step >= self.learnStart then
+    if self.globals.step < self.learnStart then
+      -- Keep ε constant before learning starts
+      epsilon = self.epsilonStart
+    else
       -- Use annealing ε
       epsilon = math.max(self.epsilonStart + (self.globals.step - self.learnStart - 1)*self.epsilonGrad, self.epsilonEnd)
-    else
-      epsilon = self.epsilonStart
     end
   end
 
@@ -165,7 +169,7 @@ function Agent:observe(reward, observation, terminal)
         if Qs[a] > maxQ then
           maxQ = Qs[a]
           bestAs = {a}
-        elseif Qs[a] == maxQ then
+        elseif Qs[a] == maxQ then -- Ties can occur even with floats
           bestAs[#bestAs + 1] = a
         end
       end
@@ -185,7 +189,7 @@ function Agent:observe(reward, observation, terminal)
     self.memory:store(reward, observation, terminal, aIndex)
 
     -- Collect validation transitions at the start
-    if self.globals.step <= self.valSize then
+    if self.globals.step <= self.valSize then -- TODO: Collect enough *valid* transitions
       self.valMemory:store(reward, observation, terminal, aIndex)
     end
 
@@ -299,10 +303,10 @@ function Agent:learn(x, indices, ISWeights)
   -- Set TD-errors δ with given actions
   for n = 1, self.batchSize do
      -- Correct prioritisation bias with importance-sampling weights
-    self.QCurr[n][actions[n]] = ISWeights[n] * -self.tdErr[n] -- Negate target to use gradient descent optimisers
+    self.QCurr[n][actions[n]] = ISWeights[n] * -self.tdErr[n] -- Negate target to use gradient descent (not ascent) optimisers
   end
 
-  -- Backpropagate (network modifies gradients internally)
+  -- Backpropagate (network accumulates gradients internally)
   self.policyNet:backward(states, self.QCurr)
   -- Clip the L2 norm of the gradients
   if self.gradClip > 0 then
@@ -337,7 +341,7 @@ function Agent:report()
   -- Loop over validation transitions
   local nBatches = math.ceil(self.valSize / self.batchSize)
   local ISWeights = self.Tensor(self.batchSize):fill(1)
-  local startIndex, endIndex, batchSize, indices
+  local startIndex, endIndex, batchSize, indices -- TODO: Use indices for *valid* validation transitions
   for n = 1, nBatches do
     startIndex = (n - 1)*self.batchSize + 1
     endIndex = n*self.batchSize

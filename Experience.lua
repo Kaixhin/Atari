@@ -45,7 +45,9 @@ function Experience:_init(capacity, opt)
   self.actions = torch.ByteTensor(capacity) -- Discrete action indices
   self.rewards = torch.FloatTensor(capacity) -- Stored at time t (not t + 1)
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
-  self.terminals = torch.ByteTensor(capacity):fill(1) -- Filling with 1 prevents going back in history initially
+  self.terminals = torch.ByteTensor(capacity)
+  -- Validation flags (used if state is stored without transition)
+  self.invalid = torch.ByteTensor(capacity):fill(1) -- 1 is used to denote invalid
   -- Internal pointer
   self.index = 1
   self.isFull = false
@@ -59,6 +61,7 @@ function Experience:_init(capacity, opt)
   self.states[1]:zero() -- Blank out state
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
+  self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
 
   -- Calculate β growth factor
   self.betaGrad = (1 - opt.betaZero)/opt.steps
@@ -96,6 +99,12 @@ function Experience:store(reward, state, terminal, action)
   self.states[self.index] = state:float():mul(self.imgDiscLevels) -- float -> byte
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
+  self.invalid[self.index] = 0
+end
+
+-- Sets current state as invalid (utilised when switching to evaluation mode)
+function Experience:setInvalid()
+  self.invalid[self.index] = 1
 end
 
 -- Retrieves experience tuples (s, a, r, s', t)
@@ -141,6 +150,13 @@ end
 
 -- Determines if an index points to a valid transition state
 function Experience:validateTransition(index)
+  -- Check history is valid
+  for h = index - self.histLen + 1, index do
+    if self.invalid[self:circIndex(h)] == 1 then
+      return false
+    end
+  end
+
   -- Calculate beginning of state and end of transition for checking overlap with head of buffer
   local minIndex, maxIndex = index - self.histLen, self:circIndex(index + 1)
   -- State must not be terminal, plus cannot overlap with head of buffer

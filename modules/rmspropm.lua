@@ -17,7 +17,7 @@ function optim.rmspropm(opfunc, x, config, state)
     state.tmp = torch.Tensor():typeAs(x):resizeAs(dfdx)
   end
 
-  -- g = αg + (1- α)df/dx
+  -- g = αg + (1 - α)df/dx
   state.g:mul(momentum):add(1 - momentum, dfdx) -- Calculate momentum
   -- tmp = df/dx . df/dx
   state.tmp:cmul(dfdx, dfdx) 

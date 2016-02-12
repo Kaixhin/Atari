@@ -51,7 +51,7 @@ cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
-cmd:option('-eta', 0.00025/4, 'Learning rate η') -- Prioritied experience replay learning rate (x0.25, does not account for duel as well)
+cmd:option('-eta', 0.00025/4, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
@@ -108,6 +108,12 @@ opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 if opt.learnStart <= opt.batchSize then
   log.error('learnStart must be greater than batchSize')
   error('learnStart must be greater than batchSize')
+end
+
+-- Check enough validation transitions will be collected before first validation
+if opt.valFreq <= opt.valSize then
+  log.error('valFreq must be greater than valSize')
+  error('valFreq must be greater than valSize')
 end
 
 -- Check prioritised experience replay options
@@ -187,7 +193,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  env = Catch()
+  env = Catch({level = 1})
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
@@ -197,6 +203,9 @@ else
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
   -- TODO: Adjust parameters to better suit Catch
+  opt.doubleQ = false
+  opt.duel = false
+  opt.optimiser = 'adam'
   opt.memSize = 1e4
   opt.epsilonEnd = 0.05
   opt.epsilonSteps = 1e4
@@ -277,7 +286,7 @@ if opt.mode == 'train' then
   local initStep = globals.step -- Extract step
   local stepStrFormat = '%0' .. (math.floor(math.log10(opt.steps)) + 1) .. 'd' -- String format for padding step with zeros
   for step = initStep, opt.steps do
-    globals.step = step -- Pass step number to globals for use in training
+    globals.step = step -- Pass step number to globals for use in other modules
     
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
     action = agent:observe(reward, state, terminal) -- As results received, learn in training mode
