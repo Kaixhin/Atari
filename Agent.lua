@@ -224,23 +224,27 @@ function Agent:learn(x, indices, ISWeights)
   -- Retrieve experience tuples
   local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
 
-  -- Calculate Q-values from transition using policy network
-  self.QPrimes = self.policyNet:forward(transitions) -- Evaluate Q-values of argmax actions using policy network
-  -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
-  self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 2)
-
-  -- Double Q-learning: Q(s', argmax_a[Q(s', a; θpolicy)]; θtarget)
+  -- Perform argmax action selection
   if self.doubleQ then
+    -- Calculate Q-values from transition using policy network
+    self.QPrimes = self.policyNet:forward(transitions) -- Find argmax actions using policy network
+    -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
+    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 2)
     -- Calculate Q-values from transition using target network
     self.QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
+  else
+    -- Calculate Q-values from transition using target network
+    self.QPrimes = self.targetNet:forward(transitions) -- Find and evaluate Q-values of argmax actions using target network
+    -- Perform argmax action selection on transition using target network: argmax_a[Q(s', a; θtarget)]
+    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 2)
   end
 
-  -- Initially set target Y = Q(s', argmax_a[Q(s', a; θpolicy)]; θ), where final θ is either θpolicy (DQN) or θtarget (DDQN)
+  -- Initially set target Y = Q(s', argmax_a[Q(s', a; θ)]; θtarget), where initial θ is either θtarget (DQN) or θpolicy (DDQN)
   for n = 1, self.batchSize do
     self.QPrimes[n]:mul(1 - terminals[n]) -- Zero Q(s' a) when s' is terminal
     self.Y[n] = self.QPrimes[n][self.APrimeMaxInds[n][1]]
   end
-  -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θpolicy)]; θ)
+  -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θ)]; θtarget)
   self.Y:mul(self.gamma):add(rewards)
 
   -- Get all predicted Q-values from the current state
@@ -266,12 +270,6 @@ function Agent:learn(x, indices, ISWeights)
     self.tdErrAL = self.tdErr - self.V:add(-self.Q):mul(self.PALpha) -- TODO: Torch.CudaTensor:csub is missing
 
     -- Calculate Q(s', a) and V(s') using target network
-    if not self.doubleQ then
-      self.QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
-      for n = 1, self.batchSize do
-        self.QPrimes[n]:mul(1 - terminals[n]) -- Zero Q(s' a) when s' is terminal
-      end
-    end
     for n = 1, self.batchSize do
       self.QPrime[n] = self.QPrimes[n][actions[n]]
     end
