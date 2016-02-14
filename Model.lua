@@ -61,7 +61,9 @@ function Model:create(m)
     net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
     net:add(nn.ReLU(true))
   else
-    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 5, 5, 2, 2))
+    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 16, 5, 5, 2, 2))
+    net:add(nn.ReLU(true))
+    net:add(nn.SpatialConvolution(16, 32, 3, 3, 1, 1))
     net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
@@ -95,9 +97,8 @@ function Model:create(m)
   else
     net:add(nn.Linear(convOutputSize, hiddenSize))
     net:add(nn.ReLU(true))
-    net:add(nn.Linear(hiddenSize, m))
+    net:add(nn.Linear(hiddenSize, m)) -- Note: Tuned DDQN uses shared bias at last layer
   end
-  -- TODO: Check need for shared bias at last layer (as used in tuned DDQN)
 
   -- GPU conversion
   if self.gpu > 0 then

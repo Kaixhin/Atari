@@ -138,7 +138,7 @@ function Agent:observe(reward, observation, terminal)
   local state = self.stateBuffer:readAll()
 
   -- Set ε based on training vs. evaluation mode
-  local epsilon = 0.001
+  local epsilon = 0.001 -- Taken from tuned DDQN evaluation
   if self.isTraining then
     if self.globals.step < self.learnStart then
       -- Keep ε constant before learning starts

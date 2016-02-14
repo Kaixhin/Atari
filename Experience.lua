@@ -45,9 +45,9 @@ function Experience:_init(capacity, opt)
   self.actions = torch.ByteTensor(capacity) -- Discrete action indices
   self.rewards = torch.FloatTensor(capacity) -- Stored at time t (not t + 1)
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
-  self.terminals = torch.ByteTensor(capacity)
+  self.terminals = torch.ByteTensor(capacity):fill(1) -- Filling with 1 prevents going back in history at beginning
   -- Validation flags (used if state is stored without transition)
-  self.invalid = torch.ByteTensor(capacity):fill(1) -- 1 is used to denote invalid
+  self.invalid = torch.ByteTensor(capacity) -- 1 is used to denote invalid
   -- Internal pointer
   self.index = 1
   self.isFull = false
