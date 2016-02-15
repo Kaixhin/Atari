@@ -7,7 +7,7 @@ require 'classic.torch' -- Enables serialisation
 local Experience = classic.class('Experience')
 
 -- Creates experience replay memory
-function Experience:_init(capacity, opt)
+function Experience:_init(capacity, opt, isValidation)
   self.capacity = capacity
   -- Extract relevant options
   self.batchSize = opt.batchSize
@@ -49,27 +49,37 @@ function Experience:_init(capacity, opt)
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
   self.smallConst = 1e-6 -- Account for half precision
   -- Sampling priority
-  if opt.memPriority == 'rank' then
-    -- Set up power-law PDF and CDF
-    self.pdf = torch.linspace(1, capacity, capacity):pow(-opt.alpha)
-    local pdfSum = torch.sum(self.pdf)
-    self.pdf:div(pdfSum) -- Normalise PDF
-    self.cdf = torch.cumsum(self.pdf)
-    -- TODO: Cache partition indices for several values of N as α is static
+  if not isValidation and opt.memPriority == 'rank' then
+    -- Cache partition indices for several values of N as α is static
+    self.distributions = {}
+    local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
+    local partitionDivision = math.floor(capacity/nPartitions)
 
-    -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
-    self.strataEnds = torch.LongTensor(opt.batchSize + 1)
-    self.strataEnds[1] = 0 -- First index is 0 (+1)
-    self.strataEnds[opt.batchSize + 1] = capacity -- Last index is memory capacity
-    -- Use linear search to find strata indices
-    local stratumEnd = 1/opt.batchSize
-    local index = 1
-    for s = 2, opt.batchSize do
-      while self.cdf[index] < stratumEnd do
-        index = index + 1
+    for n = partitionDivision, capacity, partitionDivision do
+      -- Set up power-law PDF and CDF
+      local distribution = {}
+      distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
+      local pdfSum = torch.sum(distribution.pdf)
+      distribution.pdf:div(pdfSum) -- Normalise PDF
+      local cdf = torch.cumsum(distribution.pdf)
+
+      -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
+      distribution.strataEnds = torch.LongTensor(opt.batchSize + 1)
+      distribution.strataEnds[1] = 0 -- First index is 0 (+1)
+      distribution.strataEnds[opt.batchSize + 1] = n -- Last index is n
+      -- Use linear search to find strata indices
+      local stratumEnd = 1/opt.batchSize
+      local index = 1
+      for s = 2, opt.batchSize do
+        while cdf[index] < stratumEnd do
+          index = index + 1
+        end
+        distribution.strataEnds[s] = index -- Save index
+        stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
       end
-      self.strataEnds[s] = index -- Save index
-      stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
+
+      -- Store distribution
+      self.distributions[#self.distributions + 1] = distribution
     end
   end
 
@@ -183,7 +193,7 @@ end
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
 function Experience:sample()
   local N = self.size
-  local w
+  local w -- Importance-sampling weights w
 
   -- Priority 'none' = uniform sampling
   if self.memPriority == 'none' then
@@ -206,6 +216,11 @@ function Experience:sample()
 
   elseif self.memPriority == 'rank' then
 
+    -- Find closest precomputed distribution by size
+    local distIndex = math.floor(N / self.capacity * 100)
+    local distribution = self.distributions[distIndex]
+    N = distIndex * 100
+
     -- Create table to store indices (by rank)
     local rankIndices = torch.LongTensor(self.batchSize) -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array
     -- Perform stratified sampling
@@ -216,7 +231,7 @@ function Experience:sample()
       -- Generate random index until valid transition found
       while not isValid do
         -- Sample within stratum
-        rankIndices[n] = torch.random(self.strataEnds[n] + 1, self.strataEnds[n+1])
+        rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1])
         -- Retrieve actual transition index
         index = self.priorityQueue:getValueByVal(rankIndices[n])
         isValid = self:validateTransition(index)
@@ -226,10 +241,9 @@ function Experience:sample()
       self.indices[n] = index
     end
 
-    -- TODO: Adjust N for precomputed distribution sizes, not actual size
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
-    w = self.pdf:index(1, rankIndices):mul(N):pow(-beta)
+    w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta)
     -- Find max importance-sampling weight for normalisation
     local wMax = torch.max(w)
     -- Normalise weights so updates only scale downwards (for stability)

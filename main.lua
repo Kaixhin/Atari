@@ -122,6 +122,18 @@ if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
   error('Unrecognised type of prioritised experience replay')
 end
 
+-- Check start of learning occurs after at least 1/100 of memory has been filled
+if opt.learnStart < opt.memSize/100 then
+  log.error('learnStart must be greater than memSize/100')
+  error('learnStart must be greater than memSize/100')
+end
+
+-- Check memory size is multiple of 100 (makes prioritised sampling partitioning simpler)
+if opt.memSize % 100 ~= 0 then
+  log.error('memSize must be a multiple of 100')
+  error('memSize must be a multiple of 100')
+end
+
 -- Check saliency map options
 if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
   log.error('Unrecognised method for visualising saliency maps')
@@ -137,9 +149,8 @@ torch.setheaptracking(true)
 torch.setnumthreads(opt.threads)
 -- Set default Tensor type (float is more efficient than double)
 torch.setdefaulttensortype(opt.tensorType)
--- Set manual seeds using random numbers to reduce correlations
-math.randomseed(opt.seed)
-torch.manualSeed(math.random(1, math.pow(2, 32)))
+-- Set manual seed
+torch.manualSeed(opt.seed)
 
 -- Tensor creation function for removing need to cast to CUDA if GPU is enabled
 opt.Tensor = function(...)
@@ -150,7 +161,8 @@ end
 if opt.gpu > 0 then
   log.info('Setting up GPU')
   cutorch.setDevice(opt.gpu)
-  cutorch.manualSeedAll(torch.random())
+  -- Set manual seeds using random numbers to reduce correlations
+  cutorch.manualSeed(torch.random())
   -- Replace tensor creation function
   opt.Tensor = function(...)
     return torch.CudaTensor(...)
@@ -209,7 +221,7 @@ else
   opt.epsilonSteps = 1e4
   opt.tau = 40
   opt.steps = 2e5
-  opt.learnStart = 1e4
+  opt.learnStart = 5e3
   opt.valFreq = 25000
   opt.valSteps = 4800
 end

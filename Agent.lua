@@ -77,7 +77,7 @@ function Agent:_init(env, opt)
 
   -- Validation variables
   self.valSize = opt.valSize
-  self.valMemory = Experience(opt.valSize, opt) -- Validation experience replay memory
+  self.valMemory = Experience(opt.valSize, opt, true) -- Validation experience replay memory
   self.losses = {}
   self.avgV = {} -- Running average of V(s')
   self.avgTdErr = {} -- Running average of TD-error δ
@@ -151,7 +151,7 @@ function Agent:observe(reward, observation, terminal)
   -- Choose action by ε-greedy exploration
   local aIndex = 1 -- In a terminal state, choose no-op/first action by default
   if not terminal then
-    if math.random() < epsilon then 
+    if torch.uniform() < epsilon then 
       aIndex = torch.random(1, self.m)
 
       -- Reset saliency if action not chosen by network
