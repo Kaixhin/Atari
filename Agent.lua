@@ -46,7 +46,6 @@ function Agent:_init(env, opt)
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
   self.memNSamples = opt.memNSamples
-  self.memPriority = opt.memPriority
 
   -- Training mode
   self.isTraining = false
@@ -197,7 +196,7 @@ function Agent:observe(reward, observation, terminal)
     if self.globals.step % self.memSampleFreq == 0 and self.globals.step >= self.learnStart then
       for n = 1, self.memNSamples do
         -- Optimise (learn) from experience tuples
-        self:optimise(self.memory:sample(self.memPriority))
+        self:optimise(self.memory:sample())
       end
     end
 

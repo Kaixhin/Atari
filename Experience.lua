@@ -6,15 +6,6 @@ require 'classic.torch' -- Enables serialisation
 
 local Experience = classic.class('Experience')
 
--- Converts a CDF from a PDF
-local pdfToCdf = function(pdf)
-  local c = 0
-  pdf:apply(function(x)
-    c = c + x
-    return c
-  end)
-end
-
 -- Creates experience replay memory
 function Experience:_init(capacity, opt)
   self.capacity = capacity
@@ -23,6 +14,7 @@ function Experience:_init(capacity, opt)
   self.histLen = opt.histLen
   self.gpu = opt.gpu
   self.memPriority = opt.memPriority
+  self.learnStart = opt.learnStart
   self.alpha = opt.alpha
   self.betaZero = opt.betaZero
 
@@ -52,10 +44,34 @@ function Experience:_init(capacity, opt)
   self.index = 1
   self.isFull = false
   self.size = 0
+  
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
   self.smallConst = 1e-6 -- Account for half precision
-  self.maxPriority = opt.tdClip -- Should prioritise sampling experience that has not been learnt from
+  -- Sampling priority
+  if opt.memPriority == 'rank' then
+    -- Set up power-law PDF and CDF
+    self.pdf = torch.linspace(1, capacity, capacity):pow(-opt.alpha)
+    local pdfSum = torch.sum(self.pdf)
+    self.pdf:div(pdfSum) -- Normalise PDF
+    self.cdf = torch.cumsum(self.pdf)
+    -- TODO: Cache partition indices for several values of N as α is static
+
+    -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
+    self.strataEnds = torch.LongTensor(opt.batchSize + 1)
+    self.strataEnds[1] = 0 -- First index is 0 (+1)
+    self.strataEnds[opt.batchSize + 1] = capacity -- Last index is memory capacity
+    -- Use linear search to find strata indices
+    local stratumEnd = 1/opt.batchSize
+    local index = 1
+    for s = 2, opt.batchSize do
+      while self.cdf[index] < stratumEnd do
+        index = index + 1
+      end
+      self.strataEnds[s] = index -- Save index
+      stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
+    end
+  end
 
   -- Initialise first time step
   self.states[1]:zero() -- Blank out state
@@ -63,8 +79,8 @@ function Experience:_init(capacity, opt)
   self.actions[1] = 1 -- Action is no-op
   self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
 
-  -- Calculate β growth factor
-  self.betaGrad = (1 - opt.betaZero)/opt.steps
+  -- Calculate β growth factor (linearly annealed till end of training)
+  self.betaGrad = (1 - opt.betaZero)/(opt.steps - opt.learnStart)
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -80,11 +96,11 @@ end
 function Experience:store(reward, state, terminal, action)
   self.rewards[self.index] = reward
   -- Store with maximal priority
-  self.maxPriority = self.maxPriority + self.smallConst
+  local maxPriority = (self.priorityQueue:findMax() or 1) + self.smallConst
   if self.isFull then
-    self.priorityQueue:updateByVal(self.index, self.maxPriority, self.index)
+    self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
   else
-    self.priorityQueue:insert(self.maxPriority, self.index)
+    self.priorityQueue:insert(maxPriority, self.index)
   end
 
   -- Increment index and size
@@ -112,6 +128,7 @@ function Experience:retrieve(indices)
   local batchSize = indices:size(1)
   -- Blank out history in one go
   self.transTuples.states:zero()
+  self.transTuples.transitions:zero()
 
   -- Iterate over indices
   for n = 1, batchSize do
@@ -164,12 +181,12 @@ function Experience:validateTransition(index)
 end
 
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-function Experience:sample(priorityType)
+function Experience:sample()
   local N = self.size
   local w
 
   -- Priority 'none' = uniform sampling
-  if priorityType == 'none' then
+  if self.memPriority == 'none' then
 
     -- Keep uniformly picking random indices until indices filled
     for n = 1, self.batchSize do
@@ -187,28 +204,38 @@ function Experience:sample(priorityType)
     end
     w = torch.ones(self.batchSize) -- Set weights to 1 as no correction needed
 
-  elseif priorityType == 'rank' then
+  elseif self.memPriority == 'rank' then
 
     -- Create table to store indices (by rank)
-    local rankIndices = {} -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array here
-    -- Sample (rank) indices based on power-law distribution TODO: Cache partition indices for several values of N as α is static
-    local samplingRange = torch.pow(1/self.alpha, torch.linspace(1, math.log(N, 1/self.alpha), self.batchSize+1)):long() -- Use logarithmic binning
-    -- Perform stratified sampling (transitions will have varying TD-error magnitudes |δ|)
-    for i = 1, self.batchSize do
-      rankIndices[#rankIndices + 1] = torch.random(samplingRange[i], samplingRange[i+1])
+    local rankIndices = torch.LongTensor(self.batchSize) -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array
+    -- Perform stratified sampling
+    for n = 1, self.batchSize do
+      local index
+      local isValid = false
+
+      -- Generate random index until valid transition found
+      while not isValid do
+        -- Sample within stratum
+        rankIndices[n] = torch.random(self.strataEnds[n] + 1, self.strataEnds[n+1])
+        -- Retrieve actual transition index
+        index = self.priorityQueue:getValueByVal(rankIndices[n])
+        isValid = self:validateTransition(index)
+      end
+
+      -- Store actual transition index
+      self.indices[n] = index
     end
-    -- Retrieve actual transition indices
-    self.indices = torch.LongTensor(self.priorityQueue:getValuesByVal(rankIndices))
-    
-    -- Importance-sampling weights w = (N * p(rank))^-β
-    local beta = math.min(self.betaZero + (self.globals.step - 1)*self.betaGrad, 1)
-    w = torch.Tensor(rankIndices):pow(-self.alpha):mul(N):pow(-beta) -- p(x) = Cx^-α but C is not analytical for α < 1 so this is unnormalised
+
+    -- TODO: Adjust N for precomputed distribution sizes, not actual size
+    -- Compute importance-sampling weights w = (N * p(rank))^-β
+    local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
+    w = self.pdf:index(1, rankIndices):mul(N):pow(-beta)
     -- Find max importance-sampling weight for normalisation
-    local wMax = torch.max(w) -- p(x) was unnormalised so again just use max of sample to normalise
+    local wMax = torch.max(w)
     -- Normalise weights so updates only scale downwards (for stability)
     w:div(wMax) -- Max weight will be 1
 
-  elseif priorityType == 'proportional' then
+  elseif self.memPriority == 'proportional' then
 
     --[[
     -- Calculate sampling probability distribution P
@@ -247,10 +274,7 @@ end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
-  local priorities = delta:clone():float()
-  if self.memPriority == 'proportional' then
-    priorities:abs()
-  end
+  local priorities = delta:clone():float():abs() -- Use absolute values
 
   for p = 1, indices:size(1) do
     self.priorityQueue:updateByVal(indices[p], priorities[p] + self.smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0

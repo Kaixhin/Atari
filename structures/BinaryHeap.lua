@@ -76,12 +76,12 @@ end
 
 -- Returns the maximum priority with value
 function BinaryHeap:findMax()
-  return self.size ~= 0 and self.array[1] or nil
+  return self.size ~= 0 and self.array[1][1] or nil
 end
 
 -- Returns the (approximate) minimum priority with value
 function BinaryHeap:findMin()
-  return self.size ~= 0 and self.array[self.size] or nil
+  return self.size ~= 0 and self.array[self.size][1] or nil
 end
 
 -- Removes and returns the maximum priority with value
@@ -187,6 +187,11 @@ function BinaryHeap:__index(key)
 end
 
 -- Retrieves a value by using the value (using the hash table)
+function BinaryHeap:getValueByVal(hashIndex)
+  return self.hash[hashIndex]
+end
+
+-- Retrieves a list of values by using the value (using the hash table)
 function BinaryHeap:getValuesByVal(hashIndices)
   return _.at(self.hash, unpack(hashIndices))
 end

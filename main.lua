@@ -35,7 +35,7 @@ cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage 
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
 cmd:option('-memNSamples', 1, 'Number of times to sample per learning step')
-cmd:option('-memPriority', 'none', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional')
 cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
 cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
@@ -121,7 +121,6 @@ if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
   log.error('Unrecognised type of prioritised experience replay')
   error('Unrecognised type of prioritised experience replay')
 end
-opt.memPriority = 'none' -- TODO: Remove once other types are supported
 
 -- Check saliency map options
 if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
@@ -210,7 +209,7 @@ else
   opt.epsilonSteps = 1e4
   opt.tau = 40
   opt.steps = 2e5
-  opt.learnStart = 500
+  opt.learnStart = 1e4
   opt.valFreq = 25000
   opt.valSteps = 4800
 end
