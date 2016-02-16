@@ -134,6 +134,12 @@ if opt.memSize % 100 ~= 0 then
   error('memSize must be a multiple of 100')
 end
 
+-- Check learning occurs after first progress report
+if opt.learnStart < opt.progFreq then
+  log.error('learnStart must be greater than progFreq')
+  error('learnStart must be greater than progFreq')
+end
+
 -- Check saliency map options
 if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
   log.error('Unrecognised method for visualising saliency maps')
@@ -204,7 +210,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  env = Catch({level = 1})
+  env = Catch({level = 1, size = 12, playerWidth = 2})
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
@@ -214,16 +220,16 @@ else
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
   -- TODO: Adjust parameters to better suit Catch
-  opt.doubleQ = false
   opt.duel = false
   opt.optimiser = 'adam'
   opt.memSize = 1e4
+  opt.memPriority = 'none'
   opt.epsilonSteps = 1e4
   opt.tau = 40
-  opt.steps = 2e5
-  opt.learnStart = 5e3
-  opt.valFreq = 25000
-  opt.valSteps = 4800
+  opt.steps = 1e5
+  opt.learnStart = 1e4
+  opt.valFreq = 10000
+  opt.valSteps = 3000
 end
 
 

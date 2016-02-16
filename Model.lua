@@ -63,8 +63,6 @@ function Model:create(m)
   else
     net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 16, 5, 5, 2, 2))
     net:add(nn.ReLU(true))
-    net:add(nn.SpatialConvolution(16, 32, 3, 3, 1, 1))
-    net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
   local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
