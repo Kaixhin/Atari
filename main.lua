@@ -41,9 +41,9 @@ cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β'
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
-cmd:option('-epsilonEnd', 0.1, 'Final value of greediness ε') -- Note: Tuned DDQN uses 0.01
+cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned DDQN final greediness (1/10 that of DQN)
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
-cmd:option('-tau', 10000, 'Steps between target net updates τ') -- Note: Tuned DDQN uses 30000
+cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Tuned DDQN target net update interval (3x that of DQN)
 cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable)')
 cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
 cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
