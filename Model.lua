@@ -1,6 +1,7 @@
 local _ = require 'moses'
 local classic = require 'classic'
 local nn = require 'nn'
+local nninit = require 'nninit'
 local image = require 'image'
 local DuelAggregator = require 'modules/DuelAggregator'
 require 'classic.torch' -- Enables serialisation
@@ -21,6 +22,7 @@ function Model:_init(opt)
   self.nChannels = opt.nChannels
   self.histLen = opt.histLen
   self.duel = opt.duel
+  self.bootstraps = opt.bootstraps
   self.ale = opt.ale
 
   -- Get cuDNN if available
@@ -70,6 +72,9 @@ function Model:create(m)
   local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
   net:add(nn.View(convOutputSize))
 
+  -- Network head
+  local head = nn.Sequential()
+  local heads = math.max(self.bootstraps, 1)
   if self.duel then
     -- Value approximator V^(s)
     local valStream = nn.Sequential()
@@ -89,16 +94,40 @@ function Model:create(m)
     streams:add(advStream)
     
     -- Network finishing with fully connected layers
-    net:add(nn.GradientRescale(1 / math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
+    head:add(nn.GradientRescale(1/math.sqrt(2), true)) -- Heuristic that mildly increases stability for duel
     -- Create dueling streams
-    net:add(streams)
+    head:add(streams)
     -- Add dueling streams aggregator module
-    net:add(DuelAggregator(m))
+    head:add(DuelAggregator(m))
   else
-    net:add(nn.Linear(convOutputSize, hiddenSize))
-    net:add(nn.ReLU(true))
-    net:add(nn.Linear(hiddenSize, m)) -- Note: Tuned DDQN uses shared bias at last layer
+    head:add(nn.Linear(convOutputSize, hiddenSize))
+    head:add(nn.ReLU(true))
+    head:add(nn.Linear(hiddenSize, m)) -- Note: Tuned DDQN uses shared bias at last layer
   end
+
+  if self.bootstraps > 0 then
+    -- Add bootstrap heads
+    local headConcat = nn.ConcatTable()
+    for h = 1, heads do
+      -- Clone head structure
+      local bootHead = head:clone()
+      -- Each head should use a different random initialisation to construct bootstrap (currently Torch default)
+      local linearLayers = bootHead:findModules('nn.Linear')
+      for l = 1, #linearLayers do
+        linearLayers[l]:init('weight', nninit.kaiming, {dist = 'uniform', gain = 1/math.sqrt(3)}):init('bias', nninit.kaiming, {dist = 'uniform', gain = 1/math.sqrt(3)})
+      end
+      headConcat:add(bootHead)
+    end
+    net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
+    net:add(headConcat)
+  else
+    -- Add head via ConcatTable (simplifies bootstrap code in agent)
+    local headConcat = nn.ConcatTable()
+    headConcat:add(head)
+    net:add(headConcat)
+  end
+  net:add(nn.JoinTable(1, 1))
+  net:add(nn.View(heads, m))
 
   -- GPU conversion
   if self.gpu > 0 then

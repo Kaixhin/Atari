@@ -31,6 +31,8 @@ cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|l
 -- Agent options
 cmd:option('-histLen', 4, 'Number of consecutive states processed')
 cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
+cmd:option('-bootstraps', 10, 'Number of bootstrap heads (0 to disable)')
+--cmd:option('-bootstrapMask', 1, 'Independent probability of masking a transition for each bootstrap head ~ Ber(bootstrapMask) (1 to disable)')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
@@ -48,7 +50,7 @@ cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable
 cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
 cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
-cmd:option('-PALpha', 0, 'Persistent advantage learning parameter α (0 to disable)') -- TODO: Reset to 0.9 eventually (reasonably incompatible with Duel/PER)
+cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
 cmd:option('-eta', 0.00025/4, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
@@ -123,7 +125,7 @@ if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
 end
 
 -- Check start of learning occurs after at least 1/100 of memory has been filled
-if opt.learnStart < opt.memSize/100 then
+if opt.learnStart <= opt.memSize/100 then
   log.error('learnStart must be greater than memSize/100')
   error('learnStart must be greater than memSize/100')
 end
@@ -216,8 +218,10 @@ else
   -- TODO: Adjust parameters to better suit Catch
   opt.doubleQ = false
   opt.duel = false
+  opt.PALpha = 0
   opt.optimiser = 'adam'
   opt.memSize = 1e4
+  opt.memPriority = 'none'
   opt.epsilonSteps = 1e4
   opt.tau = 40
   opt.steps = 2e5

@@ -83,7 +83,7 @@ function Experience:_init(capacity, opt, isValidation)
     end
   end
 
-  -- Initialise first time step
+  -- Initialise first time step (s0)
   self.states[1]:zero() -- Blank out state
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
