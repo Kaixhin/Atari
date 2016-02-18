@@ -9,6 +9,9 @@ local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 require 'modules/rmspropm' -- Add RMSProp with momentum
 
+-- Detect QT for image display
+local qt = pcall(require, 'qt')
+
 local Agent = classic.class('Agent')
 
 -- Creates a DQN agent
@@ -161,11 +164,27 @@ function Agent:observe(reward, observation, terminal)
     end
   end
 
-  -- TODO: Ensemble during evaluation?
   local aIndex = 1 -- In a terminal state, choose no-op/first action by default
   if not terminal then
-    -- Choose action by ε-greedy exploration
-    if torch.uniform() < epsilon and self.bootstraps == 0 then 
+    if not self.isTraining and self.bootstraps > 0 then
+      -- Retrieve estimates from all heads
+      local QHeads = self.policyNet:forward(state)
+
+      -- Use ensemble policy with bootstrap heads (in evaluation mode)
+      local QHeadsMax, QHeadsMaxInds = QHeads:max(2) -- Find max action per head
+      aIndex = torch.mode(QHeadsMaxInds)
+
+      -- Plot uncertainty in ensemble policy
+      if qt then
+        gnuplot.hist(QHeadsMaxInds, self.m, 0.5, self.m + 0.5)
+      end
+
+      -- Compute saliency
+      if self.saliency ~= 'none' then
+        self:computeSaliency(state, aIndex, true)
+      end
+    elseif torch.uniform() < epsilon then 
+      -- Choose action by ε-greedy exploration (even with bootstraps)
       aIndex = torch.random(1, self.m)
 
       -- Reset saliency if action not chosen by network
@@ -173,8 +192,11 @@ function Agent:observe(reward, observation, terminal)
         self.saliencyMap:zero()
       end
     else
-      -- Sample from current episode head
-      local Qs = self.policyNet:forward(state):select(1, self.head) -- Index on first dimension (no batch)
+      -- Retrieve estimates from all heads
+      local QHeads = self.policyNet:forward(state)
+      
+      -- Sample from current episode head (indexes on first dimension with no batch)
+      local Qs = QHeads:select(1, self.head)
       local maxQ = Qs[1]
       local bestAs = {1}
       -- Find best actions
@@ -191,7 +213,7 @@ function Agent:observe(reward, observation, terminal)
 
       -- Compute saliency
       if self.saliency ~= 'none' then
-        self:computeSaliency(state, aIndex)
+        self:computeSaliency(state, aIndex, false)
       end
     end
   end
@@ -431,13 +453,19 @@ function Agent:setSaliency(saliency)
 end
 
 -- Computes a saliency map (assuming a forward pass of a single state)
-function Agent:computeSaliency(state, index)
+function Agent:computeSaliency(state, index, ensemble)
   -- Switch to possibly special backpropagation
   self.model:salientBackprop()
 
   -- Create artificial high target
   local maxTarget = self.Tensor(self.heads, self.m):fill(0)
-  maxTarget[self.head][index] = 2
+  if ensemble then
+    -- Set target on all heads (when using ensemble policy)
+    maxTarget[{{}, {index}}] = 2
+  else
+    -- Set target on current head
+    maxTarget[self.head][index] = 2
+  end
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)

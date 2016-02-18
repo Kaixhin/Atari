@@ -218,6 +218,7 @@ else
   -- TODO: Adjust parameters to better suit Catch
   opt.doubleQ = false
   opt.duel = false
+  opt.bootstraps = 0
   opt.PALpha = 0
   opt.optimiser = 'adam'
   opt.memSize = 1e4
