@@ -9,6 +9,9 @@ local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 require 'modules/rmspropm' -- Add RMSProp with momentum
 
+-- Detect QT for image display
+local qt = pcall(require, 'qt')
+
 local Agent = classic.class('Agent')
 
 -- Creates a DQN agent
@@ -30,6 +33,11 @@ function Agent:_init(env, opt)
   self.doubleQ = opt.doubleQ
   -- Network parameters θ and gradients dθ
   self.theta, self.dTheta = self.policyNet:getParameters()
+
+  -- Boostrapping
+  self.bootstraps = opt.bootstraps
+  self.head = 1 -- Identity of current episode bootstrap head
+  self.heads = math.max(opt.bootstraps, 1) -- Number of heads
 
   -- Reinforcement learning parameters
   self.gamma = opt.gamma
@@ -60,24 +68,24 @@ function Agent:_init(env, opt)
     momentum = opt.momentum
   }
 
-  -- Q-learning variables
-  self.APrimeMax = opt.Tensor(opt.batchSize, 1)
-  self.APrimeMaxInds = opt.Tensor(opt.batchSize, 1)
-  self.QPrimes = opt.Tensor(opt.batchSize, self.m)
-  self.Y = opt.Tensor(opt.batchSize)
-  self.QCurr = opt.Tensor(opt.batchSize, self.m)
-  self.QTaken = opt.Tensor(opt.batchSize)
-  self.tdErr = opt.Tensor(opt.batchSize)
-  self.Qs = opt.Tensor(opt.batchSize, self.m)
-  self.Q = opt.Tensor(opt.batchSize)
-  self.V = opt.Tensor(opt.batchSize, 1)
-  self.tdErrAL = opt.Tensor(opt.batchSize)
-  self.QPrime = opt.Tensor(opt.batchSize)
-  self.VPrime = opt.Tensor(opt.batchSize, 1)
+  -- Q-learning variables (per head)
+  self.APrimeMax = opt.Tensor(opt.batchSize, self.heads, 1)
+  self.APrimeMaxInds = opt.Tensor(opt.batchSize, self.heads, 1)
+  self.QPrimes = opt.Tensor(opt.batchSize, self.heads, self.m)
+  self.Y = opt.Tensor(opt.batchSize, self.heads)
+  self.QCurr = opt.Tensor(opt.batchSize, self.heads, self.m)
+  self.QTaken = opt.Tensor(opt.batchSize, self.heads)
+  self.tdErr = opt.Tensor(opt.batchSize, self.heads)
+  self.Qs = opt.Tensor(opt.batchSize, self.heads, self.m)
+  self.Q = opt.Tensor(opt.batchSize, self.heads)
+  self.V = opt.Tensor(opt.batchSize, self.heads, 1)
+  self.tdErrAL = opt.Tensor(opt.batchSize, self.heads)
+  self.QPrime = opt.Tensor(opt.batchSize, self.heads)
+  self.VPrime = opt.Tensor(opt.batchSize, self.heads, 1)
 
   -- Validation variables
   self.valSize = opt.valSize
-  self.valMemory = Experience(opt.valSize, opt, true) -- Validation experience replay memory
+  self.valMemory = Experience(opt.valSize + 3, opt, true) -- Validation experience replay memory (with empty starting state...states...final transition...blank state)
   self.losses = {}
   self.avgV = {} -- Running average of V(s')
   self.avgTdErr = {} -- Running average of TD-error δ
@@ -104,6 +112,10 @@ function Agent:training()
   self.policyNet:training()
   -- Clear state buffer
   self.stateBuffer:clear()
+  -- Reset bootstrap head
+  if self.bootstraps > 0 then
+    self.head = torch.random(self.bootstraps)
+  end
 end
 
 -- Sets evaluation mode
@@ -114,6 +126,10 @@ function Agent:evaluate()
   self.stateBuffer:clear()
   -- Set previously stored state as invalid (as no transition stored)
   self.memory:setInvalid()
+  -- Reset bootstrap head
+  if self.bootstraps > 0 then
+    self.head = torch.random(self.bootstraps)
+  end
 end
   
 -- Observes the results of the previous transition and chooses the next action to perform
@@ -148,10 +164,27 @@ function Agent:observe(reward, observation, terminal)
     end
   end
 
-  -- Choose action by ε-greedy exploration
   local aIndex = 1 -- In a terminal state, choose no-op/first action by default
   if not terminal then
-    if torch.uniform() < epsilon then 
+    if not self.isTraining and self.bootstraps > 0 then
+      -- Retrieve estimates from all heads
+      local QHeads = self.policyNet:forward(state)
+
+      -- Use ensemble policy with bootstrap heads (in evaluation mode)
+      local QHeadsMax, QHeadsMaxInds = QHeads:max(2) -- Find max action per head
+      aIndex = torch.mode(QHeadsMaxInds)
+
+      -- Plot uncertainty in ensemble policy
+      if qt then
+        gnuplot.hist(QHeadsMaxInds, self.m, 0.5, self.m + 0.5)
+      end
+
+      -- Compute saliency
+      if self.saliency ~= 'none' then
+        self:computeSaliency(state, aIndex, true)
+      end
+    elseif torch.uniform() < epsilon then 
+      -- Choose action by ε-greedy exploration (even with bootstraps)
       aIndex = torch.random(1, self.m)
 
       -- Reset saliency if action not chosen by network
@@ -159,8 +192,11 @@ function Agent:observe(reward, observation, terminal)
         self.saliencyMap:zero()
       end
     else
-      -- Evaluate state
-      local Qs = self.policyNet:forward(state)
+      -- Retrieve estimates from all heads
+      local QHeads = self.policyNet:forward(state)
+      
+      -- Sample from current episode head (indexes on first dimension with no batch)
+      local Qs = QHeads:select(1, self.head)
       local maxQ = Qs[1]
       local bestAs = {1}
       -- Find best actions
@@ -177,7 +213,7 @@ function Agent:observe(reward, observation, terminal)
 
       -- Compute saliency
       if self.saliency ~= 'none' then
-        self:computeSaliency(state, aIndex)
+        self:computeSaliency(state, aIndex, false)
       end
     end
   end
@@ -185,10 +221,10 @@ function Agent:observe(reward, observation, terminal)
   -- If training
   if self.isTraining then
     -- Store experience tuple parts (including pre-emptive action)
-    self.memory:store(reward, observation, terminal, aIndex)
+    self.memory:store(reward, observation, terminal, aIndex) -- TODO Sample independent Bernoulli(p) bootstrap masks for all heads; p = 1 means no masks needed
 
     -- Collect validation transitions at the start
-    if self.globals.step <= self.valSize then -- TODO: Collect enough *valid* transitions
+    if self.globals.step <= self.valSize + 1 then
       self.valMemory:store(reward, observation, terminal, aIndex)
     end
 
@@ -207,6 +243,11 @@ function Agent:observe(reward, observation, terminal)
     end
   end
 
+  -- Change bootstrap head for next episode
+  if terminal and self.bootstraps > 0 then
+    self.head = torch.random(self.bootstraps)
+  end
+
   -- Return action index with offset applied
   return aIndex - self.actionOffset
 end
@@ -222,35 +263,36 @@ function Agent:learn(x, indices, ISWeights)
 
   -- Retrieve experience tuples
   local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
+  local N = indices:size(1) -- Batch size (experience replay memory uses fixed size buffer)
 
   -- Perform argmax action selection
   if self.doubleQ then
     -- Calculate Q-values from transition using policy network
     self.QPrimes = self.policyNet:forward(transitions) -- Find argmax actions using policy network
     -- Perform argmax action selection on transition using policy network: argmax_a[Q(s', a; θpolicy)]
-    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 2)
+    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 3)
     -- Calculate Q-values from transition using target network
     self.QPrimes = self.targetNet:forward(transitions) -- Evaluate Q-values of argmax actions using target network
   else
     -- Calculate Q-values from transition using target network
     self.QPrimes = self.targetNet:forward(transitions) -- Find and evaluate Q-values of argmax actions using target network
     -- Perform argmax action selection on transition using target network: argmax_a[Q(s', a; θtarget)]
-    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 2)
+    self.APrimeMax, self.APrimeMaxInds = torch.max(self.QPrimes, 3)
   end
 
   -- Initially set target Y = Q(s', argmax_a[Q(s', a; θ)]; θtarget), where initial θ is either θtarget (DQN) or θpolicy (DDQN)
-  for n = 1, self.batchSize do
+  for n = 1, N do
     self.QPrimes[n]:mul(1 - terminals[n]) -- Zero Q(s' a) when s' is terminal
-    self.Y[n] = self.QPrimes[n][self.APrimeMaxInds[n][1]]
+    self.Y[n] = self.QPrimes[n]:gather(2, self.APrimeMaxInds[n])
   end
   -- Calculate target Y := r + γ.Q(s', argmax_a[Q(s', a; θ)]; θtarget)
-  self.Y:mul(self.gamma):add(rewards)
+  self.Y:mul(self.gamma):add(rewards:repeatTensor(1, self.heads))
 
   -- Get all predicted Q-values from the current state
   self.QCurr = self.policyNet:forward(states) -- Correct internal state of policy network before backprop
   -- Get prediction of current Q-values with given actions
-  for n = 1, self.batchSize do
-    self.QTaken[n] = self.QCurr[n][actions[n]]
+  for n = 1, N do
+    self.QTaken[n] = self.QCurr[n][{{}, {actions[n]}}]
   end
 
   -- Calculate TD-errors δ := ∆Q(s, a) = Y − Q(s, a)
@@ -260,22 +302,22 @@ function Agent:learn(x, indices, ISWeights)
   if self.PALpha > 0 then
     -- Calculate Q(s, a) and V(s) using target network
     self.Qs = self.targetNet:forward(states)
-    for n = 1, self.batchSize do
-      self.Q[n] = self.Qs[n][actions[n]]
+    for n = 1, N do
+      self.Q[n] = self.Qs[n][{{}, {actions[n]}}]
     end
-    self.V = torch.max(self.Qs, 2) -- Current states cannot be terminal
+    self.V = torch.max(self.Qs, 3) -- Current states cannot be terminal
 
     -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
     self.tdErrAL = self.tdErr - self.V:add(-self.Q):mul(self.PALpha) -- TODO: Torch.CudaTensor:csub is missing
 
     -- Calculate Q(s', a) and V(s') using target network
-    for n = 1, self.batchSize do
-      self.QPrime[n] = self.QPrimes[n][actions[n]]
+    for n = 1, N do
+      self.QPrime[n] = self.QPrimes[n][{{}, {actions[n]}}]
     end
-    self.VPrime = torch.max(self.QPrimes, 2)
+    self.VPrime = torch.max(self.QPrimes, 3)
 
     -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-    self.tdErr = torch.max(torch.cat(self.tdErrAL, self.tdErr:add(-(self.VPrime:add(-self.QPrime):mul(self.PALpha))), 2), 2):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
+    self.tdErr = torch.max(torch.cat(self.tdErrAL, self.tdErr:add(-(self.VPrime:add(-self.QPrime):mul(self.PALpha))), 3), 3):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
   end
 
   -- Calculate loss
@@ -284,23 +326,23 @@ function Agent:learn(x, indices, ISWeights)
     -- Squared loss is used within clipping range, absolute loss is used outside (approximates Huber loss)
     local sqLoss = torch.cmin(torch.abs(self.tdErr), self.tdClip)
     local absLoss = torch.abs(self.tdErr) - sqLoss
-    loss = torch.mean(sqLoss:pow(2):mul(0.5):add(absLoss:mul(self.tdClip)))
+    loss = torch.mean(sqLoss:pow(2):mul(0.5):add(absLoss:mul(self.tdClip))) -- Average over heads
 
     -- Clip TD-errors δ
     self.tdErr:clamp(-self.tdClip, self.tdClip)
   else
     -- Squared loss
-    loss = torch.mean(self.tdErr:clone():pow(2):mul(0.5))
+    loss = torch.mean(self.tdErr:clone():pow(2):mul(0.5)) -- Average over heads
   end
   -- Send TD-errors δ to be used as priorities
-  self.memory:updatePriorities(indices, self.tdErr)
+  self.memory:updatePriorities(indices, torch.mean(self.tdErr, 2)) -- Use average error over heads
   
   -- Zero QCurr outputs (no error)
   self.QCurr:zero()
   -- Set TD-errors δ with given actions
-  for n = 1, self.batchSize do
+  for n = 1, N do
      -- Correct prioritisation bias with importance-sampling weights
-    self.QCurr[n][actions[n]] = ISWeights[n] * -self.tdErr[n] -- Negate target to use gradient descent (not ascent) optimisers
+    self.QCurr[n][{{}, {actions[n]}}] = torch.mul(-self.tdErr[n], ISWeights[n]) -- Negate target to use gradient descent (not ascent) optimisers
   end
 
   -- Backpropagate (network accumulates gradients internally)
@@ -338,10 +380,10 @@ function Agent:report()
   -- Loop over validation transitions
   local nBatches = math.ceil(self.valSize / self.batchSize)
   local ISWeights = self.Tensor(self.batchSize):fill(1)
-  local startIndex, endIndex, batchSize, indices -- TODO: Use indices for *valid* validation transitions
+  local startIndex, endIndex, batchSize, indices
   for n = 1, nBatches do
-    startIndex = (n - 1)*self.batchSize + 1
-    endIndex = n*self.batchSize
+    startIndex = (n - 1)*self.batchSize + 2
+    endIndex = math.min(n*self.batchSize + 1, self.valSize + 1)
     batchSize = endIndex - startIndex + 1
     indices = torch.linspace(startIndex, endIndex, batchSize):long()
 
@@ -350,23 +392,26 @@ function Agent:report()
 
     -- Calculate V(s') and TD-error δ
     if self.PALpha == 0 then
-      self.VPrime = torch.max(self.QPrimes, 2)
+      self.VPrime = torch.max(self.QPrimes, 3)
     end
-    totalV = totalV + torch.sum(self.VPrime)
-    totalTdErr = totalTdErr + torch.abs(self.tdErr):sum()
+    -- Average over heads
+    totalV = totalV + torch.mean(self.VPrime:narrow(1, 1, batchSize), 2):sum()
+    totalTdErr = totalTdErr + torch.mean(self.tdErr:narrow(1, 1, batchSize), 2):abs():sum()
   end
 
   -- Average and insert values
   self.avgV[#self.avgV + 1] = totalV / self.valSize
   self.avgTdErr[#self.avgTdErr + 1] = totalTdErr / self.valSize
 
-  -- TODO Reduce memory consumption for gnuplot
+  -- TODO: Reduce memory consumption for gnuplot
   -- Plot losses
-  gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
-  gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
-  gnuplot.xlabel('Step (x' .. self.progFreq .. ')')
-  gnuplot.ylabel('Loss')
-  gnuplot.plotflush()
+  if #self.losses > 0 then
+    gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
+    gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
+    gnuplot.xlabel('Step (x' .. self.progFreq .. ')')
+    gnuplot.ylabel('Loss')
+    gnuplot.plotflush()
+  end
   -- Plot V
   local epochIndices = torch.linspace(1, #self.avgV, #self.avgV)
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'Vs.png'))
@@ -408,13 +453,19 @@ function Agent:setSaliency(saliency)
 end
 
 -- Computes a saliency map (assuming a forward pass of a single state)
-function Agent:computeSaliency(state, index)
+function Agent:computeSaliency(state, index, ensemble)
   -- Switch to possibly special backpropagation
   self.model:salientBackprop()
 
   -- Create artificial high target
-  local maxTarget = self.Tensor(self.m):fill(0)
-  maxTarget[index] = 2
+  local maxTarget = self.Tensor(self.heads, self.m):fill(0)
+  if ensemble then
+    -- Set target on all heads (when using ensemble policy)
+    maxTarget[{{}, {index}}] = 2
+  else
+    -- Set target on current head
+    maxTarget[self.head][index] = 2
+  end
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
