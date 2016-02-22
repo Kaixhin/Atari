@@ -56,7 +56,7 @@ function Model:create(m)
   local net = nn.Sequential()
   net:add(nn.View(self.histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
-    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 8, 8, 4, 4))
+    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
     net:add(nn.ReLU(true))
