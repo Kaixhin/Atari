@@ -172,7 +172,7 @@ function Agent:observe(reward, observation, terminal)
 
       -- Use ensemble policy with bootstrap heads (in evaluation mode)
       local QHeadsMax, QHeadsMaxInds = QHeads:max(2) -- Find max action per head
-      aIndex = torch.mode(QHeadsMaxInds:float()) -- TODO: Torch.CudaTensor:mode is missing
+      aIndex = torch.mode(QHeadsMaxInds:float(), 1)[1] -- TODO: Torch.CudaTensor:mode is missing
 
       -- Plot uncertainty in ensemble policy
       if qt then
