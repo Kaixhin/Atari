@@ -172,7 +172,7 @@ function Agent:observe(reward, observation, terminal)
 
       -- Use ensemble policy with bootstrap heads (in evaluation mode)
       local QHeadsMax, QHeadsMaxInds = QHeads:max(2) -- Find max action per head
-      aIndex = torch.mode(QHeadsMaxInds)
+      aIndex = torch.mode(QHeadsMaxInds:float()) -- TODO: Torch.CudaTensor:mode is missing
 
       -- Plot uncertainty in ensemble policy
       if qt then
@@ -221,7 +221,7 @@ function Agent:observe(reward, observation, terminal)
   -- If training
   if self.isTraining then
     -- Store experience tuple parts (including pre-emptive action)
-    self.memory:store(reward, observation, terminal, aIndex) -- TODO Sample independent Bernoulli(p) bootstrap masks for all heads; p = 1 means no masks needed
+    self.memory:store(reward, observation, terminal, aIndex) -- TODO: Sample independent Bernoulli(p) bootstrap masks for all heads; p = 1 means no masks needed
 
     -- Collect validation transitions at the start
     if self.globals.step <= self.valSize + 1 then
