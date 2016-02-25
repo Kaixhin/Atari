@@ -158,9 +158,9 @@ function Experience:retrieve(indices)
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
-    until histIndex == 0 or self.terminals[memIndex] == 1
+    until histIndex == 0 or self.terminals[memIndex] == 1 or self.invalid[memIndex] == 1
 
-    -- If transition not terminal, fill in transition history
+    -- If transition not terminal, fill in transition history (invalid states should not be selected in the first place)
     if self.transTuples.terminals[n] == 0 then
       -- Copy most recent state
       for h = 2, self.histLen do
@@ -177,17 +177,10 @@ end
 
 -- Determines if an index points to a valid transition state
 function Experience:validateTransition(index)
-  -- Check history is valid
-  for h = index - self.histLen + 1, index do
-    if self.invalid[self:circIndex(h)] == 1 then
-      return false
-    end
-  end
-
   -- Calculate beginning of state and end of transition for checking overlap with head of buffer
   local minIndex, maxIndex = index - self.histLen, self:circIndex(index + 1)
-  -- State must not be terminal, plus cannot overlap with head of buffer
-  return self.terminals[index] == 0 and (self.index <= minIndex or self.index >= maxIndex)
+  -- State must not be terminal, invalid, or overlap with head of buffer
+  return self.terminals[index] == 0 and self.invalid[index] == 0 and (self.index <= minIndex or self.index >= maxIndex)
 end
 
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
@@ -250,32 +243,8 @@ function Experience:sample()
     w:div(wMax) -- Max weight will be 1
 
   elseif self.memPriority == 'proportional' then
-
-    --[[
-    -- Calculate sampling probability distribution P
-    local P = torch.pow(self.priorities[{{1, N}}], self.alpha) -- Use prioritised experience replay exponent α
-    local Z = torch.sum(P) -- Calculate normalisation constant
-    P:div(Z) -- Normalise
-
-    -- Calculate importance-sampling weights w
-    local beta = math.min(self.betaZero + (self.globals.step - 1)*self.betaGrad, 1)
-    w = torch.mul(P, N):pow(-beta) -- Use importance-sampling exponent β
-    w:div(torch.max(w)) -- Normalise weights so updates only scale downwards (for stability)
-
-    -- Create a cumulative distribution for inverse transform sampling
-    pdfToCdf(P) -- Convert distribution
-    self.indices = torch.sort(torch.Tensor(nSamples):uniform()) -- Generate uniform numbers for sampling
-    -- Perform linear search to sample
-    local minIndex = 1
-    for i = 1, nSamples do
-      while indices[i] > P[minIndex] do
-        minIndex = minIndex + 1
-      end
-      indices[i] = minIndex -- Get sampled index
-    end
-    indices = indices:long() -- Convert to LongTensor for indexing
-    w = w:index(1, indices) -- Index weights
-    --]]
+  
+    -- TODO: Proportional prioritised experience replay
 
   end
 
