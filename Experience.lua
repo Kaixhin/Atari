@@ -135,13 +135,13 @@ end
 
 -- Retrieves experience tuples (s, a, r, s', t)
 function Experience:retrieve(indices)
-  local batchSize = indices:size(1)
+  local N = indices:size(1)
   -- Blank out history in one go
   self.transTuples.states:zero()
   self.transTuples.transitions:zero()
 
   -- Iterate over indices
-  for n = 1, batchSize do
+  for n = 1, N do
     local memIndex = indices[n]
     -- Retrieve action
     self.transTuples.actions[n] = self.actions[memIndex]
@@ -172,7 +172,7 @@ function Experience:retrieve(indices)
     end
   end
 
-  return self.transTuples.states, self.transTuples.actions, self.transTuples.rewards, self.transTuples.transitions, self.transTuples.terminals
+  return self.transTuples.states[{{1, N}}], self.transTuples.actions[{{1, N}}], self.transTuples.rewards[{{1, N}}], self.transTuples.transitions[{{1, N}}], self.transTuples.terminals[{{1, N}}]
 end
 
 -- Determines if an index points to a valid transition state
