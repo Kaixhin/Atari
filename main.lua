@@ -212,7 +212,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  env = Catch({level = 1, size = 12, playerWidth = 2})
+  env = Catch({level = 1})
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
@@ -221,19 +221,17 @@ else
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
 
-  -- TODO: Adjust parameters to better suit Catch
-  opt.duel = false
+  -- Adjust parameters to better suit Catch
   opt.bootstraps = 0
   opt.PALpha = 0
   opt.optimiser = 'adam'
   opt.memSize = 1e4
-  opt.memPriority = 'none'
   opt.epsilonSteps = 1e4
   opt.tau = 40
   opt.steps = 1e5
   opt.learnStart = 1e4
   opt.valFreq = 10000
-  opt.valSteps = 3000
+  opt.valSteps = 6000
 end
 
 

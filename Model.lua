@@ -63,7 +63,9 @@ function Model:create(m)
     net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
     net:add(nn.ReLU(true))
   else
-    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 16, 5, 5, 2, 2))
+    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 5, 5, 2, 2, 1, 1))
+    net:add(nn.ReLU(true))
+    net:add(nn.SpatialConvolution(32, 32, 5, 5, 2, 2))
     net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size

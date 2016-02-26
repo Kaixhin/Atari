@@ -312,7 +312,7 @@ function Agent:learn(x, indices, ISWeights)
     self.VPrime = torch.max(self.QPrimes, 3)
 
     -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-    self.tdErr = torch.max(torch.cat(tdErrAL, self.tdErr:add(-(self.VPrime:add(-QPrime):mul(self.PALpha))), 3), 3):squeeze() -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
+    self.tdErr = torch.max(torch.cat(tdErrAL, self.tdErr:add(-(self.VPrime:add(-QPrime):mul(self.PALpha))), 3), 3):view(N, 1) -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
   end
 
   -- Calculate loss
