@@ -24,9 +24,6 @@ function Model:_init(opt)
   self.duel = opt.duel
   self.bootstraps = opt.bootstraps
   self.ale = opt.ale
-
-  -- Get cuDNN if available
-  self.hasCudnn = pcall(require, 'cudnn')
 end
 
 -- Processes a single frame for DQN input
@@ -132,9 +129,6 @@ function Model:create(m)
   -- GPU conversion
   if self.gpu > 0 then
     require 'cunn'
-    if self.hasCudnn then
-      cudnn.convert(net, cudnn)
-    end
     net:cuda()
   end
 
@@ -148,10 +142,8 @@ end
 function Model:getFilters()
   local filters = {}
 
-  -- nn vs. cuDNN backend
-  local backend = (self.gpu > 0 and self.hasCudnn) and 'cudnn' or 'nn'
   -- Find convolutional layers
-  local convs = self.net:findModules(backend .. '.SpatialConvolution')
+  local convs = self.net:findModules('nn.SpatialConvolution')
   for i, v in ipairs(convs) do
     -- Add filter to list (with each layer on a separate row)
     filters[#filters + 1] = image.toDisplayTensor(v.weight:view(v.nOutputPlane*v.nInputPlane, v.kH, v.kW), 1, v.nInputPlane, true)
@@ -168,9 +160,6 @@ function Model:setSaliency(saliency)
   -- Find ReLUs on existing model
   local relus, relucontainers = self.net:findModules('nn.ReLU')
   if #relus == 0 then
-    relus, relucontainers = self.net:findModules('cudnn.ReLU')
-  end
-  if #relus == 0 then
     relus, relucontainers = self.net:findModules('nn.GuidedReLU')
   end
   if #relus == 0 then
@@ -178,7 +167,7 @@ function Model:setSaliency(saliency)
   end
 
   -- Work out which ReLU to use now
-  local layerConstructor = (self.gpu > 0 and self.hasCudnn) and cudnn.ReLU or nn.ReLU
+  local layerConstructor = nn.ReLU
   self.relus = {} --- Clear special ReLU list to iterate over for salient backpropagation
   if saliency == 'guided' then
     layerConstructor = nn.GuidedReLU
