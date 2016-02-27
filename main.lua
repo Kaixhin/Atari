@@ -182,13 +182,13 @@ local globals = Singleton({step = 1}) -- Initial step
 
 -- Computes saliency map for display
 local createSaliencyMap = function(state, agent)
-  local screen = state
+  local screen
   
   -- Convert Catch screen to RGB
   if opt.game == 'catch' then
     screen = torch.repeatTensor(state, 3, 1, 1)
   else
-    screen = screen:select(1, 1)
+    screen = state:select(1, 1):clone()
   end
 
   -- Use red channel for saliency map
@@ -212,7 +212,7 @@ if opt.ale then
   opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
-  env = Catch({level = 1})
+  env = Catch()
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
@@ -227,8 +227,8 @@ else
   opt.optimiser = 'adam'
   opt.memSize = 1e4
   opt.epsilonSteps = 1e4
-  opt.tau = 40
-  opt.steps = 1e5
+  opt.tau = 4
+  opt.steps = 5e5
   opt.learnStart = 1e4
   opt.valFreq = 10000
   opt.valSteps = 6000

@@ -477,7 +477,8 @@ end
 
 -- Loads network parameters θ
 function Agent:loadWeights(path)
-  self.theta = torch.load(path)
+  local weights = torch.load(path)
+  self.theta:copy(weights)
   self.targetNet = self.policyNet:clone()
   self.targetNet:evaluate()
 end
