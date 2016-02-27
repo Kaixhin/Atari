@@ -472,7 +472,7 @@ end
 
 -- Saves the network parameters θ
 function Agent:saveWeights(path)
-  torch.save(path, self.theta)
+  torch.save(path, self.theta:float()) -- Do not save as CudaTensor to increase compatibility
 end
 
 -- Loads network parameters θ
