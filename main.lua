@@ -220,18 +220,6 @@ else
 
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
-
-  -- Adjust parameters to better suit Catch
-  opt.bootstraps = 0
-  opt.PALpha = 0
-  opt.optimiser = 'adam'
-  opt.memSize = 1e4
-  opt.epsilonSteps = 1e4
-  opt.tau = 4
-  opt.steps = 5e5
-  opt.learnStart = 1e4
-  opt.valFreq = 10000
-  opt.valSteps = 6000
 end
 
 
