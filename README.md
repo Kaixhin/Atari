@@ -6,7 +6,11 @@ Prioritised experience replay [[1]](#references) persistent advantage learning [
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[8]](#references), optionally using guided [[9]](#references) or "deconvnet" [[10]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
-To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. For more details see the script itself.
+To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. For more details see the script itself. By default the code trains on a demo environment called Catch - good parameters are as follows:
+
+```sh
+th main.lua -optimiser adam -steps 5e5 -learnStart 1e4 -tau 4 -memSize 1e4 -epsilonSteps 1e4 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0
+```
 
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 
