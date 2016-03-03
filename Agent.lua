@@ -302,7 +302,7 @@ function Agent:learn(x, indices, ISWeights)
     local V = torch.max(Qs, 3) -- Current states cannot be terminal
 
     -- Calculate Advantage Learning update ∆ALQ(s, a) := δ − αPAL(V(s) − Q(s, a))
-    local tdErrAL = self.tdErr - V:add(-Q):mul(self.PALpha) -- TODO: Torch.CudaTensor:csub is missing
+    local tdErrAL = self.tdErr - V:csub(Q):mul(self.PALpha)
 
     -- Calculate Q(s', a) and V(s') using target network
     local QPrime = self.Tensor(N, self.heads)
@@ -312,7 +312,7 @@ function Agent:learn(x, indices, ISWeights)
     self.VPrime = torch.max(self.QPrimes, 3)
 
     -- Calculate Persistent Advantage Learning update ∆PALQ(s, a) := max[∆ALQ(s, a), δ − αPAL(V(s') − Q(s', a))]
-    self.tdErr = torch.max(torch.cat(tdErrAL, self.tdErr:add(-(self.VPrime:add(-QPrime):mul(self.PALpha))), 3), 3):view(N, 1) -- tdErrPAL TODO: Torch.CudaTensor:csub is missing
+    self.tdErr = torch.max(torch.cat(tdErrAL, self.tdErr:csub((self.VPrime:csub(QPrime):mul(self.PALpha))), 3), 3):view(N, 1)
   end
 
   -- Calculate loss
