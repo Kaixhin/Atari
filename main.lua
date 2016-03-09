@@ -13,6 +13,12 @@ require 'logroll'
 local qt = pcall(require, 'qt')
 -- Detect and use GPU 1 by default
 local cuda = pcall(require, 'cutorch')
+-- Create log10 for Lua 5.2
+if not math.log10 then
+  math.log10 = function(x)
+    return math.log(x, 10)
+  end
+end
 
 local cmd = torch.CmdLine()
 -- Base Torch7 options
