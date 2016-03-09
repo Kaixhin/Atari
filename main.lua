@@ -215,14 +215,14 @@ if opt.ale then
   stateSpec = env:getStateSpec()
 
   -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
   env = Catch()
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
 
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
