@@ -6,19 +6,21 @@ if [ -z "$1" ]; then
   echo "Choices: nature|doubleq|duel|prioritised|persistent|bootstrap"
   echo "Alternative choice: demo (for Catch)"
   exit 0
+else
+  PAPER=$1
+  shift
 fi
 
 # Specify game
-if [ "$1" != "demo" ] && [ -z "$2" ]; then
-  echo "Please enter game, e.g. ./run nature breakout"
-  exit 0
+if [ "$PAPER" != "demo" ]; then
+  if [ -z "$1" ]; then
+    echo "Please enter game, e.g. ./run nature breakout"
+    exit 0
+  else
+    GAME=$2
+    shift
+  fi
 fi
-
-# Reassign and remove first 2 arguments from $@
-PAPER=$1
-GAME=$2
-shift
-shift
 
 if [ "$PAPER" == "demo" ]; then
   # Catch demo
