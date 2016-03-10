@@ -65,6 +65,7 @@ cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- 
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
 -- ALEWrap options
+cmd:option('-fullActions', 'false', 'Use full set of 18 actions')
 cmd:option('-actRep', 4, 'Times to repeat action') -- Independent of history length
 cmd:option('-randomStarts', 30, 'Max number of no-op actions played before presenting the start of each training episode')
 cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
@@ -80,6 +81,7 @@ local opt = cmd:parse(arg)
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
+opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
 
