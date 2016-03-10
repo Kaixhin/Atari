@@ -193,7 +193,7 @@ end
 
 -- Retrieves a list of values by using the value (using the hash table)
 function BinaryHeap:getValuesByVal(hashIndices)
-  return _.at(self.hash, unpack(hashIndices))
+  return _.at(self.hash, table.unpack(hashIndices))
 end
 
 return BinaryHeap

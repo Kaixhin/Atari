@@ -4,22 +4,28 @@
 if [ -z "$1" ]; then
   echo "Please enter paper, e.g. ./run nature"
   echo "Choices: nature|doubleq|duel|prioritised|persistent|bootstrap"
+  echo "Alternative choice: demo (for Catch)"
   exit 0
+else
+  PAPER=$1
+  shift
 fi
 
 # Specify game
-if [ -z "$2" ]; then
-  echo "Please enter game, e.g. ./run nature breakout"
-  exit 0
+if [ "$PAPER" != "demo" ]; then
+  if [ -z "$1" ]; then
+    echo "Please enter game, e.g. ./run nature breakout"
+    exit 0
+  else
+    GAME=$2
+    shift
+  fi
 fi
 
-# Reassign and remove first 2 arguments from $@
-PAPER=$1
-GAME=$2
-shift
-shift
-
-if [ "$PAPER" == "nature" ]; then
+if [ "$PAPER" == "demo" ]; then
+  # Catch demo
+  th main.lua -optimiser adam -steps 500000 -learnStart 10000 -tau 4 -memSize 10000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
+elif [ "$PAPER" == "nature" ]; then
   # Nature
   th main.lua -game $GAME -duel false -bootstraps 0 -memPriority none -epsilonEnd 0.1 -tau 10000 -doubleQ false -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
 elif [ "$PAPER" == "doubleq" ]; then
@@ -27,7 +33,7 @@ elif [ "$PAPER" == "doubleq" ]; then
   th main.lua -game $GAME -duel false -bootstraps 0 -memPriority none -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
 elif [ "$PAPER" == "duel" ]; then
   # Duel (eta is apparently lower but not specified in paper; unclear whether DDQN or tuned DDQN parameters are used)
-  th main.lua -game $GAME -bootstraps 0 -memPriority none -PALpha 0 -eta 0.000125 "$@"
+  th main.lua -game $GAME -bootstraps 0 -memPriority none -PALpha 0 -eta 0.00025 "$@"
 elif [ "$PAPER" == "prioritised" ]; then
   # Prioritised
   th main.lua -game $GAME -duel false -bootstraps 0 -PALpha 0 -gradClip 0 "$@"

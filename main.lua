@@ -13,6 +13,12 @@ require 'logroll'
 local qt = pcall(require, 'qt')
 -- Detect and use GPU 1 by default
 local cuda = pcall(require, 'cutorch')
+-- Create log10 for Lua 5.2
+if not math.log10 then
+  math.log10 = function(x)
+    return math.log(x, 10)
+  end
+end
 
 local cmd = torch.CmdLine()
 -- Base Torch7 options
@@ -211,14 +217,14 @@ if opt.ale then
   stateSpec = env:getStateSpec()
 
   -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
 else
   local Catch = require 'rlenvs.Catch'
   env = Catch()
   stateSpec = env:getStateSpec()
   
   -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = unpack(stateSpec[2])
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
 
   -- Adjust height and width
   opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
