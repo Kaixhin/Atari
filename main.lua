@@ -59,7 +59,7 @@ cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
 -- Training options
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
-cmd:option('-eta', 0.00025/4, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
+cmd:option('-eta', 0.0000625, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
