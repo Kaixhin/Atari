@@ -1,4 +1,4 @@
-#/bin/bash
+#!/bin/bash
 
 # Specify paper/hyperparameters
 if [ -z "$1" ]; then
