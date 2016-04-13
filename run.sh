@@ -20,7 +20,7 @@ if [ "$PAPER" != "demo" ]; then
     echo "Please enter game, e.g. ./run nature breakout"
     exit 0
   else
-    GAME=$2
+    GAME=$1
     shift
   fi
 fi
