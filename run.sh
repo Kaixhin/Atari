@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Switch to script directory
+cd `dirname -- "$0"`
+
 # Specify paper/hyperparameters
 if [ -z "$1" ]; then
   echo "Please enter paper, e.g. ./run nature"
