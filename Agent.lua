@@ -399,35 +399,43 @@ function Agent:report()
   self.avgTdErr[#self.avgTdErr + 1] = totalTdErr / self.valSize
 
   -- TODO: Reduce memory consumption for gnuplot
-  -- Plot losses
+  -- Plot and save losses
   if #self.losses > 0 then
+    local losses = torch.Tensor(self.losses)
     gnuplot.pngfigure(paths.concat('experiments', self._id, 'losses.png'))
-    gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), torch.Tensor(self.losses), '-')
+    gnuplot.plot('Loss', torch.linspace(math.floor(self.learnStart/self.progFreq), math.floor(self.globals.step/self.progFreq), #self.losses), losses, '-')
     gnuplot.xlabel('Step (x' .. self.progFreq .. ')')
     gnuplot.ylabel('Loss')
     gnuplot.plotflush()
+    torch.save(paths.concat('experiments', self._id, 'losses.t7'), losses)
   end
-  -- Plot V
+  -- Plot and save V
   local epochIndices = torch.linspace(1, #self.avgV, #self.avgV)
+  local Vs = torch.Tensor(self.avgV)
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'Vs.png'))
-  gnuplot.plot('V', epochIndices, torch.Tensor(self.avgV), '-')
+  gnuplot.plot('V', epochIndices, Vs, '-')
   gnuplot.xlabel('Epoch')
   gnuplot.ylabel('V')
   gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
-  -- Plot TD-error δ
+  torch.save(paths.concat('experiments', self._id, 'V.t7'), Vs)
+  -- Plot and save TD-error δ
+  local TDErrors = torch.Tensor(self.avgTdErr)
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'TDErrors.png'))
-  gnuplot.plot('TD-Error', epochIndices, torch.Tensor(self.avgTdErr), '-')
+  gnuplot.plot('TD-Error', epochIndices, TDErrors, '-')
   gnuplot.xlabel('Epoch')
   gnuplot.ylabel('TD-Error')
   gnuplot.plotflush()
-  -- Plot average score
+  torch.save(paths.concat('experiments', self._id, 'TDErrors.t7'), TDErrors)
+  -- Plot and save average score
+  local scores = torch.Tensor(self.valScores)
   gnuplot.pngfigure(paths.concat('experiments', self._id, 'scores.png'))
-  gnuplot.plot('Score', epochIndices, torch.Tensor(self.valScores), '-')
+  gnuplot.plot('Score', epochIndices, scores, '-')
   gnuplot.xlabel('Epoch')
   gnuplot.ylabel('Average Score')
   gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
+  torch.save(paths.concat('experiments', self._id, 'scores.t7'), scores)
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
 end
