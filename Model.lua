@@ -5,6 +5,7 @@ local nninit = require 'nninit'
 local image = require 'image'
 local DuelAggregator = require 'modules/DuelAggregator'
 require 'classic.torch' -- Enables serialisation
+require 'rnn'
 require 'dpnn' -- Adds gradParamClip method
 require 'modules/GuidedReLU'
 require 'modules/DeconvnetReLU'
@@ -23,6 +24,7 @@ function Model:_init(opt)
   self.histLen = opt.histLen
   self.duel = opt.duel
   self.bootstraps = opt.bootstraps
+  self.recurrent = opt.recurrent
   self.ale = opt.ale
 end
 
@@ -48,25 +50,27 @@ end
 function Model:create(m)
   -- Size of fully connected layers
   local hiddenSize = self.ale and 512 or 32
+  -- Number of input frames for recurrent networks is always 1
+  local histLen = self.recurrent and 1 or self.histLen
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
-  net:add(nn.View(self.histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
+  net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
-    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
+    net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
     net:add(nn.ReLU(true))
   else
-    net:add(nn.SpatialConvolution(self.histLen*self.nChannels, 32, 5, 5, 2, 2, 1, 1))
+    net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 5, 5, 2, 2, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 32, 5, 5, 2, 2))
     net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
-  local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
+  local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({histLen*self.nChannels, self.height, self.width}))):size():totable()))
   net:add(nn.View(convOutputSize))
 
   -- Network head
@@ -97,8 +101,12 @@ function Model:create(m)
     -- Add dueling streams aggregator module
     head:add(DuelAggregator(m))
   else
-    head:add(nn.Linear(convOutputSize, hiddenSize))
-    head:add(nn.ReLU(true))
+    if self.recurrent then
+      head:add(nn.FastLSTM(convOutputSize, hiddenSize, self.histLen))
+    else
+      head:add(nn.Linear(convOutputSize, hiddenSize))
+      head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
+    end
     head:add(nn.Linear(hiddenSize, m)) -- Note: Tuned DDQN uses shared bias at last layer
   end
 

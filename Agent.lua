@@ -39,6 +39,10 @@ function Agent:_init(env, opt)
   self.head = 1 -- Identity of current episode bootstrap head
   self.heads = math.max(opt.bootstraps, 1) -- Number of heads
 
+  -- Recurrency
+  self.recurrent = opt.recurrent
+  self.histLen = opt.histLen
+
   -- Reinforcement learning parameters
   self.gamma = opt.gamma
   self.rewardClip = opt.rewardClip
@@ -49,7 +53,7 @@ function Agent:_init(env, opt)
   self.PALpha = opt.PALpha
 
   -- State buffer
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
   -- Experience replay memory
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
@@ -89,7 +93,6 @@ function Agent:_init(env, opt)
   self.origWidth = opt.origWidth
   self.origHeight = opt.origHeight
   self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
-  self.histLen = opt.histLen
   self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
 
   -- Get singleton instance for step
@@ -106,6 +109,11 @@ function Agent:training()
   if self.bootstraps > 0 then
     self.head = torch.random(self.bootstraps)
   end
+  -- Forget last sequence
+  if self.recurrent then
+    self.policyNet:forget()
+    self.targetNet:forget()
+  end
 end
 
 -- Sets evaluation mode
@@ -119,6 +127,10 @@ function Agent:evaluate()
   -- Reset bootstrap head
   if self.bootstraps > 0 then
     self.head = torch.random(self.bootstraps)
+  end
+  -- Forget last sequence
+  if self.recurrent then
+    self.policyNet:forget()
   end
 end
   
@@ -233,9 +245,15 @@ function Agent:observe(reward, observation, terminal)
     end
   end
 
-  -- Change bootstrap head for next episode
-  if terminal and self.bootstraps > 0 then
-    self.head = torch.random(self.bootstraps)
+  if terminal then
+    if self.bootstraps > 0 then
+      -- Change bootstrap head for next episode
+      self.head = torch.random(self.bootstraps)
+    elseif self.recurrent then
+      -- Forget last sequence
+      self.policyNet:forget()
+      self.targetNet:forget()
+    end
   end
 
   -- Return action index with offset applied
@@ -255,8 +273,18 @@ function Agent:learn(x, indices, ISWeights)
   local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
   local N = actions:size(1)
 
+  if self.recurrent then
+    -- Forget last sequence
+    self.policyNet:forget()
+    self.targetNet:forget()
+    -- TODO: Preserve hidden state of policy net to restore?
+  end
+
   -- Perform argmax action selection
   local APrimeMax, APrimeMaxInds
+  --[[
+  --   TODO: Code BPTT for recurrence
+  --]]
   if self.doubleQ then
     -- Calculate Q-values from transition using policy network
     self.QPrimes = self.policyNet:forward(transitions) -- Find argmax actions using policy network
@@ -345,6 +373,13 @@ function Agent:learn(x, indices, ISWeights)
   -- Clip the L2 norm of the gradients
   if self.gradClip > 0 then
     self.policyNet:gradParamClip(self.gradClip)
+  end
+
+  if self.recurrent then
+    -- Forget last sequence
+    self.policyNet:forget()
+    self.targetNet:forget()
+    -- TODO: Preserve hidden state of policy net to restore?
   end
 
   return loss, self.dTheta
@@ -472,7 +507,7 @@ function Agent:computeSaliency(state, index, ensemble)
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen):float()), self.origWidth, self.origHeight)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float()), self.origWidth, self.origHeight)
 
   -- Switch back to normal backpropagation
   self.model:normalBackprop()
