@@ -28,6 +28,7 @@ function Experience:_init(capacity, opt, isValidation)
     priorities = opt.Tensor(opt.batchSize)
   }
   self.indices = torch.LongTensor(opt.batchSize)
+  self.w = opt.Tensor(opt.batchSize):fill(1) -- Importance-sampling weights w, 1 if no correction needed
 
   -- Allocate memory for experience
   local stateSize = torch.LongStorage({capacity, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
@@ -47,7 +48,7 @@ function Experience:_init(capacity, opt, isValidation)
   
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
-  self.smallConst = 1e-6 -- Account for half precision
+  self.smallConst = 1e-12
   -- Sampling priority
   if not isValidation and opt.memPriority == 'rank' then
     -- Cache partition indices for several values of N as α is static
@@ -55,6 +56,7 @@ function Experience:_init(capacity, opt, isValidation)
     local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
     local partitionDivision = math.floor(capacity/nPartitions)
 
+    -- TODO: Do not calculate for distributions needed before learnStart
     for n = partitionDivision, capacity, partitionDivision do
       -- Set up power-law PDF and CDF
       local distribution = {}
@@ -106,7 +108,7 @@ end
 function Experience:store(reward, state, terminal, action)
   self.rewards[self.index] = reward
   -- Store with maximal priority
-  local maxPriority = (self.priorityQueue:findMax() or 1) + self.smallConst
+  local maxPriority = self.priorityQueue:findMax() or 1 -- First priority = 1
   if self.isFull then
     self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
   else
@@ -186,7 +188,6 @@ end
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
 function Experience:sample()
   local N = self.size
-  local w -- Importance-sampling weights w
 
   -- Priority 'none' = uniform sampling
   if self.memPriority == 'none' then
@@ -205,7 +206,6 @@ function Experience:sample()
       -- Store index
       self.indices[n] = index
     end
-    w = torch.ones(self.batchSize) -- Set weights to 1 as no correction needed
 
   elseif self.memPriority == 'rank' then
 
@@ -236,11 +236,12 @@ function Experience:sample()
 
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
-    w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta)
+    -- Calculate entire set of IS weights
+    local wAll = torch.mul(distribution.pdf, N):pow(-beta)
     -- Find max importance-sampling weight for normalisation
-    local wMax = torch.max(w)
+    local wMax = torch.max(wAll)
     -- Normalise weights so updates only scale downwards (for stability)
-    w:div(wMax) -- Max weight will be 1
+    self.w = wAll:index(1, rankIndices):div(wMax)
 
   elseif self.memPriority == 'proportional' then
   
@@ -248,19 +249,18 @@ function Experience:sample()
 
   end
 
-  if self.gpu > 0 then
-    w = w:cuda()
-  end
-
-  return self.indices, w
+  return self.indices, self.w
 end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
   local priorities = delta:clone():float():abs() -- Use absolute values
+  if self.memPriority == 'proportional' then
+    priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0
+  end
 
   for p = 1, indices:size(1) do
-    self.priorityQueue:updateByVal(indices[p], priorities[p] + self.smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0
+    self.priorityQueue:updateByVal(indices[p], priorities[p], indices[p]) 
   end
 end
 
