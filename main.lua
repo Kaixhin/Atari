@@ -128,8 +128,8 @@ end
 
 -- Check prioritised experience replay options
 if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
-  log.error('Unrecognised type of prioritised experience replay')
-  error('Unrecognised type of prioritised experience replay')
+  log.error('Type of prioritised experience replay unrecognised')
+  error('Type of prioritised experience replay unrecognised')
 end
 
 -- Check start of learning occurs after at least 1/100 of memory has been filled

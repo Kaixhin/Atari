@@ -5,6 +5,14 @@ require 'classic.torch' -- Enables serialisation
 -- Implements a Priority Queue using a non-standard (Maximum) Binary Heap
 local BinaryHeap = classic.class('BinaryHeap')
 
+--[[
+-- Priority queue elements:
+-- array row 1 (priority/key): absolute TD-error |δ|
+-- array row 2 (value): experience replay index
+-- hash key: experience replay index
+-- hash value: priority queue array index
+--]]
+
 -- Creates a new Binary Heap with a length or existing tensor
 function BinaryHeap:_init(init)
   -- Use values as indices in a hash table
@@ -19,7 +27,7 @@ function BinaryHeap:_init(init)
     self.array = init
     self.size = init:size(1)
     -- Rebalance
-    for i = math.ceil(self.size/2) - 1, 1, -1 do
+    for i = math.floor(self.size/2) - 1, 1, -1 do
       self:downHeap(i)
     end
   end
@@ -77,11 +85,6 @@ end
 -- Returns the maximum priority with value
 function BinaryHeap:findMax()
   return self.size ~= 0 and self.array[1][1] or nil
-end
-
--- Returns the (approximate) minimum priority with value
-function BinaryHeap:findMin()
-  return self.size ~= 0 and self.array[self.size][1] or nil
 end
 
 -- Removes and returns the maximum priority with value

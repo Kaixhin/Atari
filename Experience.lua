@@ -51,13 +51,14 @@ function Experience:_init(capacity, opt, isValidation)
   self.smallConst = 1e-12
   -- Sampling priority
   if not isValidation and opt.memPriority == 'rank' then
-    -- Cache partition indices for several values of N as α is static
-    self.distributions = {}
-    local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
-    local partitionDivision = math.floor(capacity/nPartitions)
+  -- Cache partition indices for several values of N as α is static
+  self.distributions = {}
+  local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
+  local partitionNum = 1
+  local partitionDivision = math.floor(capacity/nPartitions)
 
-    -- TODO: Do not calculate for distributions needed before learnStart
-    for n = partitionDivision, capacity, partitionDivision do
+  for n = partitionDivision, capacity, partitionDivision do
+    if n >= opt.learnStart or n == capacity then -- Do not calculate distributions for before learnStart occurs
       -- Set up power-law PDF and CDF
       local distribution = {}
       distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
@@ -80,10 +81,19 @@ function Experience:_init(capacity, opt, isValidation)
         stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
       end
 
-      -- Store distribution
-      self.distributions[#self.distributions + 1] = distribution
+      -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
+      if distribution.strataEnds[2] - distribution.strataEnds[1] <= opt.histLen then
+        log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+        error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+      end
+
+        -- Store distribution
+      self.distributions[partitionNum] = distribution
     end
+
+    partitionNum = partitionNum + 1
   end
+end
 
   -- Initialise first time step (s0)
   self.states[1]:zero() -- Blank out state
@@ -236,12 +246,11 @@ function Experience:sample()
 
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
-    -- Calculate entire set of IS weights
-    local wAll = torch.mul(distribution.pdf, N):pow(-beta)
-    -- Find max importance-sampling weight for normalisation
-    local wMax = torch.max(wAll)
+    self.w = torch.mul(distribution.pdf:index(1, rankIndices), N):pow(-beta)
+    -- Calculate max importance-sampling weight (from smallest P)
+    local wMax = math.pow(distribution.pdf[distribution.pdf:size(1)]*N, -beta)
     -- Normalise weights so updates only scale downwards (for stability)
-    self.w = wAll:index(1, rankIndices):div(wMax)
+    self.w:div(wMax)
 
   elseif self.memPriority == 'proportional' then
   
