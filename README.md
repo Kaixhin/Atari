@@ -6,7 +6,7 @@
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[8]](#references), optionally using guided [[9]](#references) or "deconvnet" [[10]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
-To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. For more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo -gpu 0` to run the demo with good default parameters. Note that `main.lua` uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
+To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that `main.lua` uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
 
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 

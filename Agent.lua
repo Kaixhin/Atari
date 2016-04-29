@@ -80,6 +80,7 @@ function Agent:_init(env, opt)
   self.avgV = {} -- Running average of V(s')
   self.avgTdErr = {} -- Running average of TD-error δ
   self.valScores = {} -- Validation scores (passed from main script)
+  self.normScores = {} -- Normalised validation scores (passed from main script)
 
   -- Tensor creation
   self.Tensor = opt.Tensor
@@ -436,6 +437,17 @@ function Agent:report()
   gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
   torch.save(paths.concat('experiments', self._id, 'scores.t7'), scores)
+    -- Plot and save normalised score
+  if #self.normScores > 0 then
+    local normScores = torch.Tensor(self.normScores)
+    gnuplot.pngfigure(paths.concat('experiments', self._id, 'normScores.png'))
+    gnuplot.plot('Score', epochIndices, normScores, '-')
+    gnuplot.xlabel('Epoch')
+    gnuplot.ylabel('Normalised Score')
+    gnuplot.movelegend('left', 'top')
+    gnuplot.plotflush()
+    torch.save(paths.concat('experiments', self._id, 'normScores.t7'), normScores)
+  end
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
 end

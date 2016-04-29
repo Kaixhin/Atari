@@ -6,7 +6,7 @@ local image = require 'image'
 local gnuplot = require 'gnuplot'
 local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
-local evaluator = require 'evaluator'
+local Evaluator = require 'Evaluator'
 require 'logroll'
 
 -- Detect QT for image display
@@ -256,6 +256,9 @@ end
 
 ----- Training / Evaluation -----
 
+-- Create (Atari normalised score) evaluator
+local evaluator = Evaluator(opt.game)
+
 -- Start gaming
 log.info('Starting game: ' .. opt.game)
 local reward, state, terminal = 0, env:start(), false
@@ -292,7 +295,7 @@ if opt.mode == 'train' then
   local episodeScore = reward
 
   -- Validation variables
-  local valEpisode, valEpisodeScore, valTotalScore
+  local valEpisode, valEpisodeScore, valTotalScore, normScore
   local bestValScore = _.max(agent.valScores) or -math.huge -- Retrieve best validation score from agent if available
   local valStepStrFormat = '%0' .. (math.floor(math.log10(opt.valSteps)) + 1) .. 'd' -- String format for padding step with zeros
 
@@ -352,6 +355,7 @@ if opt.mode == 'train' then
       valEpisode = 1
       valEpisodeScore = 0
       valTotalScore = 0
+      normScore = 0
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
@@ -392,6 +396,12 @@ if opt.mode == 'train' then
       log.info('Average Score: ' .. valTotalScore)
       -- Pass to agent (for storage and plotting)
       agent.valScores[#agent.valScores + 1] = valTotalScore
+      -- Calculate normalised score (if valid)
+      normScore = evaluator:normaliseScore(valTotalScore)
+      if normScore then
+        log.info('Normalised Score: ' .. normScore)
+        agent.normScores[#agent.normScores + 1] = normScore
+      end
 
       -- Visualise convolutional filters
       agent:visualiseFilters()
