@@ -53,7 +53,7 @@ cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned DDQN fi
 cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Tuned DDQN target net update interval (3x that of DQN)
 cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable)')
-cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
+cmd:option('-tdClip', 0, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
 cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
@@ -65,6 +65,8 @@ cmd:option('-batchSize', 32, 'Minibatch size')
 cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
+cmd:option('-popArt', 'true', 'Uses (Pop-Art) normalised gradient descent')
+cmd:option('-popArtBeta', 0.0004, 'Pop-Art normalisation step size')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
 cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
@@ -87,6 +89,7 @@ local opt = cmd:parse(arg)
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
+opt.popart = opt.popart == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
@@ -142,6 +145,13 @@ end
 if opt.memSize % 100 ~= 0 then
   log.error('memSize must be a multiple of 100')
   error('memSize must be a multiple of 100')
+end
+
+-- Check Pop-Art not used with Persistent Advantage Learning
+if opt.popArt and opt.PALpha > 0 then
+  log.error('popArt is incompatible with persistent advantage learning (PALpha > 0)')
+  error('popArt is incompatible with persistent advantage learning (PALpha > 0)')
+  -- TODO: Calculate how to use Pop-Art with PAL
 end
 
 -- Check learning occurs after first progress report

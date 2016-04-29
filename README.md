@@ -2,7 +2,7 @@
 
 **Work In Progress**
 
-Preserving outputs precisely, while adaptively rescaling targets [[1]](#references) ~~prioritised experience replay~~ [[2]](#references) persistent advantage learning [[3]](#references) ~~bootstrapped~~ [[4]](#references) dueling [[5]](#references) double [[6]](#references) deep Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references). Or POPARTPERPALB(triple-D)QN for short...
+~~Preserving outputs precisely, while adaptively rescaling targets~~ [[1]](#references) ~~prioritised experience replay~~ [[2]](#references) persistent advantage learning [[3]](#references) ~~bootstrapped~~ [[4]](#references) dueling [[5]](#references) double [[6]](#references) deep Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references). Or POP-ARTPERPALB(triple-D)QN for short...
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[9]](#references), optionally using guided [[10]](#references) or "deconvnet" [[11]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
