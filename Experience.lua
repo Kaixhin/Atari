@@ -134,7 +134,7 @@ function Experience:store(reward, state, terminal, action)
     self.index = 1 -- Reset index
   end
 
-  self.states[self.index] = state:float():mul(self.imgDiscLevels) -- float -> byte
+  self.states[self.index] = torch.mul(state, self.imgDiscLevels) -- float -> byte
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
   self.invalid[self.index] = 0
@@ -166,7 +166,7 @@ function Experience:retrieve(indices)
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[n][histIndex] = self.states[memIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -180,7 +180,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = self.states[memTIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
     end
   end
 
