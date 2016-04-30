@@ -26,7 +26,7 @@ function Model:_init(opt)
   self.ale = opt.ale
 end
 
--- Processes a single frame for DQN input
+-- Processes a single frame for DQN input; must not return same memory to prevent side-effects
 function Model:preprocess(observation)
   if self.ale then
     -- Load frame
@@ -40,7 +40,7 @@ function Model:preprocess(observation)
     return image.scale(frame, self.width, self.height)
   else
     -- Return normal Catch screen
-    return observation
+    return observation:clone()
   end
 end
 

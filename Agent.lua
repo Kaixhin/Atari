@@ -124,7 +124,7 @@ function Agent:evaluate()
 end
   
 -- Observes the results of the previous transition and chooses the next action to perform
-function Agent:observe(reward, observation, terminal)
+function Agent:observe(reward, rawObservation, terminal)
   -- Clip reward for stability
   if self.rewardClip > 0 then
     reward = math.max(reward, -self.rewardClip)
@@ -132,7 +132,7 @@ function Agent:observe(reward, observation, terminal)
   end
 
   -- Process observation of current state
-  observation = self.model:preprocess(observation)
+  local observation = self.model:preprocess(rawObservation) -- Must avoid side-effects on observation from env
 
   -- Store in buffer depending on terminal status
   if terminal then
