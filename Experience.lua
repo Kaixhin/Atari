@@ -246,7 +246,7 @@ function Experience:sample()
 
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
-    self.w = torch.mul(distribution.pdf:index(1, rankIndices), N):pow(-beta)
+    self.w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta) -- torch.index does memory copy
     -- Calculate max importance-sampling weight (from smallest P)
     local wMax = math.pow(distribution.pdf[distribution.pdf:size(1)]*N, -beta)
     -- Normalise weights so updates only scale downwards (for stability)

@@ -67,6 +67,7 @@ cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
+cmd:option('-reportWeights', 'false', 'Report weight and weight gradient statistics')
 cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
@@ -87,6 +88,7 @@ local opt = cmd:parse(arg)
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
+opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
@@ -338,7 +340,13 @@ if opt.mode == 'train' then
     -- Report progress
     if step % opt.progFreq == 0 then
       log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. opt.steps)
-      -- TODO: Report absolute weight and weight gradient values per module in policy network
+      -- Report weight and weight gradient statistics
+      if opt.reportWeights then
+        local reports = agent:report()
+        for r = 1, #reports do
+          log.info(reports[r])
+        end
+      end
     end
 
     -- Validate
@@ -407,7 +415,7 @@ if opt.mode == 'train' then
       agent:visualiseFilters()
 
       -- Use transitions sampled for validation to test performance
-      local avgV, avgTdErr = agent:report()
+      local avgV, avgTdErr = agent:validate()
       log.info('Average V: ' .. avgV)
       log.info('Average δ: ' .. avgTdErr)
 
