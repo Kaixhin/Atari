@@ -34,7 +34,7 @@ function CircularQueue:push(tensor)
     end
   end
 
-  -- Add new element (casting if needed)
+  -- Add new element (casting if needed, will keep reference if not)
   self.queue[self.length] = tensor:typeAs(self.queue[1])
 end
 
@@ -45,7 +45,7 @@ function CircularQueue:pushReset(tensor)
     self.queue[i] = self.queue[i + 1]
   end
 
-  -- Add new element (casting if needed)
+  -- Add new element (casting if needed, will keep reference if not)
   self.queue[self.length] = tensor:typeAs(self.queue[1])
 
   -- Set reset flag

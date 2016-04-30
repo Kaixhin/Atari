@@ -192,7 +192,7 @@ local globals = Singleton({step = 1}) -- Initial step
 
 -- Computes saliency map for display
 local createSaliencyMap = function(state, agent)
-  local screen
+  local screen -- Clone of state that can be adjusted
   
   -- Convert Catch screen to RGB
   if opt.game == 'catch' then

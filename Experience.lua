@@ -166,7 +166,7 @@ function Experience:retrieve(indices)
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex], self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -180,7 +180,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex], self.imgDiscLevels) -- byte -> float
     end
   end
 
@@ -263,7 +263,7 @@ end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
-  local priorities = delta:clone():float():abs() -- Use absolute values
+  local priorities = torch.abs(delta):float() -- Use absolute values
   if self.memPriority == 'proportional' then
     priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0
   end
