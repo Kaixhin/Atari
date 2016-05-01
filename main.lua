@@ -6,7 +6,7 @@ local image = require 'image'
 local gnuplot = require 'gnuplot'
 local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
-local evaluator = require 'evaluator'
+local Evaluator = require 'Evaluator'
 require 'logroll'
 
 -- Detect QT for image display
@@ -68,6 +68,7 @@ cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
+cmd:option('-reportWeights', 'false', 'Report weight and weight gradient statistics')
 cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
 cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
 cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
@@ -89,6 +90,7 @@ local opt = cmd:parse(arg)
 opt.duel = opt.duel == 'true' or false
 opt.recurrent = opt.recurrent == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
+opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
@@ -139,8 +141,8 @@ end
 
 -- Check prioritised experience replay options
 if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
-  log.error('Unrecognised type of prioritised experience replay')
-  error('Unrecognised type of prioritised experience replay')
+  log.error('Type of prioritised experience replay unrecognised')
+  error('Type of prioritised experience replay unrecognised')
 end
 
 -- Check start of learning occurs after at least 1/100 of memory has been filled
@@ -201,7 +203,7 @@ local globals = Singleton({step = 1}) -- Initial step
 
 -- Computes saliency map for display
 local createSaliencyMap = function(state, agent)
-  local screen
+  local screen -- Clone of state that can be adjusted
   
   -- Convert Catch screen to RGB
   if opt.game == 'catch' then
@@ -267,6 +269,9 @@ end
 
 ----- Training / Evaluation -----
 
+-- Create (Atari normalised score) evaluator
+local evaluator = Evaluator(opt.game)
+
 -- Start gaming
 log.info('Starting game: ' .. opt.game)
 local reward, state, terminal = 0, env:start(), false
@@ -303,7 +308,7 @@ if opt.mode == 'train' then
   local episodeScore = reward
 
   -- Validation variables
-  local valEpisode, valEpisodeScore, valTotalScore
+  local valEpisode, valEpisodeScore, valTotalScore, normScore
   local bestValScore = _.max(agent.valScores) or -math.huge -- Retrieve best validation score from agent if available
   local valStepStrFormat = '%0' .. (math.floor(math.log10(opt.valSteps)) + 1) .. 'd' -- String format for padding step with zeros
 
@@ -346,7 +351,13 @@ if opt.mode == 'train' then
     -- Report progress
     if step % opt.progFreq == 0 then
       log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. opt.steps)
-      -- TODO: Report absolute weight and weight gradient values per module in policy network
+      -- Report weight and weight gradient statistics
+      if opt.reportWeights then
+        local reports = agent:report()
+        for r = 1, #reports do
+          log.info(reports[r])
+        end
+      end
     end
 
     -- Validate
@@ -363,6 +374,7 @@ if opt.mode == 'train' then
       valEpisode = 1
       valEpisodeScore = 0
       valTotalScore = 0
+      normScore = 0
 
       for valStep = 1, opt.valSteps do
         -- Observe and choose next action (index)
@@ -403,12 +415,18 @@ if opt.mode == 'train' then
       log.info('Average Score: ' .. valTotalScore)
       -- Pass to agent (for storage and plotting)
       agent.valScores[#agent.valScores + 1] = valTotalScore
+      -- Calculate normalised score (if valid)
+      normScore = evaluator:normaliseScore(valTotalScore)
+      if normScore then
+        log.info('Normalised Score: ' .. normScore)
+        agent.normScores[#agent.normScores + 1] = normScore
+      end
 
       -- Visualise convolutional filters
       agent:visualiseFilters()
 
       -- Use transitions sampled for validation to test performance
-      local avgV, avgTdErr = agent:report()
+      local avgV, avgTdErr = agent:validate()
       log.info('Average V: ' .. avgV)
       log.info('Average δ: ' .. avgTdErr)
 

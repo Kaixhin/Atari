@@ -28,6 +28,7 @@ function Experience:_init(capacity, opt, isValidation)
     priorities = opt.Tensor(opt.batchSize)
   }
   self.indices = torch.LongTensor(opt.batchSize)
+  self.w = opt.Tensor(opt.batchSize):fill(1) -- Importance-sampling weights w, 1 if no correction needed
 
   -- Allocate memory for experience
   local stateSize = torch.LongStorage({capacity, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
@@ -47,15 +48,17 @@ function Experience:_init(capacity, opt, isValidation)
   
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
-  self.smallConst = 1e-6 -- Account for half precision
+  self.smallConst = 1e-12
   -- Sampling priority
   if not isValidation and opt.memPriority == 'rank' then
-    -- Cache partition indices for several values of N as α is static
-    self.distributions = {}
-    local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
-    local partitionDivision = math.floor(capacity/nPartitions)
+  -- Cache partition indices for several values of N as α is static
+  self.distributions = {}
+  local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
+  local partitionNum = 1
+  local partitionDivision = math.floor(capacity/nPartitions)
 
-    for n = partitionDivision, capacity, partitionDivision do
+  for n = partitionDivision, capacity, partitionDivision do
+    if n >= opt.learnStart or n == capacity then -- Do not calculate distributions for before learnStart occurs
       -- Set up power-law PDF and CDF
       local distribution = {}
       distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
@@ -78,10 +81,19 @@ function Experience:_init(capacity, opt, isValidation)
         stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
       end
 
-      -- Store distribution
-      self.distributions[#self.distributions + 1] = distribution
+      -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
+      if distribution.strataEnds[2] - distribution.strataEnds[1] <= opt.histLen then
+        log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+        error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+      end
+
+        -- Store distribution
+      self.distributions[partitionNum] = distribution
     end
+
+    partitionNum = partitionNum + 1
   end
+end
 
   -- Initialise first time step (s0)
   self.states[1]:zero() -- Blank out state
@@ -106,7 +118,7 @@ end
 function Experience:store(reward, state, terminal, action)
   self.rewards[self.index] = reward
   -- Store with maximal priority
-  local maxPriority = (self.priorityQueue:findMax() or 1) + self.smallConst
+  local maxPriority = self.priorityQueue:findMax() or 1 -- First priority = 1
   if self.isFull then
     self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
   else
@@ -122,7 +134,7 @@ function Experience:store(reward, state, terminal, action)
     self.index = 1 -- Reset index
   end
 
-  self.states[self.index] = state:float():mul(self.imgDiscLevels) -- float -> byte
+  self.states[self.index] = torch.mul(state, self.imgDiscLevels) -- float -> byte
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
   self.invalid[self.index] = 0
@@ -154,7 +166,7 @@ function Experience:retrieve(indices)
     local histIndex = self.histLen
     repeat
       -- Copy state
-      self.transTuples.states[n][histIndex] = self.states[memIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex], self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -168,7 +180,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = self.states[memTIndex]:typeAs(self.transTuples.states):div(self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex], self.imgDiscLevels) -- byte -> float
     end
   end
 
@@ -186,7 +198,6 @@ end
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
 function Experience:sample()
   local N = self.size
-  local w -- Importance-sampling weights w
 
   -- Priority 'none' = uniform sampling
   if self.memPriority == 'none' then
@@ -205,7 +216,6 @@ function Experience:sample()
       -- Store index
       self.indices[n] = index
     end
-    w = torch.ones(self.batchSize) -- Set weights to 1 as no correction needed
 
   elseif self.memPriority == 'rank' then
 
@@ -236,11 +246,11 @@ function Experience:sample()
 
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
-    w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta)
-    -- Find max importance-sampling weight for normalisation
-    local wMax = torch.max(w)
+    self.w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta) -- torch.index does memory copy
+    -- Calculate max importance-sampling weight (from smallest P)
+    local wMax = math.pow(distribution.pdf[distribution.pdf:size(1)]*N, -beta)
     -- Normalise weights so updates only scale downwards (for stability)
-    w:div(wMax) -- Max weight will be 1
+    self.w:div(wMax)
 
   elseif self.memPriority == 'proportional' then
   
@@ -248,19 +258,18 @@ function Experience:sample()
 
   end
 
-  if self.gpu > 0 then
-    w = w:cuda()
-  end
-
-  return self.indices, w
+  return self.indices, self.w
 end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
-  local priorities = delta:clone():float():abs() -- Use absolute values
+  local priorities = torch.abs(delta):float() -- Use absolute values
+  if self.memPriority == 'proportional' then
+    priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0
+  end
 
   for p = 1, indices:size(1) do
-    self.priorityQueue:updateByVal(indices[p], priorities[p] + self.smallConst, indices[p]) -- Allows transitions to be sampled even if error is 0
+    self.priorityQueue:updateByVal(indices[p], priorities[p], indices[p]) 
   end
 end
 

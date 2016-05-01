@@ -84,6 +84,7 @@ function Agent:_init(env, opt)
   self.avgV = {} -- Running average of V(s')
   self.avgTdErr = {} -- Running average of TD-error δ
   self.valScores = {} -- Validation scores (passed from main script)
+  self.normScores = {} -- Normalised validation scores (passed from main script)
 
   -- Tensor creation
   self.Tensor = opt.Tensor
@@ -135,7 +136,7 @@ function Agent:evaluate()
 end
   
 -- Observes the results of the previous transition and chooses the next action to perform
-function Agent:observe(reward, observation, terminal)
+function Agent:observe(reward, rawObservation, terminal)
   -- Clip reward for stability
   if self.rewardClip > 0 then
     reward = math.max(reward, -self.rewardClip)
@@ -143,7 +144,7 @@ function Agent:observe(reward, observation, terminal)
   end
 
   -- Process observation of current state
-  observation = self.model:preprocess(observation)
+  local observation = self.model:preprocess(rawObservation) -- Must avoid side-effects on observation from env
 
   -- Store in buffer depending on terminal status
   if terminal then
@@ -402,8 +403,47 @@ function Agent:optimise(indices, ISWeights)
   return loss[1]
 end
 
--- Reports stats for validation
+-- Pretty prints array
+local pprintArr = function(memo, v)
+  return memo .. ', ' .. v
+end
+
+-- Reports absolute network weights and gradients
 function Agent:report()
+  -- Collect layer with weights
+  local weightLayers = self.policyNet:findModules('nn.SpatialConvolution')
+  local fcLayers = self.policyNet:findModules('nn.Linear')
+  weightLayers = _.append(weightLayers, fcLayers)
+  
+  -- Array of norms and maxima
+  local wNorms = {}
+  local wMaxima = {}
+  local wGradNorms = {}
+  local wGradMaxima = {}
+
+  -- Collect statistics
+  for l = 1, #weightLayers do
+    local w = weightLayers[l].weight:clone():abs() -- Weights (absolute)
+    wNorms[#wNorms + 1] = torch.mean(w) -- Weight norms:
+    wMaxima[#wMaxima + 1] = torch.max(w) -- Weight max
+    w = weightLayers[l].gradWeight:clone():abs() -- Weight gradients (absolute)
+    wGradNorms[#wGradNorms + 1] = torch.mean(w) -- Weight grad norms:
+    wGradMaxima[#wGradMaxima + 1] = torch.max(w) -- Weight grad max
+  end
+
+  -- Create report string table
+  local reports = {
+    'Weight norms: ' .. _.reduce(wNorms, pprintArr),
+    'Weight max: ' .. _.reduce(wMaxima, pprintArr),
+    'Weight gradient norms: ' .. _.reduce(wGradNorms, pprintArr),
+    'Weight gradient max: ' .. _.reduce(wGradMaxima, pprintArr)
+  }
+
+  return reports
+end
+
+-- Reports stats for validation
+function Agent:validate()
   -- Validation variables
   local totalV, totalTdErr = 0, 0
 
@@ -471,6 +511,17 @@ function Agent:report()
   gnuplot.movelegend('left', 'top')
   gnuplot.plotflush()
   torch.save(paths.concat('experiments', self._id, 'scores.t7'), scores)
+    -- Plot and save normalised score
+  if #self.normScores > 0 then
+    local normScores = torch.Tensor(self.normScores)
+    gnuplot.pngfigure(paths.concat('experiments', self._id, 'normScores.png'))
+    gnuplot.plot('Score', epochIndices, normScores, '-')
+    gnuplot.xlabel('Epoch')
+    gnuplot.ylabel('Normalised Score')
+    gnuplot.movelegend('left', 'top')
+    gnuplot.plotflush()
+    torch.save(paths.concat('experiments', self._id, 'normScores.t7'), normScores)
+  end
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
 end
