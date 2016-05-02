@@ -253,7 +253,6 @@ function Agent:observe(reward, rawObservation, terminal)
     elseif self.recurrent then
       -- Forget last sequence
       self.policyNet:forget()
-      self.targetNet:forget()
     end
   end
 

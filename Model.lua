@@ -56,8 +56,7 @@ function Model:create(m)
   -- Network starting with convolutional layers
   local net = nn.Sequential()
   if self.recurrent then
-    -- TODO: Check if the following can be made more efficient: https://github.com/Element-Research/rnn/issues/137
-    net:add(nn.Contiguous()) -- Needed when splitting batch x seq x input over seq for DRQN
+    net:add(nn.Copy(nil,nil,true)) -- Needed when splitting batch x seq x input over seq for DRQN; better than nn.Contiguous
   end
   net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
@@ -106,7 +105,9 @@ function Model:create(m)
     head:add(DuelAggregator(m))
   else
     if self.recurrent then
-      head:add(nn.FastLSTM(convOutputSize, hiddenSize, self.histLen))
+      local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
+      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
+      head:add(lstm)
     else
       head:add(nn.Linear(convOutputSize, hiddenSize))
       head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
