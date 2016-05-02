@@ -199,4 +199,22 @@ function BinaryHeap:getValuesByVal(hashIndices)
   return _.at(self.hash, table.unpack(hashIndices))
 end
 
+-- Rebalances the heap
+function BinaryHeap:rebalance()
+  -- Sort underlying array
+  local sortArray, sortIndices = torch.sort(self.array, 1, true)
+  -- Retrieve values (indices) in descending priority order
+  sortIndices = self.array:index(1, sortIndices:select(2, 1)):select(2, 2)
+  -- Put values with corresponding priorities
+  sortArray[{{}, {2}}] = sortIndices
+  -- Convert values to hash table
+  self.hash = torch.totable(sortIndices)
+  -- Replace array
+  self.array = sortArray
+  -- Fix heap
+  for i = math.floor(self.size/2) - 1, 1, -1 do
+    self:downHeap(i)
+  end
+end
+
 return BinaryHeap

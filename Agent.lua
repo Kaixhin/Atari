@@ -54,6 +54,8 @@ function Agent:_init(env, opt)
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
   self.memNSamples = opt.memNSamples
+  self.memSize = opt.memSize
+  self.memPriority = opt.memPriority
 
   -- Training mode
   self.isTraining = false
@@ -231,6 +233,11 @@ function Agent:observe(reward, rawObservation, terminal)
     if self.globals.step % self.tau == 0 and self.globals.step >= self.learnStart then
       self.targetNet = self.policyNet:clone()
       self.targetNet:evaluate()
+    end
+
+    -- Rebalance priority queue for prioritised experience replay
+    if self.globals.step % self.memSize == 0 and self.memPriority ~= 'none' then
+      self.memory:rebalance()
     end
   end
 

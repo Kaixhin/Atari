@@ -250,7 +250,7 @@ function Experience:sample()
     -- Calculate max importance-sampling weight (from smallest P)?
     --local wMax = math.pow(distribution.pdf[distribution.pdf:size(1)]*N, -beta)
     -- Calculate max importance-sampling weight
-    local wMax = torch.max(w)
+    local wMax = torch.max(self.w)
     -- Normalise weights so updates only scale downwards (for stability)
     self.w:div(wMax)
 
@@ -273,6 +273,11 @@ function Experience:updatePriorities(indices, delta)
   for p = 1, indices:size(1) do
     self.priorityQueue:updateByVal(indices[p], priorities[p], indices[p]) 
   end
+end
+
+-- Rebalance prioritised experience replay heap
+function Experience:rebalance()
+  self.priorityQueue:rebalance()
 end
 
 return Experience
