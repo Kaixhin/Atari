@@ -278,14 +278,10 @@ function Agent:learn(x, indices, ISWeights)
     -- Forget last sequence
     self.policyNet:forget()
     self.targetNet:forget()
-    -- TODO: Preserve hidden state of policy net to restore?
   end
 
   -- Perform argmax action selection
   local APrimeMax, APrimeMaxInds
-  --[[
-  --   TODO: Code BPTT for recurrence
-  --]]
   if self.doubleQ then
     -- Calculate Q-values from transition using policy network
     self.QPrimes = self.policyNet:forward(transitions) -- Find argmax actions using policy network
@@ -310,6 +306,9 @@ function Agent:learn(x, indices, ISWeights)
   Y:mul(self.gamma):add(rewards:repeatTensor(1, self.heads))
 
   -- Get all predicted Q-values from the current state
+  if self.recurrent then
+    self.policyNet:forget()
+  end
   local QCurr = self.policyNet:forward(states) -- Correct internal state of policy network before backprop
   local QTaken = self.Tensor(N, self.heads)
   -- Get prediction of current Q-values with given actions
@@ -323,6 +322,9 @@ function Agent:learn(x, indices, ISWeights)
   -- Calculate Advantage Learning update(s)
   if self.PALpha > 0 then
     -- Calculate Q(s, a) and V(s) using target network
+    if self.recurrent then
+      self.targetNet:forget()
+    end
     local Qs = self.targetNet:forward(states)
     local Q = self.Tensor(N, self.heads)
     for n = 1, N do
@@ -380,7 +382,7 @@ function Agent:learn(x, indices, ISWeights)
     -- Forget last sequence
     self.policyNet:forget()
     self.targetNet:forget()
-    -- TODO: Preserve hidden state of policy net to restore?
+    -- Previous hidden state of policy net not restored as model parameters changed
   end
 
   return loss, self.dTheta

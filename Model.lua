@@ -55,6 +55,10 @@ function Model:create(m)
 
   -- Network starting with convolutional layers
   local net = nn.Sequential()
+  if self.recurrent then
+    -- TODO: Check if the following can be made more efficient: https://github.com/Element-Research/rnn/issues/137
+    net:add(nn.Contiguous()) -- Needed when splitting batch x seq x input over seq for DRQN
+  end
   net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
     net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
@@ -133,6 +137,12 @@ function Model:create(m)
   end
   net:add(nn.JoinTable(1, 1))
   net:add(nn.View(heads, m))
+
+  if self.recurrent then
+    local sequencer = nn.Sequencer(net)
+    sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
+    net = nn.Sequential():add(nn.SplitTable(1, 4)):add(sequencer):add(nn.SelectTable(-1))
+  end
 
   -- GPU conversion
   if self.gpu > 0 then

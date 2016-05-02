@@ -131,12 +131,10 @@ if opt.valFreq <= opt.valSize then
 end
 
 -- Check recurrent is not used with other options
--- TODO REMOVE THE FOLLOWING LINES
-opt.duel = false
-opt.bootstraps = 0
-if opt.recurrent and (opt.duel or opt.bootstraps > 0) then
-  log.error('recurrency is not compatible with the dueling architecture or bootstrap heads')
-  error('recurrency is not compatible with the dueling architecture or bootstrap heads')
+opt.duel = false -- TODO: REMOVE THIS LINE
+if opt.recurrent and opt.duel then
+  log.error('recurrency is not compatible with the dueling architecture')
+  error('recurrency is not compatible with the dueling architecture')
 end
 
 -- Check prioritised experience replay options
