@@ -38,8 +38,8 @@ cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|l
 cmd:option('-histLen', 4, 'Number of consecutive states processed/used for backpropagation-through-time') -- DQN standard is 4, DRQN is 10
 cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
 cmd:option('-bootstraps', 10, 'Number of bootstrap heads (0 to disable)')
-cmd:option('-recurrent', 'true', 'Use recurrent connections')
 --cmd:option('-bootstrapMask', 1, 'Independent probability of masking a transition for each bootstrap head ~ Ber(bootstrapMask) (1 to disable)')
+cmd:option('-recurrent', 'false', 'Use recurrent connections')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
