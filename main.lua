@@ -130,13 +130,6 @@ if opt.valFreq <= opt.valSize then
   error('valFreq must be greater than valSize')
 end
 
--- Check recurrent is not used with other options
-opt.duel = false -- TODO: REMOVE THIS LINE
-if opt.recurrent and opt.duel then
-  log.error('recurrency is not compatible with the dueling architecture')
-  error('recurrency is not compatible with the dueling architecture')
-end
-
 -- Check prioritised experience replay options
 if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
   log.error('Type of prioritised experience replay unrecognised')

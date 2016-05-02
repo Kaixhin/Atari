@@ -56,7 +56,7 @@ function Model:create(m)
   -- Network starting with convolutional layers
   local net = nn.Sequential()
   if self.recurrent then
-    net:add(nn.Copy(nil,nil,true)) -- Needed when splitting batch x seq x input over seq for DRQN; better than nn.Contiguous
+    net:add(nn.Copy(nil, nil, true)) -- Needed when splitting batch x seq x input over seq for DRQN; better than nn.Contiguous
   end
   net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
   if self.ale then
@@ -82,14 +82,26 @@ function Model:create(m)
   if self.duel then
     -- Value approximator V^(s)
     local valStream = nn.Sequential()
-    valStream:add(nn.Linear(convOutputSize, hiddenSize))
-    valStream:add(nn.ReLU(true))
+    if self.recurrent then
+      local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
+      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1)
+      valStream:add(lstm)
+    else
+      valStream:add(nn.Linear(convOutputSize, hiddenSize))
+      valStream:add(nn.ReLU(true))
+    end
     valStream:add(nn.Linear(hiddenSize, 1)) -- Predicts value for state
 
     -- Advantage approximator A^(s, a)
     local advStream = nn.Sequential()
-    advStream:add(nn.Linear(convOutputSize, hiddenSize))
-    advStream:add(nn.ReLU(true))
+    if self.recurrent then
+      local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
+      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1)
+      advStream:add(lstm)
+    else
+      advStream:add(nn.Linear(convOutputSize, hiddenSize))
+      advStream:add(nn.ReLU(true))
+    end
     advStream:add(nn.Linear(hiddenSize, m)) -- Predicts action-conditional advantage
 
     -- Streams container
