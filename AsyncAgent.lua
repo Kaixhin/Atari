@@ -7,6 +7,8 @@ require 'classic.torch'
 
 local AsyncAgent = classic.class('AsyncAgent')
 
+local EPSILON_ENDS = { 0.01, 0.1, 0.5}
+local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
 function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters)
   log.info('creating AsyncAgent')
@@ -45,11 +47,10 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters)
   self.rewardClip = opt.rewardClip
   self.tdClip = opt.tdClip
   self.epsilonStart = opt.epsilonStart
-  self.epsilonEnd = opt.epsilonEnd
-  self.epsilonGrad = (opt.epsilonEnd - opt.epsilonStart)/opt.epsilonSteps
   self.epsilon = self.epsilonStart
   self.PALpha = opt.PALpha
 
+  self.progFreq = opt.progFreq
   self.batchSize = opt.batchSize
   self.gradClip = opt.gradClip
 
@@ -58,18 +59,32 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters)
   self.batchIdx = 0
   self.target = self.Tensor(self.m)
 
+  self:setEpsilon(opt)
+
   self.step = 0
   self.valSteps = opt.valSteps
   classic.strict(self)
 end
 
 
+function AsyncAgent:setEpsilon(opt)
+  local r = torch.rand(1):squeeze()
+  local e = 3
+  if r < EPSILON_PROBS[1] then
+    e = 1
+  elseif r < EPSILON_PROBS[2] then
+    e = 2
+  end
+  self.epsilonEnd = EPSILON_ENDS[e]
+  self.epsilonGrad = (self.epsilonEnd - opt.epsilonStart) / opt.epsilonSteps
+end
+
 function AsyncAgent:learn(steps)
   self.policyNet:training()
   self.stateBuffer:clear()
   if self.ale then self.env:training() end
 
-  log.info('AsyncAgent starting learning steps=%d ε=%.4f', steps, self.epsilon)
+  log.info('AsyncAgent starting learning steps=%d ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, rawObservation, terminal = 0, self.env:start(), false
   local observation = self.model:preprocess(rawObservation)
 
@@ -118,9 +133,14 @@ function AsyncAgent:learn(steps)
       self.batchIdx = 0
     end
 
+    if self.step % self.progFreq == 0 then
+      log.info('AsyncAgent learning step=%d ε=%.2f -> %.2f', self.step, self.epsilon, self.epsilonEnd)
+    end
     self.step = self.step + 1
     self.counters[self.id] = self.counters[self.id] + 1
   end
+
+  log.info('AsyncAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
 end
 
 
@@ -212,7 +232,9 @@ function AsyncAgent:validate()
     else
       -- Print score every 10 episodes
       if valEpisode % 10 == 0 then
-        log.info('[VAL] Steps: ' .. string.format(valStepStrFormat, valStep) .. '/' .. self.valSteps .. ' | Episode ' .. valEpisode .. ' | Score: ' .. valEpisodeScore)
+        local avgScore = valTotalScore/math.max(valEpisode - 1, 1)
+        log.info('[VAL] Steps: ' .. string.format(valStepStrFormat, valStep) .. '/' .. self.valSteps .. ' | Episode ' .. valEpisode
+          .. ' | Score: ' .. valEpisodeScore .. ' | TotScore: ' .. valTotalScore .. ' | AvgScore: %.2f', avgScore)
       end
 
       -- Start a new episode

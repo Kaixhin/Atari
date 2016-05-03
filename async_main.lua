@@ -19,7 +19,8 @@ cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage 
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
 cmd:option('-epsilonEnd', 0.01, 'Final value of greediness ε') -- Tuned DDQN final greediness (1/10 that of DQN)
-cmd:option('-epsilonSteps', 1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
+-- in ER each step = minibatch of 32, in asynq 1-step-Q each step = 1 sample
+cmd:option('-epsilonSteps', 32*1e6, 'Number of steps to linearly decay epsilonStart to epsilonEnd') -- Usually same as memory size
 cmd:option('-tau', 30000, 'Steps between target net updates τ') -- Tuned DDQN target net update interval (3x that of DQN)
 cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable)')
 cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
@@ -30,8 +31,9 @@ cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to dis
 cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
 cmd:option('-eta', 0.0000625, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
-cmd:option('-batchSize', 5, 'Minibatch size')
-cmd:option('-steps', 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
+cmd:option('-batchSize', 5, 'Accumulate gradient x batchSize')
+-- in ER each step = minibatch of 32, in asynq 1-step-Q each step = 1 sample
+cmd:option('-steps', 32 * 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')

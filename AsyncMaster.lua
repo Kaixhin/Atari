@@ -6,6 +6,9 @@ threads.Threads.serialization('threads.sharedserialize')
 
 local AsyncMaster = classic.class('AsyncMaster')
 
+local TARGET_UPDATER = 1
+local VALIDATOR = 2
+
 local function checkNotNan(t)
   local ok = t:ne(t):sum() == 0
   if not ok then
@@ -19,14 +22,17 @@ local function torchSetup(opt)
   local seed = opt.seed
   return function()
     log.info('Setting up Torch7')
+    require 'nn'
     -- Use enhanced garbage collector
     torch.setheaptracking(true)
     -- Set number of BLAS threads
+    -- must be 1 for each thread
     torch.setnumthreads(1)
     -- Set default Tensor type (float is more efficient than double)
     torch.setdefaulttensortype(tensorType)
-    -- Set manual seed
-    torch.manualSeed(seed)
+    -- Set manual seed: but different for each thread
+    -- to have different experiences, eg. catch randomness
+    torch.manualSeed(seed * __threadid)
   end
 end  
 
@@ -77,9 +83,20 @@ function AsyncMaster:_init(opt)
   self.theta = policyNet:getParameters()
   self.targetTheta = targetNet:getParameters()
 
-  self.controlPool = threads.Threads(1,
-    setupLogging(opt, 'TG'),
-    torchSetup(opt))
+  self.controlPool = threads.Threads(2)
+  self.controlPool:specific(true)
+
+  self.controlPool:addjob(TARGET_UPDATER, setupLogging(opt, 'TG'))
+  self.controlPool:addjob(TARGET_UPDATER, torchSetup(opt))
+
+  self.controlPool:addjob(VALIDATOR, setupLogging(opt, 'VA'))
+  self.controlPool:addjob(VALIDATOR, torchSetup(opt))
+  self.controlPool:addjob(VALIDATOR, function()
+    local AsyncAgent = require 'AsyncAgent'
+    evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters)
+  end)
+
+  self.controlPool:synchronize()
 
   local theta = self.theta
 
@@ -87,10 +104,7 @@ function AsyncMaster:_init(opt)
   -- but not later... but is it really threadsafe then...?
   local mutex = threads.Mutex()
   local mutexId = mutex:id()
-
   self.pool = threads.Threads(self.opt.threads, function()
-      require 'nn'
-      AsyncAgent1 = require 'AsyncAgent'
     end,
     setupLogging(opt),
     torchSetup(opt),
@@ -98,14 +112,12 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      agent = AsyncAgent1(opt, policyNet, targetNet, theta, counters)
+      local AsyncAgent = require 'AsyncAgent'
+      agent = AsyncAgent(opt, policyNet, targetNet, theta, counters)
       mutex1:unlock()
     end
   )
-
   mutex:free()
-
-  self.evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters)
 
   classic.strict(self)
 end
@@ -118,9 +130,30 @@ function AsyncMaster:start()
   local theta = self.theta
   local targetTheta = self.targetTheta
 
+  local validator = function()
+    require 'socket'
+    local lastUpdate = 0
+    while true do
+      local countSum = counters:sum()
+      if countSum < 0 then return end
+
+      local countSince = countSum - lastUpdate
+      if countSince > opt.valFreq then
+        log.info('starting validation after %d steps', countSince)
+        lastUpdate = countSum
+        evalAgent:validate()
+      end
+      socket.select(nil,nil,1)
+    end
+  end
+
+  self.controlPool:addjob(VALIDATOR, validator)
+
   local targetUpdater = function()
     require 'socket'
     local lastUpdate = 0
+    local sleepSecs  = 0.01
+    if opt.tau > 1000 then sleepSecs = 1 end
     while true do
       local countSum = counters:sum()
       if countSum < 0 then return end
@@ -130,33 +163,31 @@ function AsyncMaster:start()
         lastUpdate = countSum
         targetTheta:copy(theta)
         checkNotNan(targetTheta)
---        log.info('updated targetNet from policyNet after %d steps', countSince)
+        if opt.tau > 1000 then
+          log.info('updated targetNet from policyNet after %d steps', countSince)
+        end
       end
-      socket.select(nil,nil,.01)
+      socket.select(nil,nil,sleepSecs)
     end
   end
 
-  self.controlPool:addjob(targetUpdater)
+  self.controlPool:addjob(TARGET_UPDATER, targetUpdater)
 
-  while true do
+  local steps1 = self.opt.steps / self.opt.threads
 
-log.info('theta=%f', self.theta:sum())
-log.info('targetTheta=%f', self.targetTheta:sum())
-
-    for i=1,self.opt.threads do
-      self.pool:addjob(function()
-        agent:learn(opt.valFreq)
-      end)
-    end
-
-    self.pool:synchronize()
-
-    self.evalAgent:validate()
+  for i=1,self.opt.threads do
+    self.pool:addjob(function()
+      agent:learn(steps1)
+    end)
   end
 
-  counter:fill(-1)
+  self.pool:synchronize()
+  counters:fill(-1)
+
+  self.controlPool:synchronize()
+
   self.pool:terminate()
-  self.pool2:terminate()
+  self.controlPool:terminate()
 end
 
 return AsyncMaster
