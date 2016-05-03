@@ -187,7 +187,7 @@ function Agent:observe(reward, rawObservation, terminal)
     else
       -- Retrieve estimates from all heads
       local QHeads = self.policyNet:forward(state)
-      
+
       -- Sample from current episode head (indexes on first dimension with no batch)
       local Qs = QHeads:select(1, self.head)
       local maxQ = Qs[1]
@@ -344,7 +344,7 @@ function Agent:learn(x, indices, ISWeights)
   QCurr:zero()
   -- Set TD-errors δ with given actions
   for n = 1, N do
-     -- Correct prioritisation bias with importance-sampling weights
+    -- Correct prioritisation bias with importance-sampling weights
     QCurr[n][{{}, {actions[n]}}] = torch.mul(-self.tdErr[n], ISWeights[n]) -- Negate target to use gradient descent (not ascent) optimisers
   end
 

@@ -44,6 +44,11 @@ function Model:preprocess(observation)
   end
 end
 
+-- Calculates network output size
+local function getOutputSize(net, inputDims)
+  return net:forward(torch.Tensor(torch.LongStorage(inputDims))):size():totable()
+end
+
 -- Creates a dueling DQN based on a number of discrete actions
 function Model:create(m)
   -- Size of fully connected layers
@@ -66,7 +71,7 @@ function Model:create(m)
     net:add(nn.ReLU(true))
   end
   -- Calculate convolutional network output size
-  local convOutputSize = torch.prod(torch.Tensor(net:forward(torch.Tensor(torch.LongStorage({self.histLen*self.nChannels, self.height, self.width}))):size():totable()))
+  local convOutputSize = torch.prod(torch.Tensor(getOutputSize(net, {self.histLen*self.nChannels, self.height, self.width})))
   net:add(nn.View(convOutputSize))
 
   -- Network head
