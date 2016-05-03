@@ -30,10 +30,10 @@ fi
 
 if [ "$PAPER" == "demo" ]; then
   # Catch demo
-  th async_main.lua -async $ASYNC -eta 0.00025 -doubleQ false -duel false -optimiser adam -steps 500000 -tau 4 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -PALpha 0 "$@"
+  th async_main.lua -async $ASYNC -eta 0.00025 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 4 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -PALpha 0 "$@"
 elif [ "$PAPER" == "nature" ]; then
   # Nature
-  th async_main.lua -async $ASYNC -game $GAME -duel false -epsilonEnd 0.1 -tau 10000 -doubleQ false -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
+  th async_main.lua -async $ASYNC -game $GAME -duel false -tau 320000 -doubleQ false -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
 elif [ "$PAPER" == "doubleq" ]; then
   # Double-Q (tuned)
   th async_main.lua -async $ASYNC -game $GAME -duel false -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
