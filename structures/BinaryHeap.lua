@@ -26,6 +26,8 @@ function BinaryHeap:_init(init)
     -- Otherwise assume tensor to build heap from
     self.array = init
     self.size = init:size(1)
+    -- Convert values to hash table
+    self.hash = torch.totable(self.array:select(2, 2))
     -- Rebalance
     for i = math.floor(self.size/2) - 1, 1, -1 do
       self:downHeap(i)
@@ -168,7 +170,7 @@ function BinaryHeap:__tostring()
   local str = ''
   local level = -1
   local maxLevel = math.floor(math.log(self.size, 2))
-  
+
   -- Print each level
   for i = 1, self.size do
     -- Add a new line and spacing for each new level
