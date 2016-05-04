@@ -4,6 +4,10 @@ local BinaryHeap = require 'structures/BinaryHeap'
 local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 
+--[[
+--   WARNING: Experience performs a float -> byte compression of state, assuming discretised elements ∈ {0, 1/256, 2/256, ..., 1}
+--]]
+
 local Experience = classic.class('Experience')
 
 -- Creates experience replay memory
@@ -167,8 +171,8 @@ function Experience:retrieve(indices)
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
-      -- Copy state
-      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex], self.imgDiscLevels) -- byte -> float
+      -- Copy state (converting to float first for non-integer division)
+      self.transTuples.states[n][histIndex]:div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -182,7 +186,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex], self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen]:div(self.states[memTIndex]:typeAs(self.transTuples.transitions), self.imgDiscLevels) -- byte -> float
     end
   end
 
