@@ -1,3 +1,4 @@
+require 'socket'
 local AsyncModel = require 'AsyncModel'
 local AsyncAgent = require 'AsyncAgent'
 local class = require 'classic'
@@ -10,9 +11,10 @@ local TARGET_UPDATER = 1
 local VALIDATOR = 2
 
 local function checkNotNan(t)
-  local ok = t:ne(t):sum() == 0
+  local sum = t:sum()
+  local ok = sum == sum
   if not ok then
-    log.error('ERROR'.. t:sum())
+    log.error('ERROR'.. sum)
   end
   assert(ok)
 end
@@ -82,6 +84,7 @@ function AsyncMaster:_init(opt)
 
   self.theta = policyNet:getParameters()
   self.targetTheta = targetNet:getParameters()
+  local sharedG = self.theta:clone():zero()
 
   self.controlPool = threads.Threads(2)
   self.controlPool:specific(true)
@@ -93,7 +96,7 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(VALIDATOR, torchSetup(opt))
   self.controlPool:addjob(VALIDATOR, function()
     local AsyncAgent = require 'AsyncAgent'
-    evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters)
+    evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
   end)
 
   self.controlPool:synchronize()
@@ -113,7 +116,7 @@ function AsyncMaster:_init(opt)
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
       local AsyncAgent = require 'AsyncAgent'
-      agent = AsyncAgent(opt, policyNet, targetNet, theta, counters)
+      agent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
       mutex1:unlock()
     end
   )
@@ -157,6 +160,8 @@ function AsyncMaster:start()
     while true do
       local countSum = counters:sum()
       if countSum < 0 then return end
+
+      -- TODO report speed
 
       local countSince = countSum - lastUpdate
       if countSince > opt.tau then

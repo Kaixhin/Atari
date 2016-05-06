@@ -28,7 +28,7 @@ cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
 -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
 cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
 -- Training options
-cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"
+cmd:option('-optimiser', 'sharedRmsProp', 'Training algorithm')
 cmd:option('-eta', 0.0000625, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 5, 'Accumulate gradient x batchSize')
@@ -111,6 +111,7 @@ opt.Tensor = function(...)
   return torch.Tensor(...)
 end
 
+log.info(opt)
 
 local master = AsyncMaster(opt)
 
