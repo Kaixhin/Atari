@@ -2,7 +2,7 @@ local AsyncModel = require 'AsyncModel'
 local CircularQueue = require 'structures/CircularQueue'
 local classic = require 'classic'
 local optim = require 'optim'
-require 'modules/rmspropm' -- Add RMSProp with momentum
+require 'modules/sharedRmsProp'
 require 'classic.torch'
 
 local AsyncAgent = classic.class('AsyncAgent')
@@ -10,7 +10,7 @@ local AsyncAgent = classic.class('AsyncAgent')
 local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
-function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters)
+function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   log.info('creating AsyncAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
@@ -21,7 +21,8 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters)
   self.optimiser = optim[opt.optimiser]
   self.optimParams = {
     learningRate = opt.eta,
-    momentum = opt.momentum
+    momentum = opt.momentum,
+    g = sharedG
   }
 
   local actionSpec = self.env:getActionSpec()
