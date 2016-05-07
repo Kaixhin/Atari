@@ -251,7 +251,7 @@ function Agent:observe(reward, rawObservation, terminal)
 end
 
 -- Learns from experience
-function Agent:learn(x, indices, ISWeights)
+function Agent:learn(x, indices, ISWeights, isValidation)
   -- Copy x to parameters θ if necessary
   if x ~= self.theta then
     self.theta:copy(x)
@@ -260,7 +260,8 @@ function Agent:learn(x, indices, ISWeights)
   self.dTheta:zero()
 
   -- Retrieve experience tuples
-  local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
+  local memory = isValidation and self.valMemory or self.memory
+  local states, actions, rewards, transitions, terminals = memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
   local N = actions:size(1)
 
   -- Perform argmax action selection
@@ -337,6 +338,12 @@ function Agent:learn(x, indices, ISWeights)
     -- Squared loss
     loss = torch.mean(self.tdErr:clone():pow(2):mul(0.5)) -- Average over heads
   end
+
+  -- Exit if being used for validation metrics
+  if isValidation then
+    return
+  end
+
   -- Send TD-errors δ to be used as priorities
   self.memory:updatePriorities(indices, torch.mean(self.tdErr, 2)) -- Use average error over heads
   
@@ -430,7 +437,7 @@ function Agent:validate()
     indices = torch.linspace(startIndex, endIndex, batchSize):long()
 
     -- Perform "learning" (without optimisation)
-    self:learn(self.theta, indices, ISWeights:narrow(1, 1, batchSize))
+    self:learn(self.theta, indices, ISWeights:narrow(1, 1, batchSize), true)
 
     -- Calculate V(s') and TD-error δ
     if self.PALpha == 0 then
