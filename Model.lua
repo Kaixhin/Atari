@@ -10,7 +10,7 @@ require 'dpnn' -- Adds gradParamClip method
 require 'modules/GuidedReLU'
 require 'modules/DeconvnetReLU'
 require 'modules/GradientRescale'
-nn.FastLSTM.usenngraph = true -- Use faster FastLSTM
+--nn.FastLSTM.usenngraph = true -- Use faster FastLSTM TODO: Re-enable once nngraph #109 is resolved
 
 local Model = classic.class('Model')
 
@@ -85,7 +85,8 @@ function Model:create(m)
     local valStream = nn.Sequential()
     if self.recurrent then
       local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
-      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1)
+      lstm.o2g:init('weight', nninit.orthogonal)
+      lstm.i2g:init('weight', nninit.orthogonal):init({'bias', {{3*hiddenSize+1, 4*hiddenSize}}}, nninit.constant, 1)
       valStream:add(lstm)
     else
       valStream:add(nn.Linear(convOutputSize, hiddenSize))
@@ -97,7 +98,8 @@ function Model:create(m)
     local advStream = nn.Sequential()
     if self.recurrent then
       local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
-      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1)
+      lstm.o2g:init('weight', nninit.orthogonal)
+      lstm.i2g:init('weight', nninit.orthogonal):init({'bias', {{3*hiddenSize+1, 4*hiddenSize}}}, nninit.constant, 1)
       advStream:add(lstm)
     else
       advStream:add(nn.Linear(convOutputSize, hiddenSize))
@@ -119,7 +121,8 @@ function Model:create(m)
   else
     if self.recurrent then
       local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
-      lstm.i2g:init({'bias', {{3*hiddenSize-1, 3*hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
+      lstm.o2g:init('weight', nninit.orthogonal) -- Extra: orthogonal initialisation (Saxe et al., 2013)
+      lstm.i2g:init('weight', nninit.orthogonal):init({'bias', {{3*hiddenSize+1, 4*hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
       head:add(lstm)
     else
       head:add(nn.Linear(convOutputSize, hiddenSize))
