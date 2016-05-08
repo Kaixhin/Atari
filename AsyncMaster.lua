@@ -82,12 +82,19 @@ function AsyncMaster:_init(opt)
   local asyncModel = AsyncModel(opt)
 
   local policyNet = asyncModel:createNet()
-  local targetNet = policyNet:clone()
-  local counters = self.counters
-
   self.theta = policyNet:getParameters()
+
+  if paths.filep(opt.network) then
+    log.info('Loading pretrained network weights')
+    local weights = torch.load(opt.network)
+     self.theta:copy(weights)
+  end
+
+  local targetNet = policyNet:clone()
   self.targetTheta = targetNet:getParameters()
   local sharedG = self.theta:clone():zero()
+
+  local theta = self.theta
 
   self.controlPool = threads.Threads(2)
   self.controlPool:specific(true)
@@ -99,12 +106,12 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(VALIDATOR, torchSetup(opt))
   self.controlPool:addjob(VALIDATOR, function()
     local ValidationAgent = require 'ValidationAgent'
-    validAgent = ValidationAgent(opt, policyNet, counters)
+    validAgent = ValidationAgent(opt, policyNet, theta)
   end)
 
   self.controlPool:synchronize()
 
-  local theta = self.theta
+  local counters = self.counters
 
   -- without locking xitari sometimes crashes during initialization
   -- but not later... but is it really threadsafe then...?

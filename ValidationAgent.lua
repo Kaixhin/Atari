@@ -9,7 +9,7 @@ require 'classic.torch'
 
 local ValidationAgent = classic.class('ValidationAgent')
 
-function ValidationAgent:_init(opt, policyNet, counters)
+function ValidationAgent:_init(opt, policyNet, theta)
   log.info('creating ValidationAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
@@ -17,7 +17,7 @@ function ValidationAgent:_init(opt, policyNet, counters)
 
   self._id = opt._id
 
-  self.counters = counters
+  self.theta = theta
 
   -- Validation variables
   self.valSize = opt.valSize
@@ -47,6 +47,8 @@ function ValidationAgent:_init(opt, policyNet, counters)
 
   opt.batchSize = opt.valSize -- override in this thread ONLY
   self.valMemory = Experience(opt.valSize + 3, opt, true)
+
+  self.bestValScore = -math.huge
 
   classic.strict(self)
 end
@@ -128,10 +130,10 @@ function ValidationAgent:validate()
   end
 
   log.info('Total Score: ' .. valTotalScore)
-  valTotalScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
-  log.info('Average Score: ' .. valTotalScore)
-  self.valScores[#self.valScores + 1] = valTotalScore
-  local normScore = self.evaluator:normaliseScore(valTotalScore)
+  local valAvgScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
+  log.info('Average Score: ' .. valAvgScore)
+  self.valScores[#self.valScores + 1] = valAvgScore
+  local normScore = self.evaluator:normaliseScore(valAvgScore)
   if normScore then
     log.info('Normalised Score: ' .. normScore)
     self.normScores[#self.normScores + 1] = normScore
@@ -141,6 +143,14 @@ function ValidationAgent:validate()
 
   local avgV = self:validationStats()
   log.info('Average V: ' .. avgV)
+
+  if valAvgScore > self.bestValScore then
+    log.info('New best average score')
+    self.bestValScore = valAvgScore
+
+    log.info('Saving weights')
+    torch.save(paths.concat('experiments', self._id, 'weights.t7'), self.theta)
+  end
 
   if self.reportWeights then
     local reports = self:weightsReport()
