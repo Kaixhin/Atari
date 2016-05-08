@@ -1,6 +1,7 @@
 require 'socket'
 local AsyncModel = require 'AsyncModel'
 local AsyncAgent = require 'AsyncAgent'
+local ValidationAgent = require 'ValidationAgent'
 local class = require 'classic'
 local threads = require 'threads'
 threads.Threads.serialization('threads.sharedserialize')
@@ -95,8 +96,8 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(VALIDATOR, setupLogging(opt, 'VA'))
   self.controlPool:addjob(VALIDATOR, torchSetup(opt))
   self.controlPool:addjob(VALIDATOR, function()
-    local AsyncAgent = require 'AsyncAgent'
-    evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+    local ValidationAgent = require 'ValidationAgent'
+    validAgent = ValidationAgent(opt, policyNet, counters)
   end)
 
   self.controlPool:synchronize()
@@ -144,7 +145,7 @@ function AsyncMaster:start()
       if countSince > opt.valFreq then
         log.info('starting validation after %d steps', countSince)
         lastUpdate = countSum
-        evalAgent:validate()
+        validAgent:validate()
       end
       socket.select(nil,nil,1)
     end
@@ -160,8 +161,6 @@ function AsyncMaster:start()
     while true do
       local countSum = counters:sum()
       if countSum < 0 then return end
-
-      -- TODO report speed
 
       local countSince = countSum - lastUpdate
       if countSince > opt.tau then

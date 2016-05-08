@@ -138,6 +138,10 @@ function Model:create(m)
   return net
 end
 
+function Model:setNetwork(net)
+  self.net = net
+end
+
 -- Return list of convolutional filters as list of images
 function Model:getFilters()
   local filters = {}
