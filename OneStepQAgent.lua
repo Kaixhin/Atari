@@ -6,13 +6,13 @@ local optim = require 'optim'
 require 'modules/sharedRmsProp'
 require 'classic.torch'
 
-local AsyncAgent = classic.class('AsyncAgent')
+local OneStepQAgent = classic.class('OneStepQAgent')
 
 local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
-function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
-  log.info('creating AsyncAgent')
+function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
+  log.info('creating OneStepQAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
 
@@ -67,7 +67,7 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
 end
 
 
-function AsyncAgent:setEpsilon(opt)
+function OneStepQAgent:setEpsilon(opt)
   local r = torch.rand(1):squeeze()
   local e = 3
   if r < EPSILON_PROBS[1] then
@@ -79,12 +79,12 @@ function AsyncAgent:setEpsilon(opt)
   self.epsilonGrad = (self.epsilonEnd - opt.epsilonStart) / opt.epsilonSteps
 end
 
-function AsyncAgent:learn(steps)
+function OneStepQAgent:learn(steps)
   self.policyNet:training()
   self.stateBuffer:clear()
   if self.ale then self.env:training() end
 
-  log.info('AsyncAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
+  log.info('OneStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, rawObservation, terminal = 0, self.env:start(), false
   local observation = self.model:preprocess(rawObservation)
 
@@ -140,21 +140,21 @@ function AsyncAgent:learn(steps)
       local progressPercent = 100 * self.step / steps
       local speed = self.progFreq / torch.toc(self.tic)
       self.tic = torch.tic()
-      log.info('AsyncAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f', self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd)
+      log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f', self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd)
     end
   end
 
-  log.info('AsyncAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
+  log.info('OneStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
 end
 
 
-function AsyncAgent:eGreedy(state)
+function OneStepQAgent:eGreedy(state)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
   return self:eGreedy0(state, self.epsilon)
 end
 
 
-function AsyncAgent:eGreedy0(state, epsilon)
+function OneStepQAgent:eGreedy0(state, epsilon)
   if torch.uniform() < epsilon then
     return torch.random(1,self.m)
   end
@@ -165,7 +165,7 @@ function AsyncAgent:eGreedy0(state, epsilon)
 end
 
 
-function AsyncAgent:accumulateGradient(state, action, state_, reward, terminal)
+function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
   local Y = reward
   if not terminal then
       local QPrimes = self.targetNet:forward(state_):squeeze()
@@ -193,7 +193,7 @@ function AsyncAgent:accumulateGradient(state, action, state_, reward, terminal)
 end
 
 
-function AsyncAgent:applyGradients()
+function OneStepQAgent:applyGradients()
   if self.gradClip > 0 then
     self.policyNet:gradParamClip(self.gradClip)
   end
@@ -207,5 +207,5 @@ function AsyncAgent:applyGradients()
 end
 
 
-return AsyncAgent
+return OneStepQAgent
 

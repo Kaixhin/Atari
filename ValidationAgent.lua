@@ -48,16 +48,15 @@ function ValidationAgent:_init(opt, policyNet, counters)
   opt.batchSize = opt.valSize -- override in this thread ONLY
   self.valMemory = Experience(opt.valSize + 3, opt, true)
 
-  self:fillValMemory()
-
   classic.strict(self)
 end
 
 
-function ValidationAgent:fillValMemory()
+function ValidationAgent:start()
+  log.info('ValidationAgent | filling ValMemory ')
   local reward, rawObservation, terminal = 0, self.env:start(), false
   local action = 1
-  for i=1,self.valSteps+1 do
+  for i=1,self.valSize+1 do
     local observation = self.model:preprocess(rawObservation)
     self.valMemory:store(reward, observation, terminal, action)
     if not terminal then

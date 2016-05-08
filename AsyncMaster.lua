@@ -1,6 +1,6 @@
 require 'socket'
 local AsyncModel = require 'AsyncModel'
-local AsyncAgent = require 'AsyncAgent'
+local OneStepQAgent = require 'OneStepQAgent'
 local ValidationAgent = require 'ValidationAgent'
 local class = require 'classic'
 local threads = require 'threads'
@@ -118,8 +118,8 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local AsyncAgent = require 'AsyncAgent'
-      agent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+      local OneStepQAgent = require 'OneStepQAgent'
+      agent = OneStepQAgent(opt, policyNet, targetNet, theta, counters, sharedG)
       mutex1:unlock()
     end
   )
@@ -138,6 +138,7 @@ function AsyncMaster:start()
 
   local validator = function()
     require 'socket'
+    validAgent:start()
     local lastUpdate = 0
     while true do
       local countSum = counters:sum()
