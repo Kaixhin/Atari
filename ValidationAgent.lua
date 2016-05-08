@@ -71,16 +71,6 @@ function ValidationAgent:fillValMemory()
 end
 
 
-function ValidationAgent:reportProgress()
-    if self.reportWeights then
-      local reports = self:weightsReport()
-      for r = 1, #reports do
-        log.info(reports[r])
-      end
-    end
-end
-
-
 function ValidationAgent:eGreedy0(state, epsilon)
   if torch.uniform() < epsilon then
     return torch.random(1,self.m)
@@ -153,6 +143,12 @@ function ValidationAgent:validate()
   local avgV = self:validationStats()
   log.info('Average V: ' .. avgV)
 
+  if self.reportWeights then
+    local reports = self:weightsReport()
+    for r = 1, #reports do
+      log.info(reports[r])
+    end
+  end
 end
 
 -- Saves network convolutional filters as images

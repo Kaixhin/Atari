@@ -75,6 +75,8 @@ end
 
 function AsyncMaster:_init(opt)
   self.opt = opt
+
+  -- not atomic, but calling sum() on it is good enough
   self.counters = torch.LongTensor(opt.threads)
 
   local asyncModel = AsyncModel(opt)
