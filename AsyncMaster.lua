@@ -1,8 +1,10 @@
 require 'socket'
 local AsyncModel = require 'AsyncModel'
-local AsyncAgent = require 'AsyncAgent'
+local OneStepQAgent = require 'OneStepQAgent'
+local ValidationAgent = require 'ValidationAgent'
 local class = require 'classic'
 local threads = require 'threads'
+local signal = require 'posix.signal'
 threads.Threads.serialization('threads.sharedserialize')
 
 local AsyncMaster = classic.class('AsyncMaster')
@@ -74,17 +76,29 @@ end
 
 function AsyncMaster:_init(opt)
   self.opt = opt
+
+  -- not atomic, but calling sum() on it is good enough
   self.counters = torch.LongTensor(opt.threads)
 
+  self.stateFile = paths.concat('experiments', opt._id, 'agent.async.t7')
+
   local asyncModel = AsyncModel(opt)
-
   local policyNet = asyncModel:createNet()
-  local targetNet = policyNet:clone()
-  local counters = self.counters
-
   self.theta = policyNet:getParameters()
+
+  if paths.filep(opt.network) then
+    log.info('Loading pretrained network weights')
+    local weights = torch.load(opt.network)
+    self.theta:copy(weights)
+  end
+
+  local targetNet = policyNet:clone()
   self.targetTheta = targetNet:getParameters()
   local sharedG = self.theta:clone():zero()
+
+  local theta = self.theta
+  local counters = self.counters
+  local stateFile = self.stateFile
 
   self.controlPool = threads.Threads(2)
   self.controlPool:specific(true)
@@ -95,13 +109,23 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(VALIDATOR, setupLogging(opt, 'VA'))
   self.controlPool:addjob(VALIDATOR, torchSetup(opt))
   self.controlPool:addjob(VALIDATOR, function()
-    local AsyncAgent = require 'AsyncAgent'
-    evalAgent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+    local signal = require 'posix.signal'
+    local ValidationAgent = require 'ValidationAgent'
+    validAgent = ValidationAgent(opt, policyNet, theta)
+
+    signal.signal(signal.SIGINT, function(signum)
+      log.warn('SIGINT received')
+      log.info('Saving agent')
+      local globalSteps = counters:sum()
+      local state = { globalSteps = globalSteps }
+      torch.save(stateFile, state)
+      validAgent:saveWeights()
+      log.warn('Exiting')
+      os.exit(128 + signum)
+    end)
   end)
 
   self.controlPool:synchronize()
-
-  local theta = self.theta
 
   -- without locking xitari sometimes crashes during initialization
   -- but not later... but is it really threadsafe then...?
@@ -115,8 +139,8 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local AsyncAgent = require 'AsyncAgent'
-      agent = AsyncAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+      local OneStepQAgent = require 'OneStepQAgent'
+      agent = OneStepQAgent(opt, policyNet, targetNet, theta, counters, sharedG)
       mutex1:unlock()
     end
   )
@@ -135,6 +159,7 @@ function AsyncMaster:start()
 
   local validator = function()
     require 'socket'
+    validAgent:start()
     local lastUpdate = 0
     while true do
       local countSum = counters:sum()
@@ -144,7 +169,7 @@ function AsyncMaster:start()
       if countSince > opt.valFreq then
         log.info('starting validation after %d steps', countSince)
         lastUpdate = countSum
-        evalAgent:validate()
+        validAgent:validate()
       end
       socket.select(nil,nil,1)
     end
@@ -161,8 +186,6 @@ function AsyncMaster:start()
       local countSum = counters:sum()
       if countSum < 0 then return end
 
-      -- TODO report speed
-
       local countSince = countSum - lastUpdate
       if countSince > opt.tau then
         lastUpdate = countSum
@@ -178,11 +201,24 @@ function AsyncMaster:start()
 
   self.controlPool:addjob(TARGET_UPDATER, targetUpdater)
 
-  local steps1 = self.opt.steps / self.opt.threads
+  local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
+  if paths.filep(self.stateFile) then
+    log.info('Saved agent found - load (y/n)?')
+    if io.read() == 'y' then
+      local state = torch.load(self.stateFile)
+      stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
+      local steps1 = math.floor(state.globalSteps / self.opt.threads)
+      counters:fill(steps1)
+      log.info('Resuming training from step %d', state.globalSteps)
+      log.info('Loading pretrained network weights')
+      local weights = torch.load(paths.concat('experiments', opt._id, 'weights.t7'))
+      self.theta:copy(weights)
+    end
+  end
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()
-      agent:learn(steps1)
+      agent:learn(stepsToGo)
     end)
   end
 

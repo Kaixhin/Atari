@@ -15,6 +15,11 @@ cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|l
 -- Agent options
 cmd:option('-histLen', 4, 'Number of consecutive states processed')
 cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
+-- Experience replay options (only for valMemory)
+cmd:option('-learnStart', 50000, 'Number of steps after which learning starts')
+cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional')
+cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
+cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
 -- Reinforcement learning parameters
 cmd:option('-gamma', 0.99, 'Discount rate γ')
 cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
