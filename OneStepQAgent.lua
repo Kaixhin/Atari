@@ -80,6 +80,7 @@ function OneStepQAgent:setEpsilon(opt)
 end
 
 function OneStepQAgent:learn(steps)
+  self.step = self.counters[self.id]
   self.policyNet:training()
   self.stateBuffer:clear()
   if self.ale then self.env:training() end
