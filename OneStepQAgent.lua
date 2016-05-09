@@ -67,6 +67,9 @@ function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG
   self:setEpsilon(opt)
   self.tic = 0
   self.step = 0
+
+  self.QCurr = torch.Tensor(0)
+
   classic.strict(self)
 end
 
@@ -156,17 +159,14 @@ end
 
 function OneStepQAgent:eGreedy(state)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
-  return self:eGreedy0(state, self.epsilon)
-end
 
+  self.QCurr = self.policyNet:forward(state):squeeze()
 
-function OneStepQAgent:eGreedy0(state, epsilon)
-  if torch.uniform() < epsilon then
+  if torch.uniform() < self.epsilon then
     return torch.random(1,self.m)
   end
 
-  local Q = self.policyNet:forward(state):squeeze()
-  local _, maxIdx = Q:max(1)
+  local _, maxIdx = self.QCurr:max(1)
   return maxIdx[1]
 end
 
@@ -185,8 +185,7 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
       Y = Y + self.gamma * APrimeMax
   end
 
-  local QCurr = self.policyNet:forward(state):squeeze()
-  local tdErr = Y - QCurr[action]
+  local tdErr = Y - self.QCurr[action]
 
   if self.tdClip > 0 then
       if tdErr > self.tdClip then tdErr = self.tdClip end
