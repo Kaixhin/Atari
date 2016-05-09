@@ -26,6 +26,8 @@ function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG
     g = sharedG
   }
 
+  self.learningRateStart = opt.eta
+
   local actionSpec = self.env:getActionSpec()
   self.m = actionSpec[3][2] - actionSpec[3][1] + 1
   self.actionOffset = 1 - actionSpec[3][1]
@@ -59,6 +61,8 @@ function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG
 
   self.batchIdx = 0
   self.target = self.Tensor(self.m)
+
+  self.totalSteps = math.floor(opt.steps / opt.threads)
 
   self:setEpsilon(opt)
   self.tic = 0
@@ -141,7 +145,8 @@ function OneStepQAgent:learn(steps)
       local progressPercent = 100 * self.step / steps
       local speed = self.progFreq / torch.toc(self.tic)
       self.tic = torch.tic()
-      log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f', self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd)
+      log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+        self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
     end
   end
 
@@ -203,6 +208,8 @@ function OneStepQAgent:applyGradients()
     local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
     return loss, self.dTheta
   end
+
+  self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
 
   self.optimiser(feval, self.theta, self.optimParams)
 end
