@@ -175,14 +175,14 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
   local Y = reward
   if not terminal then
       local QPrimes = self.targetNet:forward(state_):squeeze()
-      local q2 = QPrimes:max(1):squeeze()
+      local APrimeMax = QPrimes:max(1):squeeze()
 
       if self.doubleQ then
-          local _,argmax = self.policyNet:forward(state_):squeeze():max(1)
-          q2 = QPrimes[argmax[1]]
+          local _,APrimeMaxInds = self.policyNet:forward(state_):squeeze():max(1)
+          APrimeMax = QPrimes[APrimeMaxInds[1]]
       end
 
-      Y = Y + self.gamma * q2
+      Y = Y + self.gamma * APrimeMax
   end
 
   local QCurr = self.policyNet:forward(state):squeeze()
