@@ -147,7 +147,7 @@ function ValidationAgent:validate()
   if valAvgScore > self.bestValScore then
     log.info('New best average score')
     self.bestValScore = valAvgScore
-    self:saveWeights()
+    self:saveWeights('best')
   end
 
   if self.reportWeights then
@@ -158,9 +158,9 @@ function ValidationAgent:validate()
   end
 end
 
-function ValidationAgent:saveWeights()
+function ValidationAgent:saveWeights(name)
   log.info('Saving weights')
-  torch.save(paths.concat('experiments', self._id, 'weights.t7'), self.theta)
+  torch.save(paths.concat('experiments', self._id, name..'.weights.t7'), self.theta)
 end
 
 -- Saves network convolutional filters as images

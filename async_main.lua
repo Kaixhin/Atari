@@ -38,7 +38,7 @@ cmd:option('-eta', 0.0000625, 'Learning rate η') -- Prioritied experience repla
 cmd:option('-momentum', 0.95, 'Gradient descent momentum')
 cmd:option('-batchSize', 5, 'Accumulate gradient x batchSize')
 -- in ER each step = minibatch of 32, in asynq 1-step-Q each step = 1 sample
-cmd:option('-steps', 32 * 5e7, 'Training iterations (steps)') -- Frame := step in ALE; Time step := consecutive frames treated atomically by the agent
+cmd:option('-steps', 166*1e6, 'Training iterations (steps)') -- about 4 days
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')

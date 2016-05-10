@@ -119,7 +119,8 @@ function AsyncMaster:_init(opt)
       local globalSteps = counters:sum()
       local state = { globalSteps = globalSteps }
       torch.save(stateFile, state)
-      validAgent:saveWeights()
+
+      validAgent:saveWeights('last')
       log.warn('Exiting')
       os.exit(128 + signum)
     end)
@@ -151,12 +152,24 @@ end
 
 
 function AsyncMaster:start()
-  local counters = self.counters
+  local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
+  if paths.filep(self.stateFile) then
+      local state = torch.load(self.stateFile)
+      stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
+      local steps1 = math.floor(state.globalSteps / self.opt.threads)
+      self.counters:fill(steps1)
+      log.info('Resuming training from step %d', state.globalSteps)
+      log.info('Loading pretrained network weights')
+      local weights = torch.load(paths.concat('experiments', self.opt._id, 'last.weights.t7'))
+      self.theta:copy(weights)
+      self.targetTheta:copy(self.theta)
+  end
 
+  local counters = self.counters
   local opt = self.opt
   local theta = self.theta
   local targetTheta = self.targetTheta
-
+  
   local validator = function()
     require 'socket'
     validAgent:start()
@@ -200,21 +213,6 @@ function AsyncMaster:start()
   end
 
   self.controlPool:addjob(TARGET_UPDATER, targetUpdater)
-
-  local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
-  if paths.filep(self.stateFile) then
-    log.info('Saved agent found - load (y/n)?')
-    if io.read() == 'y' then
-      local state = torch.load(self.stateFile)
-      stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
-      local steps1 = math.floor(state.globalSteps / self.opt.threads)
-      counters:fill(steps1)
-      log.info('Resuming training from step %d', state.globalSteps)
-      log.info('Loading pretrained network weights')
-      local weights = torch.load(paths.concat('experiments', opt._id, 'weights.t7'))
-      self.theta:copy(weights)
-    end
-  end
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()
