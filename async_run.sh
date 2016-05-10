@@ -41,8 +41,8 @@ elif [ "$PAPER" == "doubleq" ]; then
   th async_main.lua -async $ASYNC -game $GAME -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -PALpha 0 -eta 0.0007 -gradClip 0 "$@"
 elif [ "$PAPER" == "duel" ]; then
   # Duel (eta is apparently lower but not specified in paper; unclear whether DDQN or tuned DDQN parameters are used)
-  th async_main.lua -async $ASYNC -game $GAME -PALpha 0 -eta 0.00025 "$@"
+  th async_main.lua -async $ASYNC -game $GAME -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -PALpha 0 -eta 0.0007 "$@"
 elif [ "$PAPER" == "persistent" ]; then
   # Persistent
-  th async_main.lua -async $ASYNC -game $GAME -duel false -epsilonEnd 0.1 -tau 10000 -doubleQ false -eta 0.00025 -gradClip 0 "$@"
+  th async_main.lua -async $ASYNC -game $GAME -duel false -doubleQ false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -eta 0.0007 -gradClip 0 "$@"
 fi
