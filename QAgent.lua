@@ -85,7 +85,6 @@ function QAgent:setEpsilon(opt)
 end
 
 
-
 function QAgent:eGreedy(state)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
 
@@ -99,33 +98,17 @@ function QAgent:eGreedy(state)
   return maxIdx[1]
 end
 
-
-function QAgent:accumulateGradient(state, action, state_, reward, terminal)
-  local Y = reward
-  if not terminal then
-      local QPrimes = self.targetNet:forward(state_):squeeze()
-      local APrimeMax = QPrimes:max(1):squeeze()
-
-      if self.doubleQ then
-          local _,APrimeMaxInds = self.policyNet:forward(state_):squeeze():max(1)
-          APrimeMax = QPrimes[APrimeMaxInds[1]]
-      end
-
-      Y = Y + self.gamma * APrimeMax
+function QAgent:progress(steps)
+  self.step = self.step + 1
+  self.counters[self.id] = self.counters[self.id] + 1
+  if self.step % self.progFreq == 0 then
+    local progressPercent = 100 * self.step / steps
+    local speed = self.progFreq / torch.toc(self.tic)
+    self.tic = torch.tic()
+    log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+      self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
   end
-
-  local tdErr = Y - self.QCurr[action]
-
-  if self.tdClip > 0 then
-      if tdErr > self.tdClip then tdErr = self.tdClip end
-      if tdErr <-self.tdClip then tdErr =-self.tdClip end
-  end
-
-  self.target:zero()
-  self.target[action] = -tdErr
-  self.policyNet:backward(state, self.target)
 end
-
 
 function QAgent:applyGradients()
   if self.gradClip > 0 then

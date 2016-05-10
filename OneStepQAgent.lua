@@ -8,9 +8,6 @@ require 'classic.torch'
 
 local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
 
-local EPSILON_ENDS = { 0.01, 0.1, 0.5}
-local EPSILON_PROBS = { 0.4, 0.7, 1 }
-
 function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
   classic.strict(self)
@@ -73,20 +70,38 @@ function OneStepQAgent:learn(steps)
       self.batchIdx = 0
     end
 
-    self.step = self.step + 1
-    self.counters[self.id] = self.counters[self.id] + 1
-    if self.step % self.progFreq == 0 then
-      local progressPercent = 100 * self.step / steps
-      local speed = self.progFreq / torch.toc(self.tic)
-      self.tic = torch.tic()
-      log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
-        self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
-    end
+    self:progress(steps)
   end
 
   log.info('OneStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
 end
 
+
+function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
+  local Y = reward
+  if not terminal then
+      local QPrimes = self.targetNet:forward(state_):squeeze()
+      local APrimeMax = QPrimes:max(1):squeeze()
+
+      if self.doubleQ then
+          local _,APrimeMaxInds = self.policyNet:forward(state_):squeeze():max(1)
+          APrimeMax = QPrimes[APrimeMaxInds[1]]
+      end
+
+      Y = Y + self.gamma * APrimeMax
+  end
+
+  local tdErr = Y - self.QCurr[action]
+
+  if self.tdClip > 0 then
+      if tdErr > self.tdClip then tdErr = self.tdClip end
+      if tdErr <-self.tdClip then tdErr =-self.tdClip end
+  end
+
+  self.target:zero()
+  self.target[action] = -tdErr
+  self.policyNet:backward(state, self.target)
+end
 
 return OneStepQAgent
 
