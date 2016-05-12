@@ -305,7 +305,7 @@ function Agent:learn(x, indices, ISWeights)
   Y:mul(self.gamma):add(rewards:repeatTensor(1, self.heads))
 
   -- Get all predicted Q-values from the current state
-  if self.recurrent then
+  if self.recurrent and self.doubleQ then
     self.policyNet:forget()
   end
   local QCurr = self.policyNet:forward(states) -- Correct internal state of policy network before backprop
@@ -371,7 +371,7 @@ function Agent:learn(x, indices, ISWeights)
   end
 
   -- Backpropagate (network accumulates gradients internally)
-  self.policyNet:backward(states, QCurr)
+  self.policyNet:backward(states, QCurr) -- TODO: Work out why DRQN crashes on different batch sizes
   -- Clip the L2 norm of the gradients
   if self.gradClip > 0 then
     self.policyNet:gradParamClip(self.gradClip)
