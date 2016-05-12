@@ -35,10 +35,11 @@ cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
 -- Agent options
-cmd:option('-histLen', 4, 'Number of consecutive states processed')
+cmd:option('-histLen', 4, 'Number of consecutive states processed/used for backpropagation-through-time') -- DQN standard is 4, DRQN is 10
 cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
 cmd:option('-bootstraps', 10, 'Number of bootstrap heads (0 to disable)')
 --cmd:option('-bootstrapMask', 1, 'Independent probability of masking a transition for each bootstrap head ~ Ber(bootstrapMask) (1 to disable)')
+cmd:option('-recurrent', 'false', 'Use recurrent connections')
 -- Experience replay options
 cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
 cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
@@ -87,6 +88,7 @@ local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
+opt.recurrent = opt.recurrent == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
 opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
