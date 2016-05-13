@@ -5,9 +5,9 @@ cd `dirname -- "$0"`
 
 # Specify paper/hyperparameters
 if [ -z "$1" ]; then
-  echo "Please enter paper and async method, e.g. ./async_run nature"
+  echo "Please enter paper and async method, e.g. ./async_run nature 1-stepQ"
   echo "Paper choices: nature|doubleq|duel|persistent"
-  echo "Async choices: 1stepq"
+  echo "Async modes: OneStepQ|NStepQ|a3c"
   echo "Alternative choice: demo (for Catch)"
   exit 0
 else
@@ -15,7 +15,6 @@ else
   shift
 fi
 
-ASYNC=1stepq  
 
 # Specify game
 if [ "$PAPER" != "demo" ]; then
@@ -27,6 +26,13 @@ if [ "$PAPER" != "demo" ]; then
     shift
   fi
 fi
+
+if [ -z "$1" ]; then
+  exit 0
+fi
+
+ASYNC=$1
+shift
 
 export OMP_NUM_THREADS=1 
 

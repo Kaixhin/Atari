@@ -1,12 +1,12 @@
 local _ = require 'moses'
-local AsyncModel = require 'AsyncModel'
-local CircularQueue = require 'structures/CircularQueue'
 local classic = require 'classic'
 local optim = require 'optim'
 require 'modules/sharedRmsProp'
 require 'classic.torch'
 
+
 local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
+
 
 function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
@@ -21,37 +21,18 @@ function OneStepQAgent:learn(steps)
   if self.ale then self.env:training() end
 
   log.info('OneStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
-  local reward, rawObservation, terminal = 0, self.env:start(), false
-  local observation = self.model:preprocess(rawObservation)
-
-  self.stateBuffer:push(observation)
-  local state = self.stateBuffer:readAll()
+  local reward, terminal, state = self:start()
 
   local action, state_
 
   self.tic = torch.tic()
   for step1=1,steps do
     if not terminal then
-      action = self:eGreedy(state)
-      reward, rawObservation, terminal = self.env:step(action - self.actionOffset)
-      observation = self.model:preprocess(rawObservation)
-
-      if terminal then
-        self.stateBuffer:pushReset(observation)
-      else
-        self.stateBuffer:push(observation)
-      end
-
-      if self.rewardClip > 0 then
-        reward = math.max(reward, -self.rewardClip)
-        reward = math.min(reward, self.rewardClip)
-      end
+      action = self:eGreedy(state, self.policyNet)
+      reward, terminal, state_ = self:takeAction(action)
     else
-      reward, rawObservation, terminal = 0, self.env:start(), false
-      observation = self.model:preprocess(rawObservation)
-      self.stateBuffer:push(observation)
+      reward, terminal, state_ = self:start()
     end
-    state_ = self.stateBuffer:readAll()
 
     if state ~= nil then
       self:accumulateGradient(state, action, state_, reward, terminal)
@@ -66,7 +47,6 @@ function OneStepQAgent:learn(steps)
 
     if self.batchIdx == self.batchSize or terminal then
       self:applyGradients()
-      self.dTheta:zero()
       self.batchIdx = 0
     end
 
@@ -93,14 +73,7 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
 
   local tdErr = Y - self.QCurr[action]
 
-  if self.tdClip > 0 then
-      if tdErr > self.tdClip then tdErr = self.tdClip end
-      if tdErr <-self.tdClip then tdErr =-self.tdClip end
-  end
-
-  self.target:zero()
-  self.target[action] = -tdErr
-  self.policyNet:backward(state, self.target)
+  self:accumulateGradientTdErr(state, action, tdErr)
 end
 
 return OneStepQAgent

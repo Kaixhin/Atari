@@ -11,6 +11,7 @@ local QAgent = classic.class('QAgent')
 local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
+
 function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   log.info('creating QAgent')
   local asyncModel = AsyncModel(opt)
@@ -85,10 +86,10 @@ function QAgent:setEpsilon(opt)
 end
 
 
-function QAgent:eGreedy(state)
+function QAgent:eGreedy(state, net)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
 
-  self.QCurr = self.policyNet:forward(state):squeeze()
+  self.QCurr = net:forward(state):squeeze()
 
   if torch.uniform() < self.epsilon then
     return torch.random(1,self.m)
@@ -97,6 +98,33 @@ function QAgent:eGreedy(state)
   local _, maxIdx = self.QCurr:max(1)
   return maxIdx[1]
 end
+
+
+function QAgent:start()
+  local reward, rawObservation, terminal = 0, self.env:start(), false
+  local observation = self.model:preprocess(rawObservation)
+  self.stateBuffer:push(observation)
+  return reward, terminal, self.stateBuffer:readAll()
+end
+
+
+function QAgent:takeAction(action)
+  local reward, rawObservation, terminal = self.env:step(action - self.actionOffset)
+  if self.rewardClip > 0 then
+    reward = math.max(reward, -self.rewardClip)
+    reward = math.min(reward, self.rewardClip)
+  end
+
+  observation = self.model:preprocess(rawObservation)
+  if terminal then
+    self.stateBuffer:pushReset(observation)
+  else
+    self.stateBuffer:push(observation)
+  end
+
+  return reward, terminal, self.stateBuffer:readAll()
+end
+
 
 function QAgent:progress(steps)
   self.step = self.step + 1
@@ -110,6 +138,7 @@ function QAgent:progress(steps)
   end
 end
 
+
 function QAgent:applyGradients()
   if self.gradClip > 0 then
     self.policyNet:gradParamClip(self.gradClip)
@@ -121,10 +150,23 @@ function QAgent:applyGradients()
   end
 
   self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
-
   self.optimiser(feval, self.theta, self.optimParams)
+
+  self.dTheta:zero()
 end
 
+
+function QAgent:accumulateGradientTdErr(state, action, tdErr)
+  if self.tdClip > 0 then
+      if tdErr > self.tdClip then tdErr = self.tdClip end
+      if tdErr <-self.tdClip then tdErr =-self.tdClip end
+  end
+
+  self.target:zero()
+  self.target[action] = -tdErr
+
+  self.policyNet:backward(state, self.target)
+end
 
 return QAgent
 

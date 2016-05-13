@@ -12,6 +12,12 @@ local AsyncMaster = classic.class('AsyncMaster')
 local TARGET_UPDATER = 1
 local VALIDATOR = 2
 
+local methods = {
+  OneStepQ = 'OneStepQAgent',
+  NStepQ = 'NStepQAgent',
+  A3C = 'A3CAgent'
+}
+
 local function checkNotNan(t)
   local sum = t:sum()
   local ok = sum == sum
@@ -141,8 +147,8 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local OneStepQAgent = require 'OneStepQAgent'
-      agent = OneStepQAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+      local Agent = require(methods[opt.async])
+      agent = Agent(opt, policyNet, targetNet, theta, counters, sharedG)
       mutex1:unlock()
     end
   )
