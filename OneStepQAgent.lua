@@ -1,9 +1,6 @@
-local _ = require 'moses'
 local classic = require 'classic'
 local optim = require 'optim'
 require 'modules/sharedRmsProp'
-require 'classic.torch'
-
 
 local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
 
@@ -46,7 +43,7 @@ function OneStepQAgent:learn(steps)
     end
 
     if self.batchIdx == self.batchSize or terminal then
-      self:applyGradients()
+      self:applyGradients(self.policyNet, self.dTheta, self.theta)
       self.batchIdx = 0
     end
 
@@ -73,7 +70,7 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
 
   local tdErr = Y - self.QCurr[action]
 
-  self:accumulateGradientTdErr(state, action, tdErr)
+  self:accumulateGradientTdErr(state, action, tdErr, self.policyNet)
 end
 
 return OneStepQAgent

@@ -1,6 +1,7 @@
 require 'socket'
 local AsyncModel = require 'AsyncModel'
 local OneStepQAgent = require 'OneStepQAgent'
+local NStepQAgent = require 'NStepQAgent'
 local ValidationAgent = require 'ValidationAgent'
 local class = require 'classic'
 local threads = require 'threads'

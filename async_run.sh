@@ -5,9 +5,9 @@ cd `dirname -- "$0"`
 
 # Specify paper/hyperparameters
 if [ -z "$1" ]; then
-  echo "Please enter paper and async method, e.g. ./async_run nature 1-stepQ"
+  echo "Please enter paper and async method, e.g. ./async_run nature OneStepQ"
   echo "Paper choices: nature|doubleq|duel|persistent"
-  echo "Async modes: OneStepQ|NStepQ|a3c"
+  echo "Async modes: OneStepQ|NStepQ|A3C"
   echo "Alternative choice: demo (for Catch)"
   exit 0
 else

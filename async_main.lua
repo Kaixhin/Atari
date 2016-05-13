@@ -57,7 +57,7 @@ cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults 
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
 -- Async
-cmd:option('-async', '1-stepQ', 'async method')
+cmd:option('-async', 'OneStepQ', 'async method')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)

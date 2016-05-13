@@ -1,8 +1,6 @@
-local _ = require 'moses'
 local classic = require 'classic'
 local optim = require 'optim'
 require 'modules/sharedRmsProp'
-require 'classic.torch'
 
 local NStepQAgent, super = classic.class('NStepQAgent', 'QAgent')
 
@@ -11,11 +9,13 @@ function NStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
   self.policyNet_ = policyNet:clone()
   self.theta_, self.dTheta_ = self.policyNet_:getParameters()
+  self.dTheta_:zero()
+
   self.rewards = torch.Tensor(self.batchSize)
   self.Qs = torch.Tensor(self.batchSize, self.m)
   self.actions = torch.ByteTensor(self.batchSize)
-  local stateSpec = self.env:getStateSpec()
-  self.states = torch.zeros(0)
+  self.states = torch.Tensor(0)
+
   classic.strict(self)
 end
 
@@ -23,6 +23,7 @@ end
 function NStepQAgent:learn(steps)
   self.step = self.counters[self.id]
   self.policyNet:training()
+  self.policyNet_:training()
   self.stateBuffer:clear()
   if self.ale then self.env:training() end
 
@@ -55,9 +56,8 @@ function NStepQAgent:learn(steps)
       reward, terminal, state = self:start()
     end
 
-    self:applyGradients()
+    self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
     self.batchIdx = 0
-
   until self.step == steps
 
   log.info('NStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
@@ -81,7 +81,7 @@ function NStepQAgent:accumulateGradients(terminal, state)
     R = self.rewards[i] + self.gamma * R
     local tdErr = R - self.Qs[i][self.actions[i]]
 
-    self:accumulateGradientTdErr(self.states[i], self.actions[i], tdErr) 
+    self:accumulateGradientTdErr(self.states[i], self.actions[i], tdErr, self.policyNet_) 
   end
 end
 

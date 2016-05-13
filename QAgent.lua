@@ -139,24 +139,7 @@ function QAgent:progress(steps)
 end
 
 
-function QAgent:applyGradients()
-  if self.gradClip > 0 then
-    self.policyNet:gradParamClip(self.gradClip)
-  end
-
-  local feval = function()
-    local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
-    return loss, self.dTheta
-  end
-
-  self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
-  self.optimiser(feval, self.theta, self.optimParams)
-
-  self.dTheta:zero()
-end
-
-
-function QAgent:accumulateGradientTdErr(state, action, tdErr)
+function QAgent:accumulateGradientTdErr(state, action, tdErr, net)
   if self.tdClip > 0 then
       if tdErr > self.tdClip then tdErr = self.tdClip end
       if tdErr <-self.tdClip then tdErr =-self.tdClip end
@@ -165,8 +148,26 @@ function QAgent:accumulateGradientTdErr(state, action, tdErr)
   self.target:zero()
   self.target[action] = -tdErr
 
-  self.policyNet:backward(state, self.target)
+  net:backward(state, self.target)
 end
+
+
+function QAgent:applyGradients(net, dTheta, theta)
+  if self.gradClip > 0 then
+    net:gradParamClip(self.gradClip)
+  end
+
+  local feval = function()
+    local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
+    return loss, dTheta
+  end
+
+  self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
+  self.optimiser(feval, theta, self.optimParams)
+
+  dTheta:zero()
+end
+
 
 return QAgent
 
