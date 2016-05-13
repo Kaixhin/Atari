@@ -4,6 +4,7 @@ local signal = require 'posix.signal'
 local _ = require 'moses'
 local image = require 'image'
 local gnuplot = require 'gnuplot'
+local cjson = require 'cjson'
 local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
 local Evaluator = require 'Evaluator'
@@ -105,6 +106,10 @@ if not paths.dirp('experiments') then
   paths.mkdir('experiments')
 end
 paths.mkdir(paths.concat('experiments', opt._id))
+-- Save options for reference
+local file = torch.DiskFile(paths.concat('experiments', opt._id, 'opts.json'), 'w')
+file:writeString(cjson.encode(opt))
+file:close()
 
 -- Set up logs
 local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
