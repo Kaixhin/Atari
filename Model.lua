@@ -24,6 +24,7 @@ function Model:_init(opt)
   self.duel = opt.duel
   self.bootstraps = opt.bootstraps
   self.ale = opt.ale
+  self.a3c = opt.async == 'A3C'
 end
 
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
@@ -117,15 +118,18 @@ function Model:create(m)
     end
     net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
     net:add(headConcat)
+  elseif self.a3c then
+    net:add(head)
   else
     -- Add head via ConcatTable (simplifies bootstrap code in agent)
     local headConcat = nn.ConcatTable()
     headConcat:add(head)
     net:add(headConcat)
   end
-  net:add(nn.JoinTable(1, 1))
-  net:add(nn.View(heads, m))
-
+  if not self.a3c then
+    net:add(nn.JoinTable(1, 1))
+    net:add(nn.View(heads, m))
+  end
   -- GPU conversion
   if self.gpu > 0 then
     require 'cunn'

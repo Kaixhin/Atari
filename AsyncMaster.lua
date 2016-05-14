@@ -1,22 +1,28 @@
 require 'socket'
 local AsyncModel = require 'AsyncModel'
 local OneStepQAgent = require 'OneStepQAgent'
+local NStepQAgent = require 'NStepQAgent'
+local A3CAgent = require 'A3CAgent'
 local ValidationAgent = require 'ValidationAgent'
 local class = require 'classic'
 local threads = require 'threads'
 local signal = require 'posix.signal'
+local tds = require 'tds'
 threads.Threads.serialization('threads.sharedserialize')
 
 local AsyncMaster = classic.class('AsyncMaster')
 
-local TARGET_UPDATER = 1
-local VALIDATOR = 2
+local methods = {
+  OneStepQ = 'OneStepQAgent',
+  NStepQ = 'NStepQAgent',
+  A3C = 'A3CAgent'
+}
 
 local function checkNotNan(t)
   local sum = t:sum()
   local ok = sum == sum
   if not ok then
-    log.error('ERROR'.. sum)
+    log.error('ERROR '.. sum)
   end
   assert(ok)
 end
@@ -78,9 +84,6 @@ end
 function AsyncMaster:_init(opt)
   self.opt = opt
 
-  -- not atomic, but calling sum() on it is good enough
-  self.counters = torch.LongTensor(opt.threads)
-
   self.stateFile = paths.concat('experiments', opt._id, 'agent.async.t7')
 
   local asyncModel = AsyncModel(opt)
@@ -93,23 +96,22 @@ function AsyncMaster:_init(opt)
     self.theta:copy(weights)
   end
 
+  self.atomic = tds.AtomicCounter()
+
   local targetNet = policyNet:clone()
   self.targetTheta = targetNet:getParameters()
   local sharedG = self.theta:clone():zero()
 
   local theta = self.theta
-  local counters = self.counters
+  local targetTheta = self.targetTheta
   local stateFile = self.stateFile
+  local atomic = self.atomic
 
-  self.controlPool = threads.Threads(2)
-  self.controlPool:specific(true)
+  self.controlPool = threads.Threads(1)
 
-  self.controlPool:addjob(TARGET_UPDATER, setupLogging(opt, 'TG'))
-  self.controlPool:addjob(TARGET_UPDATER, torchSetup(opt))
-
-  self.controlPool:addjob(VALIDATOR, setupLogging(opt, 'VA'))
-  self.controlPool:addjob(VALIDATOR, torchSetup(opt))
-  self.controlPool:addjob(VALIDATOR, function()
+  self.controlPool:addjob(setupLogging(opt, 'VA'))
+  self.controlPool:addjob(torchSetup(opt))
+  self.controlPool:addjob(function()
     local signal = require 'posix.signal'
     local ValidationAgent = require 'ValidationAgent'
     validAgent = ValidationAgent(opt, policyNet, theta)
@@ -117,7 +119,7 @@ function AsyncMaster:_init(opt)
     signal.signal(signal.SIGINT, function(signum)
       log.warn('SIGINT received')
       log.info('Saving agent')
-      local globalSteps = counters:sum()
+      local globalSteps = atomic:get()
       local state = { globalSteps = globalSteps }
       torch.save(stateFile, state)
 
@@ -141,8 +143,8 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local OneStepQAgent = require 'OneStepQAgent'
-      agent = OneStepQAgent(opt, policyNet, targetNet, theta, counters, sharedG)
+      local Agent = require(methods[opt.async])
+      agent = Agent(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
       mutex1:unlock()
     end
   )
@@ -154,11 +156,12 @@ end
 
 function AsyncMaster:start()
   local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
+  local startStep = 0
   if paths.filep(self.stateFile) then
       local state = torch.load(self.stateFile)
       stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
-      local steps1 = math.floor(state.globalSteps / self.opt.threads)
-      self.counters:fill(steps1)
+      startStep = math.floor(state.globalSteps / self.opt.threads)
+      self.atomic:set(state.globalSteps)
       log.info('Resuming training from step %d', state.globalSteps)
       log.info('Loading pretrained network weights')
       local weights = torch.load(paths.concat('experiments', self.opt._id, 'last.weights.t7'))
@@ -166,7 +169,7 @@ function AsyncMaster:start()
       self.targetTheta:copy(self.theta)
   end
 
-  local counters = self.counters
+  local atomic = self.atomic
   local opt = self.opt
   local theta = self.theta
   local targetTheta = self.targetTheta
@@ -176,53 +179,29 @@ function AsyncMaster:start()
     validAgent:start()
     local lastUpdate = 0
     while true do
-      local countSum = counters:sum()
-      if countSum < 0 then return end
+      local globalStep = atomic:get()
+      if globalStep < 0 then return end
 
-      local countSince = countSum - lastUpdate
+      local countSince = globalStep - lastUpdate
       if countSince > opt.valFreq then
         log.info('starting validation after %d steps', countSince)
-        lastUpdate = countSum
+        lastUpdate = globalStep
         validAgent:validate()
       end
       socket.select(nil,nil,1)
     end
   end
 
-  self.controlPool:addjob(VALIDATOR, validator)
-
-  local targetUpdater = function()
-    require 'socket'
-    local lastUpdate = 0
-    local sleepSecs  = 0.01
-    if opt.tau > 1000 then sleepSecs = 1 end
-    while true do
-      local countSum = counters:sum()
-      if countSum < 0 then return end
-
-      local countSince = countSum - lastUpdate
-      if countSince > opt.tau then
-        lastUpdate = countSum
-        targetTheta:copy(theta)
-        checkNotNan(targetTheta)
-        if opt.tau > 1000 then
-          log.info('updated targetNet from policyNet after %d steps', countSince)
-        end
-      end
-      socket.select(nil,nil,sleepSecs)
-    end
-  end
-
-  self.controlPool:addjob(TARGET_UPDATER, targetUpdater)
+  self.controlPool:addjob(validator)
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()
-      agent:learn(stepsToGo)
+      agent:learn(stepsToGo, startStep)
     end)
   end
 
   self.pool:synchronize()
-  counters:fill(-1)
+  self.atomic:set(-1)
 
   self.controlPool:synchronize()
 

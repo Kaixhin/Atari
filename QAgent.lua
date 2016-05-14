@@ -11,13 +11,14 @@ local QAgent = classic.class('QAgent')
 local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
-function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
+
+function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   log.info('creating QAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
 
   self.id = __threadid or 1
-  self.counters = counters
+  self.atomic = atomic
 
   self.optimiser = optim[opt.optimiser]
   self.optimParams = {
@@ -37,6 +38,7 @@ function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   self.targetNet:evaluate()
 
   self.theta = theta
+  self.targetTheta = targetTheta
   local __, gradParams = self.policyNet:parameters()
   self.dTheta = nn.Module.flatten(gradParams)
   self.dTheta:zero()
@@ -56,7 +58,7 @@ function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   self.progFreq = opt.progFreq
   self.batchSize = opt.batchSize
   self.gradClip = opt.gradClip
-
+  self.tau = opt.tau
   self.Tensor = opt.Tensor
 
   self.batchIdx = 0
@@ -85,10 +87,10 @@ function QAgent:setEpsilon(opt)
 end
 
 
-function QAgent:eGreedy(state)
+function QAgent:eGreedy(state, net)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
 
-  self.QCurr = self.policyNet:forward(state):squeeze()
+  self.QCurr = net:forward(state):squeeze()
 
   if torch.uniform() < self.epsilon then
     return torch.random(1,self.m)
@@ -98,31 +100,78 @@ function QAgent:eGreedy(state)
   return maxIdx[1]
 end
 
+
+function QAgent:start()
+  local reward, rawObservation, terminal = 0, self.env:start(), false
+  local observation = self.model:preprocess(rawObservation)
+  self.stateBuffer:push(observation)
+  return reward, terminal, self.stateBuffer:readAll()
+end
+
+
+function QAgent:takeAction(action)
+  local reward, rawObservation, terminal = self.env:step(action - self.actionOffset)
+  if self.rewardClip > 0 then
+    reward = math.max(reward, -self.rewardClip)
+    reward = math.min(reward, self.rewardClip)
+  end
+
+  observation = self.model:preprocess(rawObservation)
+  if terminal then
+    self.stateBuffer:pushReset(observation)
+  else
+    self.stateBuffer:push(observation)
+  end
+
+  return reward, terminal, self.stateBuffer:readAll()
+end
+
+
 function QAgent:progress(steps)
   self.step = self.step + 1
-  self.counters[self.id] = self.counters[self.id] + 1
+  if self.atomic:inc() % self.tau == 0 then
+    self.targetTheta:copy(self.theta)
+    if self.tau>1000 then
+      log.info('QAgent | updated targetNetwork at %d', self.step) 
+    end
+  end
   if self.step % self.progFreq == 0 then
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)
     self.tic = torch.tic()
-    log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+    log.info('QAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
       self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
   end
 end
 
-function QAgent:applyGradients()
+
+function QAgent:accumulateGradientTdErr(state, action, tdErr, net)
+  if self.tdClip > 0 then
+      if tdErr > self.tdClip then tdErr = self.tdClip end
+      if tdErr <-self.tdClip then tdErr =-self.tdClip end
+  end
+
+  self.target:zero()
+  self.target[action] = -tdErr
+
+  net:backward(state, self.target)
+end
+
+
+function QAgent:applyGradients(net, dTheta, theta)
   if self.gradClip > 0 then
-    self.policyNet:gradParamClip(self.gradClip)
+    net:gradParamClip(self.gradClip)
   end
 
   local feval = function()
     local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
-    return loss, self.dTheta
+    return loss, dTheta
   end
 
   self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
+  self.optimiser(feval, theta, self.optimParams)
 
-  self.optimiser(feval, self.theta, self.optimParams)
+  dTheta:zero()
 end
 
 
