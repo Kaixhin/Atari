@@ -5,8 +5,8 @@ require 'modules/sharedRmsProp'
 local NStepQAgent, super = classic.class('NStepQAgent', 'QAgent')
 
 
-function NStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
-  super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
+function NStepQAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.policyNet_ = self.policyNet:clone()
   self.theta_, self.dTheta_ = self.policyNet_:getParameters()
   self.dTheta_:zero()
@@ -20,8 +20,8 @@ function NStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
 end
 
 
-function NStepQAgent:learn(steps)
-  self.step = self.counters[self.id]
+function NStepQAgent:learn(steps, from)
+  self.step = from or 0
   self.policyNet:training()
   self.policyNet_:training()
   self.stateBuffer:clear()

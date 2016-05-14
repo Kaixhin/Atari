@@ -22,6 +22,7 @@ luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitar
 
 And in addition install
 
+- tds
 - luasocket
 
 

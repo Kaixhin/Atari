@@ -5,14 +5,14 @@ require 'modules/sharedRmsProp'
 local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
 
 
-function OneStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
-  super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
+function OneStepQAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   classic.strict(self)
 end
 
 
-function OneStepQAgent:learn(steps)
-  self.step = self.counters[self.id]
+function OneStepQAgent:learn(steps, from)
+  self.step = from or 0
   self.policyNet:training()
   self.stateBuffer:clear()
   if self.ale then self.env:training() end

@@ -10,7 +10,6 @@ function A3CAgent:_init(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
 
   self.id = __threadid or 1
-  self.counters = counters
 
   self.optimiser = optim[opt.optimiser]
   self.optimParams = {

@@ -12,13 +12,13 @@ local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
 
-function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
+function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   log.info('creating QAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
 
   self.id = __threadid or 1
-  self.counters = counters
+  self.atomic = atomic
 
   self.optimiser = optim[opt.optimiser]
   self.optimParams = {
@@ -38,6 +38,7 @@ function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   self.targetNet:evaluate()
 
   self.theta = theta
+  self.targetTheta = targetTheta
   local __, gradParams = self.policyNet:parameters()
   self.dTheta = nn.Module.flatten(gradParams)
   self.dTheta:zero()
@@ -57,7 +58,7 @@ function QAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   self.progFreq = opt.progFreq
   self.batchSize = opt.batchSize
   self.gradClip = opt.gradClip
-
+  self.tau = opt.tau
   self.Tensor = opt.Tensor
 
   self.batchIdx = 0
@@ -128,7 +129,12 @@ end
 
 function QAgent:progress(steps)
   self.step = self.step + 1
-  self.counters[self.id] = self.counters[self.id] + 1
+  if self.atomic:inc() % self.tau == 0 then
+    self.targetTheta:copy(self.theta)
+    if self.tau>1000 then
+      log.info('QAgent | updated targetNetwork at %d', self.step) 
+    end
+  end
   if self.step % self.progFreq == 0 then
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)
