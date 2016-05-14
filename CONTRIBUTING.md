@@ -40,7 +40,7 @@ Feature requests are welcome to be filed. This project has one primary developer
 
 Before opening a feature request, please take a moment to find out whether your idea fits with the scope and aims of the project. It's up to *you* to make a strong case to convince the project's developer of the merits of this feature. Please provide as much detail and context as possible.
 
-## Pull Reqests
+## Pull requests
 
 Good pull requests - patches, improvements, new features - are a fantastic help. They should remain focused in scope **and avoid containing unrelated commits.**
 
@@ -90,7 +90,7 @@ Adhering to the following this process is the best way to get your work included
 
 7. [Open a Pull Request](https://help.github.com/articles/using-pull-requests/) with a clear title and description.
 
-### Code Guidelines
+### Code guidelines
 
 Please try to follow the general coding style in this repository. Loosely:
 
