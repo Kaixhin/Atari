@@ -133,7 +133,7 @@ function QAgent:progress(steps)
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)
     self.tic = torch.tic()
-    log.info('OneStepQAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+    log.info('QAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
       self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
   end
 end

@@ -7,7 +7,7 @@ local NStepQAgent, super = classic.class('NStepQAgent', 'QAgent')
 
 function NStepQAgent:_init(opt, policyNet, targetNet, theta, counters, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, counters, sharedG)
-  self.policyNet_ = policyNet:clone()
+  self.policyNet_ = self.policyNet:clone()
   self.theta_, self.dTheta_ = self.policyNet_:getParameters()
   self.dTheta_:zero()
 
@@ -36,6 +36,7 @@ function NStepQAgent:learn(steps)
   self.tic = torch.tic()
   repeat
     self.theta_:copy(self.theta)
+    self.batchIdx = 0
     repeat
       self.batchIdx = self.batchIdx + 1
       self.states[self.batchIdx]:copy(state)
@@ -57,7 +58,6 @@ function NStepQAgent:learn(steps)
     end
 
     self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
-    self.batchIdx = 0
   until self.step == steps
 
   log.info('NStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)

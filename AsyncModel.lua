@@ -26,7 +26,7 @@ function AsyncModel:_init(opt)
   end
 
   self.model = Model(opt)
-
+  self.a3c = opt.async == 'A3C'
 
   classic.strict(self)
 end
@@ -38,7 +38,30 @@ end
 function AsyncModel:createNet()
   local actionSpec = self.env:getActionSpec()
   local m = actionSpec[3][2] - actionSpec[3][1] + 1 -- Number of discrete actions
-  return self.model:create(m)
+  local net = self.model:create(m)
+
+  if self.a3c then return self:createA3C(net) end
+  return net
+end
+
+
+function AsyncModel:createA3C(net)
+  local valueAndPolicy = nn.ConcatTable()
+
+  local valueFunction = nn.Sequential()
+  valueFunction:add(nn.Linear(convOutputSize, 1))
+  valueFunction:add(nn.ReLU(true))
+
+  local policy = nn.Sequential()
+  policy:add(nn.Linear(convOutputSize, m))
+  policy:add(nn.ReLU(true))
+  policy:add(nn.SoftMax())
+
+  valueAndPolicy:add(valueFunction)
+  valueAndPolicy:add(policy)
+
+  net:add(valueAndPolicy)
+  return net, valueFunction, policy
 end
 
 return AsyncModel

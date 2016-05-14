@@ -23,7 +23,7 @@ local function checkNotNan(t)
   local sum = t:sum()
   local ok = sum == sum
   if not ok then
-    log.error('ERROR'.. sum)
+    log.error('ERROR '.. sum)
   end
   assert(ok)
 end
