@@ -7,54 +7,15 @@ local A3CAgent,super = classic.class('A3CAgent', 'AsyncAgent')
 
 function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
-  
-  log.info('creating QAgent')
-  local asyncModel = AsyncModel(opt)
-  self.env, self.model = asyncModel:getEnvAndModel()
 
-  self.id = __threadid or 1
-  self.atomic = atomic
-
-  self.optimiser = optim[opt.optimiser]
-  self.optimParams = {
-    learningRate = opt.eta,
-    momentum = opt.momentum,
-    g = sharedG
-  }
-
-  self.learningRateStart = opt.eta
-
-  local actionSpec = self.env:getActionSpec()
-  self.m = actionSpec[3][2] - actionSpec[3][1] + 1
-  self.actionOffset = 1 - actionSpec[3][1]
+  log.info('creating A3CAgent')
 
   self.policyNet_ = policyNet:clone('weight', 'bias')
 
-  self.theta = theta
-  __, self.dTheta = self.policyNet_:getParams()
-  self.dTheta:zero()
+  __, self.dTheta_ = self.policyNet_:getParams()
+  self.dTheta_:zero()
 
-  self.ale = opt.ale
-
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
-
-  self.gamma = opt.gamma
-  self.rewardClip = opt.rewardClip
-  self.tdClip = opt.tdClip
-  self.gradClip = opt.gradClip
-
-  self.progFreq = opt.progFreq
-  self.t_max = opt.batchSize
-
-  self.Tensor = opt.Tensor
-
-  self.T = 0
   self.target = self.Tensor(self.m)
-
-  self.totalSteps = math.floor(opt.steps / opt.threads)
-
-  self.tic = 0
-  self.step = 0
 
   classic.strict(self)
 end
