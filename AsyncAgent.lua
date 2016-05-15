@@ -84,17 +84,6 @@ function AsyncAgent:takeAction(action)
 end
 
 
-function AsyncAgent:progress(steps)
-  if self.step % self.progFreq == 0 then
-    local progressPercent = 100 * self.step / steps
-    local speed = self.progFreq / torch.toc(self.tic)
-    self.tic = torch.tic()
-    log.info('AsyncAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
-      self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
-  end
-end
-
-
 function AsyncAgent:applyGradients(net, dTheta, theta)
   if self.gradClip > 0 then
     net:gradParamClip(self.gradClip)

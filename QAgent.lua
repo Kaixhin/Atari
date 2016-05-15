@@ -72,7 +72,13 @@ function QAgent:progress(steps)
       log.info('QAgent | updated targetNetwork at %d', self.atomic:get()) 
     end
   end
-  super.progress(self, steps)
+  if self.step % self.progFreq == 0 then
+    local progressPercent = 100 * self.step / steps
+    local speed = self.progFreq / torch.toc(self.tic)
+    self.tic = torch.tic()
+    log.info('AsyncAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+      self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
+  end
 end
 
 

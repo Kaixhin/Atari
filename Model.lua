@@ -119,7 +119,23 @@ function Model:create(m)
     net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
     net:add(headConcat)
   elseif self.a3c then
-    net:add(head)
+    net:add(nn.Linear(convOutputSize, hiddenSize))
+
+    local valueAndPolicy = nn.ConcatTable()
+
+    local valueFunction = nn.Sequential()
+    valueFunction:add(nn.Linear(hiddenSize, 1))
+    valueFunction:add(nn.ReLU(true))
+
+    local policy = nn.Sequential()
+    policy:add(nn.Linear(hiddenSize, m))
+    policy:add(nn.ReLU(true))
+    policy:add(nn.SoftMax())
+
+    valueAndPolicy:add(valueFunction)
+    valueAndPolicy:add(policy)
+
+    net:add(valueAndPolicy)
   else
     -- Add head via ConcatTable (simplifies bootstrap code in agent)
     local headConcat = nn.ConcatTable()
