@@ -565,10 +565,10 @@ function Agent:computeSaliency(state, index, ensemble)
   local maxTarget = self.Tensor(self.heads, self.m):fill(0)
   if ensemble then
     -- Set target on all heads (when using ensemble policy)
-    maxTarget[{{}, {index}}] = 2
+    maxTarget[{{}, {index}}] = 1
   else
     -- Set target on current head
-    maxTarget[self.head][index] = 2
+    maxTarget[self.head][index] = 1
   end
 
   -- Backpropagate to inputs
