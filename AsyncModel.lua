@@ -45,7 +45,7 @@ function AsyncModel:createNet()
 end
 
 
-function AsyncModel:createA3C(net)
+function AsyncModel:createA3C(convNetOnly)
   local valueAndPolicy = nn.ConcatTable()
 
   local valueFunction = nn.Sequential()
@@ -60,8 +60,8 @@ function AsyncModel:createA3C(net)
   valueAndPolicy:add(valueFunction)
   valueAndPolicy:add(policy)
 
-  net:add(valueAndPolicy)
-  return net, valueFunction, policy
+  convNetOnly:add(valueAndPolicy)
+  return convNetOnly
 end
 
 return AsyncModel

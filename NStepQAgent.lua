@@ -29,7 +29,6 @@ function NStepQAgent:learn(steps, from)
 
   log.info('NStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
-  self.policyNet:forward(state) -- initialize buffers once with statesize
 
   self.states:resize(self.batchSize, unpack(state:size():totable()))
 
