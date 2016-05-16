@@ -39,6 +39,7 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 ## Acknowledgements
 
 - [@GeorgOstrovski](https://github.com/GeorgOstrovski) for confirmation on network usage in advantage operators + note on interaction with Double DQN.
+- [@schaul](https://github.com/schaul) for clarifications on prioritised experience replay + dueling DQN hyperparameters.
 
 ## References
 

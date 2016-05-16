@@ -35,7 +35,8 @@ elif [ "$PAPER" == "doubleq" ]; then
   # Double-Q (tuned)
   th main.lua -game $GAME -duel false -bootstraps 0 -memPriority none -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
 elif [ "$PAPER" == "duel" ]; then
-  # Duel (eta is apparently lower but not specified in paper; unclear whether DDQN or tuned DDQN parameters are used)
+  # Duel (eta is apparently lower but not specified in paper)
+  # Note from Tom Schaul: Tuned DDQN hyperparameters are used
   th main.lua -game $GAME -bootstraps 0 -memPriority none -PALpha 0 -eta 0.00025 "$@"
 elif [ "$PAPER" == "prioritised" ]; then
   # Prioritised (rank-based)

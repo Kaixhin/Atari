@@ -202,6 +202,7 @@ function BinaryHeap:getValuesByVal(hashIndices)
 end
 
 -- Rebalances the heap
+-- Note from Tom Schaul: Solution for rebalancing (below) is good; original solution not revealed
 function BinaryHeap:rebalance()
   -- Sort underlying array
   local sortArray, sortIndices = torch.sort(self.array, 1, true)
