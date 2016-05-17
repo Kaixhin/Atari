@@ -100,8 +100,6 @@ function A3CAgent:accumulateGradients(terminal, state)
     local advantage = R - self.Vs[i]
 
     self.policyTarget:zero()
-    self.policyTarget[action] = -(actionLogProbability * advantage + self.beta * entropy)
-    self.vTarget = - advantage
 
     self.policyNet_:backward(self.targets)
   end

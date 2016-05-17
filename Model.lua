@@ -125,7 +125,6 @@ function Model:create(m)
 
     local valueFunction = nn.Sequential()
     valueFunction:add(nn.Linear(hiddenSize, 1))
-    valueFunction:add(nn.ReLU(true))
 
     local policy = nn.Sequential()
     policy:add(nn.Linear(hiddenSize, m))

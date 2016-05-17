@@ -33,6 +33,8 @@ function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sha
   self.tic = 0
   self.step = 0
 
+  self.alwaysComputeGreedyQ = not self.doubleQ
+
   self.QCurr = torch.Tensor(0)
 end
 
@@ -53,10 +55,16 @@ end
 function QAgent:eGreedy(state, net)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
 
-  self.QCurr = net:forward(state):squeeze()
+  if self.alwaysComputeGreedyQ then
+    self.QCurr = net:forward(state):squeeze()
+  end
 
   if torch.uniform() < self.epsilon then
     return torch.random(1,self.m)
+  end
+
+  if not self.alwaysComputeGreedyQ then
+    self.QCurr = net:forward(state):squeeze()
   end
 
   local _, maxIdx = self.QCurr:max(1)

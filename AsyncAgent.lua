@@ -90,7 +90,7 @@ function AsyncAgent:applyGradients(net, dTheta, theta)
   end
 
   local feval = function()
-    local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
+    local loss = 0 -- 0.5 * tdErr ^2
     return loss, dTheta
   end
 
