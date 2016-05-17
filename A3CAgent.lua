@@ -2,65 +2,121 @@ local classic = require 'classic'
 local optim = require 'optim'
 require 'modules/sharedRmsProp'
 
-local A3CAgent = classic.class('A3CAgent')
+local A3CAgent,super = classic.class('A3CAgent', 'AsyncAgent')
 
-function A3CAgent:_init(opt)
-  log.info('creating QAgent')
-  local asyncModel = AsyncModel(opt)
-  self.env, self.model = asyncModel:getEnvAndModel()
 
-  self.id = __threadid or 1
+function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
 
-  self.optimiser = optim[opt.optimiser]
-  self.optimParams = {
-    learningRate = opt.eta,
-    momentum = opt.momentum,
-    g = sharedG
-  }
+  log.info('creating A3CAgent')
 
-  self.learningRateStart = opt.eta
+  self.policyNet_ = policyNet:clone('weight', 'bias')
 
-  local actionSpec = self.env:getActionSpec()
-  self.m = actionSpec[3][2] - actionSpec[3][1] + 1
-  self.actionOffset = 1 - actionSpec[3][1]
+  self.theta_, self.dTheta_ = self.policyNet_:getParameters()
+  self.dTheta_:zero()
 
-  self.policyNet = policyNet:clone('weight', 'bias')
-  self.targetNet = targetNet:clone('weight', 'bias')
-  self.targetNet:evaluate()
+  self.policyTarget = self.Tensor(self.m)
+  self.vTarget = self.Tensor(1)
+  self.targets = { vTarget, policyTarget }
 
-  self.theta = theta
-  local __, gradParams = self.policyNet:parameters()
-  self.dTheta = nn.Module.flatten(gradParams)
-  self.dTheta:zero()
+  self.Vs = self.Tensor(self.batchSize)
+  self.probabilities = self.Tensor(self.batchSize, self.m)
 
-  self.ale = opt.ale
+  self.rewards = torch.Tensor(self.batchSize)
+  self.actions = torch.ByteTensor(self.batchSize)
+  self.states = torch.Tensor(0)
 
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
-
-  self.gamma = opt.gamma -- ???
-  self.rewardClip = opt.rewardClip
-  self.tdClip = opt.tdClip
-  self.gradClip = opt.gradClip
-
-  self.progFreq = opt.progFreq
-  self.batchSize = opt.batchSize
-
-  self.Tensor = opt.Tensor
-
-  self.batchIdx = 0
-  self.target = self.Tensor(self.m)
-
-  self.totalSteps = math.floor(opt.steps / opt.threads)
-
-  self.tic = 0
-  self.step = 0
+  self.beta = 0.01
 
   classic.strict(self)
 end
 
 
-function A3CAgent:learn(steps)
+function A3CAgent:learn(steps, from)
+  self.step = from or 0
 
+  self.stateBuffer:clear()
+  if self.ale then self.env:training() end
+
+  log.info('A3CAgent starting | steps=%d', steps)
+  local reward, terminal, state = self:start()
+
+  self.states:resize(self.batchSize, unpack(state:size():totable()))
+
+  self.tic = torch.tic()
+  local V, probability
+  repeat
+    self.theta_:copy(self.theta)
+    self.batchIdx = 0
+    repeat
+      self.batchIdx = self.batchIdx + 1
+      self.states[self.batchIdx]:copy(state)
+
+      if V == nil then
+        V, probability = unpack(self.policyNet_:forward(state))
+      end
+      local action = torch.multinomial(probability, 1):squeeze()
+
+      self.Vs[self.batchIdx] = V
+      self.probabilities[self.batchIdx]:copy(probability)
+      self.actions[self.batchIdx] = action
+
+      reward, terminal, state = self:takeAction(action)
+      self.rewards[self.batchIdx] = reward
+
+      self:progress(steps)
+    until terminal or self.batchIdx == self.batchSize
+
+    V, probability = self:accumulateGradients(terminal, state)
+
+    if terminal then 
+      reward, terminal, state = self:start()
+    end
+
+    self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
+  until self.step == steps
+
+  log.info('A3CAgent ended learning steps=%d', steps)
 end
 
+
+function A3CAgent:accumulateGradients(terminal, state)
+  local R = 0
+  local V, probability
+  if not terminal then
+    V, probability = unpack(self.policyNet_:forward(state))
+    R = V
+  end
+
+  for i=self.batchIdx,1-1 do
+    R = self.rewards[i] + self.gamma * R
+    
+    local action = self.actions[i]
+    local logProbabilities = torch.log(self.probabilities[i])
+    local actionLogProbability = logProbabilities[action]
+
+    local entropy = - torch.cmul(logProbabilities, self.probabilities[i]):sum()
+
+    local advantage = R - self.Vs[i]
+
+    self.policyTarget:zero()
+
+    self.policyNet_:backward(self.targets)
+  end
+
+  return V, probability
+end
+
+
+function A3CAgent:progress(steps)
+  if self.atomic:inc() % self.progFreq == 0 then
+    local progressPercent = 100 * self.step / steps
+    local speed = self.progFreq / torch.toc(self.tic)
+    self.tic = torch.tic()
+    log.info('A3CAgent | step=%d | %.02f%% | speed=%d/sec | η=%.8f',
+      self.step, progressPercent, speed, self.optimParams.learningRate)
+  end
+end
+
+return A3CAgent
 

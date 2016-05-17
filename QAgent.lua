@@ -1,67 +1,30 @@
-local _ = require 'moses'
-local AsyncModel = require 'AsyncModel'
-local CircularQueue = require 'structures/CircularQueue'
 local classic = require 'classic'
-local optim = require 'optim'
-require 'modules/sharedRmsProp'
-require 'classic.torch'
 
-local QAgent = classic.class('QAgent')
+local QAgent, super = classic.class('QAgent', 'AsyncAgent')
 
 local EPSILON_ENDS = { 0.01, 0.1, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
 
 function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  self.super = super
   log.info('creating QAgent')
-  local asyncModel = AsyncModel(opt)
-  self.env, self.model = asyncModel:getEnvAndModel()
 
-  self.id = __threadid or 1
-  self.atomic = atomic
-
-  self.optimiser = optim[opt.optimiser]
-  self.optimParams = {
-    learningRate = opt.eta,
-    momentum = opt.momentum,
-    g = sharedG
-  }
-
-  self.learningRateStart = opt.eta
-
-  local actionSpec = self.env:getActionSpec()
-  self.m = actionSpec[3][2] - actionSpec[3][1] + 1
-  self.actionOffset = 1 - actionSpec[3][1]
-
-  self.policyNet = policyNet:clone('weight', 'bias')
   self.targetNet = targetNet:clone('weight', 'bias')
   self.targetNet:evaluate()
 
-  self.theta = theta
   self.targetTheta = targetTheta
   local __, gradParams = self.policyNet:parameters()
   self.dTheta = nn.Module.flatten(gradParams)
   self.dTheta:zero()
 
-  self.ale = opt.ale
   self.doubleQ = opt.doubleQ
 
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
-
-  self.gamma = opt.gamma
-  self.rewardClip = opt.rewardClip
-  self.tdClip = opt.tdClip
   self.epsilonStart = opt.epsilonStart
   self.epsilon = self.epsilonStart
   self.PALpha = opt.PALpha
 
-  self.progFreq = opt.progFreq
-  self.batchSize = opt.batchSize
-  self.gradClip = opt.gradClip
-  self.tau = opt.tau
-  self.Tensor = opt.Tensor
-
-  self.batchIdx = 0
   self.target = self.Tensor(self.m)
 
   self.totalSteps = math.floor(opt.steps / opt.threads)
@@ -69,6 +32,8 @@ function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sha
   self:setEpsilon(opt)
   self.tic = 0
   self.step = 0
+
+  self.alwaysComputeGreedyQ = not self.doubleQ
 
   self.QCurr = torch.Tensor(0)
 end
@@ -90,40 +55,20 @@ end
 function QAgent:eGreedy(state, net)
   self.epsilon = math.max(self.epsilonStart + (self.step - 1)*self.epsilonGrad, self.epsilonEnd)
 
-  self.QCurr = net:forward(state):squeeze()
+  if self.alwaysComputeGreedyQ then
+    self.QCurr = net:forward(state):squeeze()
+  end
 
   if torch.uniform() < self.epsilon then
     return torch.random(1,self.m)
   end
 
+  if not self.alwaysComputeGreedyQ then
+    self.QCurr = net:forward(state):squeeze()
+  end
+
   local _, maxIdx = self.QCurr:max(1)
   return maxIdx[1]
-end
-
-
-function QAgent:start()
-  local reward, rawObservation, terminal = 0, self.env:start(), false
-  local observation = self.model:preprocess(rawObservation)
-  self.stateBuffer:push(observation)
-  return reward, terminal, self.stateBuffer:readAll()
-end
-
-
-function QAgent:takeAction(action)
-  local reward, rawObservation, terminal = self.env:step(action - self.actionOffset)
-  if self.rewardClip > 0 then
-    reward = math.max(reward, -self.rewardClip)
-    reward = math.min(reward, self.rewardClip)
-  end
-
-  observation = self.model:preprocess(rawObservation)
-  if terminal then
-    self.stateBuffer:pushReset(observation)
-  else
-    self.stateBuffer:push(observation)
-  end
-
-  return reward, terminal, self.stateBuffer:readAll()
 end
 
 
@@ -132,14 +77,14 @@ function QAgent:progress(steps)
   if self.atomic:inc() % self.tau == 0 then
     self.targetTheta:copy(self.theta)
     if self.tau>1000 then
-      log.info('QAgent | updated targetNetwork at %d', self.step) 
+      log.info('QAgent | updated targetNetwork at %d', self.atomic:get()) 
     end
   end
   if self.step % self.progFreq == 0 then
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)
     self.tic = torch.tic()
-    log.info('QAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
+    log.info('AsyncAgent | step=%d | %.02f%% | speed=%d/sec | ε=%.2f -> %.2f | η=%.8f',
       self.step, progressPercent, speed ,self.epsilon, self.epsilonEnd, self.optimParams.learningRate)
   end
 end
@@ -155,23 +100,6 @@ function QAgent:accumulateGradientTdErr(state, action, tdErr, net)
   self.target[action] = -tdErr
 
   net:backward(state, self.target)
-end
-
-
-function QAgent:applyGradients(net, dTheta, theta)
-  if self.gradClip > 0 then
-    net:gradParamClip(self.gradClip)
-  end
-
-  local feval = function()
-    local loss = 0 -- torch.mean(self.tdErr:clone():pow(2):mul(0.5))
-    return loss, dTheta
-  end
-
-  self.optimParams.learningRate = self.learningRateStart * (self.totalSteps - self.step) / self.totalSteps
-  self.optimiser(feval, theta, self.optimParams)
-
-  dTheta:zero()
 end
 
 

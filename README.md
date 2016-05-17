@@ -4,11 +4,18 @@
 
 Asynchrounous version [[1]](#references) of DQN that runs on CPU multithreaded
 
-Modes supported
+Async modes supported
 
 * 1 step Q
-* ~~N step Q~~
+* N step Q
 * ~~A3C~~
+
+Q learning can be combined with these methods:
+
+* double Q learning
+* ~~PAL~~ 
+* ~~dueling~~
+* ~~deep recurrent~~
 
 This branch will be merged with the experience replay based `master` branch after refactoring unifying all the methods
 
@@ -23,7 +30,6 @@ luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitar
 And in addition install
 
 - tds
-- luasocket
 
 
 ## Acknowledgements

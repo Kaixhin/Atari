@@ -68,10 +68,14 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
       Y = Y + self.gamma * APrimeMax
   end
 
+  if self.doubleQ then
+    self.QCurr = self.policyNet:forward(state):squeeze()
+  end
+
   local tdErr = Y - self.QCurr[action]
 
   self:accumulateGradientTdErr(state, action, tdErr, self.policyNet)
 end
 
-return OneStepQAgent
 
+return OneStepQAgent

@@ -173,9 +173,9 @@ function AsyncMaster:start()
   local opt = self.opt
   local theta = self.theta
   local targetTheta = self.targetTheta
-  
+
   local validator = function()
-    require 'socket'
+    local posix = require 'posix'
     validAgent:start()
     local lastUpdate = 0
     while true do
@@ -188,7 +188,7 @@ function AsyncMaster:start()
         lastUpdate = globalStep
         validAgent:validate()
       end
-      socket.select(nil,nil,1)
+      posix.sleep(1)
     end
   end
 
