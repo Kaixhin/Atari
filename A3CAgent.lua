@@ -19,9 +19,6 @@ function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, s
   self.vTarget = self.Tensor(1)
   self.targets = { vTarget, policyTarget }
 
-  self.Vs = self.Tensor(self.batchSize)
-  self.probabilities = self.Tensor(self.batchSize, self.m)
-
   self.rewards = torch.Tensor(self.batchSize)
   self.actions = torch.ByteTensor(self.batchSize)
   self.states = torch.Tensor(0)
@@ -44,7 +41,7 @@ function A3CAgent:learn(steps, from)
   self.states:resize(self.batchSize, unpack(state:size():totable()))
 
   self.tic = torch.tic()
-  local V, probability
+
   repeat
     self.theta_:copy(self.theta)
     self.batchIdx = 0
@@ -57,8 +54,6 @@ function A3CAgent:learn(steps, from)
       end
       local action = torch.multinomial(probability, 1):squeeze()
 
-      self.Vs[self.batchIdx] = V
-      self.probabilities[self.batchIdx]:copy(probability)
       self.actions[self.batchIdx] = action
 
       reward, terminal, state = self:takeAction(action)
@@ -67,7 +62,7 @@ function A3CAgent:learn(steps, from)
       self:progress(steps)
     until terminal or self.batchIdx == self.batchSize
 
-    V, probability = self:accumulateGradients(terminal, state)
+    self:accumulateGradients(terminal, state)
 
     if terminal then 
       reward, terminal, state = self:start()
@@ -92,19 +87,17 @@ function A3CAgent:accumulateGradients(terminal, state)
     R = self.rewards[i] + self.gamma * R
     
     local action = self.actions[i]
-    local logProbabilities = torch.log(self.probabilities[i])
-    local actionLogProbability = logProbabilities[action]
+    local V, probability = unpack(self.policyNet_:forward(self.states[i]))
 
-    local entropy = - torch.cmul(logProbabilities, self.probabilities[i]):sum()
+    local advantage = R - V
 
-    local advantage = R - self.Vs[i]
-
+    self.vTarget = - advantage
     self.policyTarget:zero()
+    self.policyTarget[action] = advantage / probability[action] - self.beta * (probability:log():sum()+1)
 
     self.policyNet_:backward(self.targets)
   end
 
-  return V, probability
 end
 
 
