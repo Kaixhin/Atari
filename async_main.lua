@@ -58,6 +58,7 @@ cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
 -- Async
 cmd:option('-async', 'OneStepQ', 'async method')
+cmd:option('-novalidation', 'false', 'dont run validation thread (for debugging)')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
@@ -67,6 +68,7 @@ opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
+opt.novalidation = opt.novalidation == 'true' or false
 opt.bootstraps = 0
 opt.gpu = 0
 opt.ale = opt.game ~= 'catch'

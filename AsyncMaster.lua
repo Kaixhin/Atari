@@ -114,19 +114,20 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(function()
     local signal = require 'posix.signal'
     local ValidationAgent = require 'ValidationAgent'
-    validAgent = ValidationAgent(opt, policyNet, theta)
+    validAgent = ValidationAgent(opt, policyNet, theta, atomic)
+    if not opt.novalidation then
+      signal.signal(signal.SIGINT, function(signum)
+        log.warn('SIGINT received')
+        log.info('Saving agent')
+        local globalSteps = atomic:get()
+        local state = { globalSteps = globalSteps }
+        torch.save(stateFile, state)
 
-    signal.signal(signal.SIGINT, function(signum)
-      log.warn('SIGINT received')
-      log.info('Saving agent')
-      local globalSteps = atomic:get()
-      local state = { globalSteps = globalSteps }
-      torch.save(stateFile, state)
-
-      validAgent:saveWeights('last')
-      log.warn('Exiting')
-      os.exit(128 + signum)
-    end)
+        validAgent:saveWeights('last')
+        log.warn('Exiting')
+        os.exit(128 + signum)
+      end)
+    end
   end)
 
   self.controlPool:synchronize()
@@ -192,7 +193,9 @@ function AsyncMaster:start()
     end
   end
 
-  self.controlPool:addjob(validator)
+  if not self.opt.novalidation then
+    self.controlPool:addjob(validator)
+  end
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()

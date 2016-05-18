@@ -9,12 +9,12 @@ require 'classic.torch'
 
 local ValidationAgent = classic.class('ValidationAgent')
 
-function ValidationAgent:_init(opt, policyNet, theta)
+function ValidationAgent:_init(opt, policyNet, theta, atomic)
   log.info('creating ValidationAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
   self.model:setNetwork(policyNet)
-
+  self.atomic = atomic
   self._id = opt._id
 
   self.theta = theta
@@ -129,6 +129,7 @@ function ValidationAgent:validate()
     valTotalScore = valEpisodeScore
   end
 
+  log.info('Validated @ '.. self.atomic:get())
   log.info('Total Score: ' .. valTotalScore)
   local valAvgScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
   log.info('Average Score: ' .. valAvgScore)
