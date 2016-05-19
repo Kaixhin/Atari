@@ -19,6 +19,7 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic,
   self.optimParams = {
     learningRate = opt.eta,
     momentum = opt.momentum,
+    epsilon = opt.rmsEpsilon,
     g = sharedG
   }
 

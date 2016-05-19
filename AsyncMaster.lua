@@ -90,6 +90,8 @@ function AsyncMaster:_init(opt)
   local policyNet = asyncModel:createNet()
   self.theta = policyNet:getParameters()
 
+  log.info('%s', policyNet)
+
   if paths.filep(opt.network) then
     log.info('Loading pretrained network weights')
     local weights = torch.load(opt.network)
@@ -158,7 +160,7 @@ end
 function AsyncMaster:start()
   local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
   local startStep = 0
-  if paths.filep(self.stateFile) then
+  if self.opt.network ~= '' and paths.filep(self.stateFile) then
       local state = torch.load(self.stateFile)
       stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
       startStep = math.floor(state.globalSteps / self.opt.threads)

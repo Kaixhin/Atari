@@ -152,10 +152,8 @@ function ValidationAgent:validate()
 
   self:visualiseFilters()
 
-  if not self.a3c then
-    local avgV = self:validationStats()
-    log.info('Average V: ' .. avgV)
-  end
+  local avgV = self:validationStats()
+  log.info('Average V: ' .. avgV)
 
   if valAvgScore > self.bestValScore then
     log.info('New best average score')
@@ -228,9 +226,15 @@ function ValidationAgent:validationStats()
   local indices = torch.linspace(2, self.valSize+1, self.valSize):long()
   local states, actions, rewards, transitions, terminals = self.valMemory:retrieve(indices)
 
-  local QPrimes = self.policyNet:forward(transitions) -- in real learning targetNet but doesnt matter for validation
-  local VPrime = torch.max(QPrimes, 3)
-  local totalV = VPrime:sum()
+  local totalV
+  if self.a3c then
+    local Vs = self.policyNet:forward(transitions)[1]
+    totalV = Vs:sum()
+  else
+    local QPrimes = self.policyNet:forward(transitions) -- in real learning targetNet but doesnt matter for validation
+    local VPrime = torch.max(QPrimes, 3)
+    totalV = VPrime:sum()
+  end
   local avgV = totalV / self.valSize
   self.avgV[#self.avgV + 1] = avgV
   self:plotValidation()
