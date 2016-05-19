@@ -120,6 +120,7 @@ function Model:create(m)
     net:add(headConcat)
   elseif self.a3c then
     net:add(nn.Linear(convOutputSize, hiddenSize))
+    net:add(nn.ReLU(true))
 
     local valueAndPolicy = nn.ConcatTable()
 
@@ -128,7 +129,6 @@ function Model:create(m)
 
     local policy = nn.Sequential()
     policy:add(nn.Linear(hiddenSize, m))
-    policy:add(nn.ReLU(true))
     policy:add(nn.SoftMax())
 
     valueAndPolicy:add(valueFunction)

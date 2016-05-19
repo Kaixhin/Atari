@@ -77,7 +77,8 @@ function NStepQAgent:accumulateGradients(terminal, state)
 
   for i=self.batchIdx,1,-1 do
     R = self.rewards[i] + self.gamma * R
-    local tdErr = R - self.policyNet_:forward(self.states[i]):squeeze()[self.actions[i]]
+    local Q_i = self.policyNet_:forward(self.states[i]):squeeze()
+    local tdErr = R - Q_i[self.actions[i]]
     self:accumulateGradientTdErr(self.states[i], self.actions[i], tdErr, self.policyNet_) 
   end
 end

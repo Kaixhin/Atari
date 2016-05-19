@@ -90,6 +90,8 @@ function AsyncMaster:_init(opt)
   local policyNet = asyncModel:createNet()
   self.theta = policyNet:getParameters()
 
+  log.info('%s', policyNet)
+
   if paths.filep(opt.network) then
     log.info('Loading pretrained network weights')
     local weights = torch.load(opt.network)
@@ -114,19 +116,20 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(function()
     local signal = require 'posix.signal'
     local ValidationAgent = require 'ValidationAgent'
-    validAgent = ValidationAgent(opt, policyNet, theta)
+    validAgent = ValidationAgent(opt, policyNet, theta, atomic)
+    if not opt.novalidation then
+      signal.signal(signal.SIGINT, function(signum)
+        log.warn('SIGINT received')
+        log.info('Saving agent')
+        local globalSteps = atomic:get()
+        local state = { globalSteps = globalSteps }
+        torch.save(stateFile, state)
 
-    signal.signal(signal.SIGINT, function(signum)
-      log.warn('SIGINT received')
-      log.info('Saving agent')
-      local globalSteps = atomic:get()
-      local state = { globalSteps = globalSteps }
-      torch.save(stateFile, state)
-
-      validAgent:saveWeights('last')
-      log.warn('Exiting')
-      os.exit(128 + signum)
-    end)
+        validAgent:saveWeights('last')
+        log.warn('Exiting')
+        os.exit(128 + signum)
+      end)
+    end
   end)
 
   self.controlPool:synchronize()
@@ -157,7 +160,7 @@ end
 function AsyncMaster:start()
   local stepsToGo = math.floor(self.opt.steps / self.opt.threads)
   local startStep = 0
-  if paths.filep(self.stateFile) then
+  if self.opt.network ~= '' and paths.filep(self.stateFile) then
       local state = torch.load(self.stateFile)
       stepsToGo = math.floor((self.opt.steps - state.globalSteps) / self.opt.threads)
       startStep = math.floor(state.globalSteps / self.opt.threads)
@@ -186,17 +189,27 @@ function AsyncMaster:start()
       if countSince > opt.valFreq then
         log.info('starting validation after %d steps', countSince)
         lastUpdate = globalStep
-        validAgent:validate()
+        local status, err = xpcall(validAgent.validate, debug.traceback, validAgent)
+        if not status then
+          log.error('%s', err)
+          os.exit(128)
+        end
       end
       posix.sleep(1)
     end
   end
 
-  self.controlPool:addjob(validator)
+  if not self.opt.novalidation then
+    self.controlPool:addjob(validator)
+  end
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()
-      agent:learn(stepsToGo, startStep)
+      local status, err = xpcall(agent.learn, debug.traceback, agent, stepsToGo, startStep)
+      if not status then
+        log.error('%s', err)
+        os.exit(128)
+      end
     end)
   end
 

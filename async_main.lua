@@ -35,10 +35,11 @@ cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to dis
 -- Training options
 cmd:option('-optimiser', 'sharedRmsProp', 'Training algorithm')
 cmd:option('-eta', 0.0000625, 'Learning rate η') -- Prioritied experience replay learning rate (1/4 that of DQN; does not account for Duel as well)
-cmd:option('-momentum', 0.95, 'Gradient descent momentum')
+cmd:option('-momentum', 0.99, 'Gradient descent momentum')
+cmd:option('-rmsEpsilon', 0.1, 'Epsilon for sharedRmsProp')
 cmd:option('-batchSize', 5, 'Accumulate gradient x batchSize')
 -- in ER each step = minibatch of 32, in asynq 1-step-Q each step = 1 sample
-cmd:option('-steps', 166*1e6, 'Training iterations (steps)') -- about 4 days
+cmd:option('-steps', 80*1e6, 'Training iterations (steps)') -- = "1 day", 1e9 = "4 day"
 cmd:option('-gradClip', 10, 'Clips L2 norm of gradients at gradClip (0 to disable)')
 -- Evaluation options
 cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
@@ -58,6 +59,7 @@ cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
 -- Async
 cmd:option('-async', 'OneStepQ', 'async method')
+cmd:option('-novalidation', 'false', 'dont run validation thread (for debugging)')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
@@ -67,6 +69,7 @@ opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false
 opt.record = opt.record == 'true' or false
+opt.novalidation = opt.novalidation == 'true' or false
 opt.bootstraps = 0
 opt.gpu = 0
 opt.ale = opt.game ~= 'catch'

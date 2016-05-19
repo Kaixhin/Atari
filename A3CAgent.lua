@@ -10,23 +10,21 @@ function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, s
 
   log.info('creating A3CAgent')
 
-  self.policyNet_ = policyNet:clone('weight', 'bias')
+  self.policyNet_ = policyNet:clone()
 
   self.theta_, self.dTheta_ = self.policyNet_:getParameters()
   self.dTheta_:zero()
 
   self.policyTarget = self.Tensor(self.m)
   self.vTarget = self.Tensor(1)
-  self.targets = { vTarget, policyTarget }
-
-  self.Vs = self.Tensor(self.batchSize)
-  self.probabilities = self.Tensor(self.batchSize, self.m)
+  self.targets = { self.vTarget, self.policyTarget }
 
   self.rewards = torch.Tensor(self.batchSize)
   self.actions = torch.ByteTensor(self.batchSize)
   self.states = torch.Tensor(0)
-
   self.beta = 0.01
+
+  if self.ale then self.env:training() end
 
   classic.strict(self)
 end
@@ -36,7 +34,6 @@ function A3CAgent:learn(steps, from)
   self.step = from or 0
 
   self.stateBuffer:clear()
-  if self.ale then self.env:training() end
 
   log.info('A3CAgent starting | steps=%d', steps)
   local reward, terminal, state = self:start()
@@ -44,7 +41,6 @@ function A3CAgent:learn(steps, from)
   self.states:resize(self.batchSize, unpack(state:size():totable()))
 
   self.tic = torch.tic()
-  local V, probability
   repeat
     self.theta_:copy(self.theta)
     self.batchIdx = 0
@@ -52,13 +48,9 @@ function A3CAgent:learn(steps, from)
       self.batchIdx = self.batchIdx + 1
       self.states[self.batchIdx]:copy(state)
 
-      if V == nil then
-        V, probability = unpack(self.policyNet_:forward(state))
-      end
+      local V, probability = unpack(self.policyNet_:forward(state))
       local action = torch.multinomial(probability, 1):squeeze()
 
-      self.Vs[self.batchIdx] = V
-      self.probabilities[self.batchIdx]:copy(probability)
       self.actions[self.batchIdx] = action
 
       reward, terminal, state = self:takeAction(action)
@@ -67,7 +59,7 @@ function A3CAgent:learn(steps, from)
       self:progress(steps)
     until terminal or self.batchIdx == self.batchSize
 
-    V, probability = self:accumulateGradients(terminal, state)
+    self:accumulateGradients(terminal, state)
 
     if terminal then 
       reward, terminal, state = self:start()
@@ -82,33 +74,29 @@ end
 
 function A3CAgent:accumulateGradients(terminal, state)
   local R = 0
-  local V, probability
   if not terminal then
-    V, probability = unpack(self.policyNet_:forward(state))
-    R = V
+    R = self.policyNet_:forward(state)[1]
   end
 
-  for i=self.batchIdx,1-1 do
+  for i=self.batchIdx,1,-1 do
     R = self.rewards[i] + self.gamma * R
     
     local action = self.actions[i]
-    local logProbabilities = torch.log(self.probabilities[i])
-    local actionLogProbability = logProbabilities[action]
+    local V, probability = unpack(self.policyNet_:forward(self.states[i]))
 
-    local entropy = - torch.cmul(logProbabilities, self.probabilities[i]):sum()
-
-    local advantage = R - self.Vs[i]
+    self.vTarget[1] = -0.5 * (R - V)
 
     self.policyTarget:zero()
+    local logProbability = torch.log(probability)
+    self.policyTarget[action] = -(R - V) / probability[action]  - self.beta * logProbability:sum()
 
-    self.policyNet_:backward(self.targets)
+    self.policyNet_:backward(self.states[i], self.targets)
   end
-
-  return V, probability
 end
 
 
 function A3CAgent:progress(steps)
+  self.step = self.step + 1
   if self.atomic:inc() % self.progFreq == 0 then
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)

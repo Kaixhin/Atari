@@ -9,12 +9,12 @@ require 'classic.torch'
 
 local ValidationAgent = classic.class('ValidationAgent')
 
-function ValidationAgent:_init(opt, policyNet, theta)
+function ValidationAgent:_init(opt, policyNet, theta, atomic)
   log.info('creating ValidationAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
   self.model:setNetwork(policyNet)
-
+  self.atomic = atomic
   self._id = opt._id
 
   self.theta = theta
@@ -50,6 +50,10 @@ function ValidationAgent:_init(opt, policyNet, theta)
 
   self.bestValScore = -math.huge
 
+  self.selectAction = self.eGreedyAction
+  self.a3c = opt.async == 'A3C'
+  if self.a3c then self.selectAction = self.probabilisticAction end
+
   classic.strict(self)
 end
 
@@ -72,7 +76,8 @@ function ValidationAgent:start()
 end
 
 
-function ValidationAgent:eGreedy0(state, epsilon)
+function ValidationAgent:eGreedyAction(state)
+  local epsilon = 0.001 -- Taken from tuned DDQN evaluation
   if torch.uniform() < epsilon then
     return torch.random(1,self.m)
   end
@@ -83,12 +88,17 @@ function ValidationAgent:eGreedy0(state, epsilon)
 end
 
 
+function ValidationAgent:probabilisticAction(state)
+  local __, probability = unpack(self.policyNet:forward(state))
+  return torch.multinomial(probability, 1):squeeze()
+end
+
+
 function ValidationAgent:validate()
   self.stateBuffer:clear()
   if self.ale then self.env:evaluate() end
 
   local valStepStrFormat = '%0' .. (math.floor(math.log10(self.valSteps)) + 1) .. 'd'
-  local epsilon = 0.001 -- Taken from tuned DDQN evaluation
   local valEpisode = 1
   local valEpisodeScore = 0
   local valTotalScore = 0
@@ -105,7 +115,7 @@ function ValidationAgent:validate()
     if not terminal then
       local state = self.stateBuffer:readAll()
 
-      local action = self:eGreedy0(state, epsilon)
+      local action = self:selectAction(state)
       reward, observation, terminal = self.env:step(action - self.actionOffset)
       valEpisodeScore = valEpisodeScore + reward
     else
@@ -129,6 +139,7 @@ function ValidationAgent:validate()
     valTotalScore = valEpisodeScore
   end
 
+  log.info('Validated @ '.. self.atomic:get())
   log.info('Total Score: ' .. valTotalScore)
   local valAvgScore = valTotalScore/math.max(valEpisode - 1, 1) -- Only average score for completed episodes in general
   log.info('Average Score: ' .. valAvgScore)
@@ -215,9 +226,15 @@ function ValidationAgent:validationStats()
   local indices = torch.linspace(2, self.valSize+1, self.valSize):long()
   local states, actions, rewards, transitions, terminals = self.valMemory:retrieve(indices)
 
-  local QPrimes = self.policyNet:forward(transitions) -- in real learning targetNet but doesnt matter for validation
-  local VPrime = torch.max(QPrimes, 3)
-  local totalV = VPrime:sum()
+  local totalV
+  if self.a3c then
+    local Vs = self.policyNet:forward(transitions)[1]
+    totalV = Vs:sum()
+  else
+    local QPrimes = self.policyNet:forward(transitions) -- in real learning targetNet but doesnt matter for validation
+    local VPrime = torch.max(QPrimes, 3)
+    totalV = VPrime:sum()
+  end
   local avgV = totalV / self.valSize
   self.avgV[#self.avgV + 1] = avgV
   self:plotValidation()
