@@ -187,7 +187,11 @@ function AsyncMaster:start()
       if countSince > opt.valFreq then
         log.info('starting validation after %d steps', countSince)
         lastUpdate = globalStep
-        validAgent:validate()
+        local status, err = xpcall(validAgent.validate, debug.traceback, validAgent)
+        if not status then
+          log.error('%s', err)
+          os.exit(128)
+        end
       end
       posix.sleep(1)
     end
@@ -199,7 +203,11 @@ function AsyncMaster:start()
 
   for i=1,self.opt.threads do
     self.pool:addjob(function()
-      agent:learn(stepsToGo, startStep)
+      local status, err = xpcall(agent.learn, debug.traceback, agent, stepsToGo, startStep)
+      if not status then
+        log.error('%s', err)
+        os.exit(128)
+      end
     end)
   end
 
