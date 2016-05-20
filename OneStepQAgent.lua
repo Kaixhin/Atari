@@ -7,6 +7,7 @@ local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
 
 function OneStepQAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+  self.agentName = 'OneStepQAgent'
   classic.strict(self)
 end
 
@@ -17,7 +18,7 @@ function OneStepQAgent:learn(steps, from)
   self.stateBuffer:clear()
   if self.ale then self.env:training() end
 
-  log.info('OneStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
+  log.info('%s starting | steps=%d | ε=%.2f -> %.2f', self.agentName, steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
 
   local action, state_
@@ -50,7 +51,7 @@ function OneStepQAgent:learn(steps, from)
     self:progress(steps)
   end
 
-  log.info('OneStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
+  log.info('%s ended learning steps=%d ε=%.4f', self.agentName, steps, self.epsilon)
 end
 
 

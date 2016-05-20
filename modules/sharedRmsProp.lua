@@ -4,7 +4,7 @@ function optim.sharedRmsProp(opfunc, x, config, state)
   local state = state or config
   local lr = config.learningRate or 1e-2
   local momentum = config.momentum or 0.95
-  local epsilon = config.epsilon or 0.01
+  local epsilon = config.rmsEpsilon or 0.01
 
   -- Evaluate f(x) and df/dx
   local fx, dfdx = opfunc(x)

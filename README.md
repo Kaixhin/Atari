@@ -7,14 +7,15 @@ Asynchrounous version [[1]](#references) of DQN that runs on CPU multithreaded
 Async modes supported
 
 * 1 step Q
+* 1 step Sarsa
 * N step Q
-* ~~A3C~~
+* A3C
 
 Q learning can be combined with these methods:
 
 * double Q learning
+* dueling
 * ~~PAL~~ 
-* ~~dueling~~
 * ~~deep recurrent~~
 
 This branch will be merged with the experience replay based `master` branch after refactoring unifying all the methods

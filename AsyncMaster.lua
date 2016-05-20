@@ -14,6 +14,7 @@ local AsyncMaster = classic.class('AsyncMaster')
 
 local methods = {
   OneStepQ = 'OneStepQAgent',
+  Sarsa = 'SarsaAgent',
   NStepQ = 'NStepQAgent',
   A3C = 'A3CAgent'
 }

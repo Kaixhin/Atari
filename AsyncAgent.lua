@@ -8,7 +8,6 @@ local AsyncAgent = classic.class('AsyncAgent')
 
 
 function AsyncAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
-  log.info('creating AsyncAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
 
@@ -19,7 +18,7 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic,
   self.optimParams = {
     learningRate = opt.eta,
     momentum = opt.momentum,
-    epsilon = opt.rmsEpsilon,
+    rmsEpsilon = opt.rmsEpsilon,
     g = sharedG
   }
 

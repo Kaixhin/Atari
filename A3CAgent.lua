@@ -96,8 +96,9 @@ end
 
 
 function A3CAgent:progress(steps)
+  self.atomic:inc()
   self.step = self.step + 1
-  if self.atomic:inc() % self.progFreq == 0 then
+  if self.step % self.progFreq == 0 then
     local progressPercent = 100 * self.step / steps
     local speed = self.progFreq / torch.toc(self.tic)
     self.tic = torch.tic()

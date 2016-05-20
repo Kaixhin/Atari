@@ -9,7 +9,6 @@ local EPSILON_PROBS = { 0.4, 0.7, 1 }
 function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.super = super
-  log.info('creating QAgent')
 
   self.targetNet = targetNet:clone('weight', 'bias')
   self.targetNet:evaluate()
