@@ -88,13 +88,13 @@ cmd:option('-record', 'false', 'Record screen (only in eval mode)')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
-opt.duel = opt.duel == 'true' or false
-opt.recurrent = opt.recurrent == 'true' or false
-opt.doubleQ = opt.doubleQ == 'true' or false
-opt.reportWeights = opt.reportWeights == 'true' or false
-opt.fullActions = opt.fullActions == 'true' or false
-opt.verbose = opt.verbose == 'true' or false
-opt.record = opt.record == 'true' or false
+opt.duel = opt.duel == 'true'
+opt.recurrent = opt.recurrent == 'true'
+opt.doubleQ = opt.doubleQ == 'true'
+opt.reportWeights = opt.reportWeights == 'true'
+opt.fullActions = opt.fullActions == 'true'
+opt.verbose = opt.verbose == 'true'
+opt.record = opt.record == 'true'
 
 -- Set ID as game name if not set
 if opt._id == '' then
