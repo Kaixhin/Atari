@@ -9,15 +9,17 @@ require 'classic.torch'
 
 local ValidationAgent = classic.class('ValidationAgent')
 
-function ValidationAgent:_init(opt, policyNet, theta, atomic)
+function ValidationAgent:_init(opt, theta, atomic)
   log.info('creating ValidationAgent')
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
-  self.model:setNetwork(policyNet)
+  self.policyNet_ = asyncModel:createNet()
+
+  self.theta_ = self.policyNet_:getParameters()
+  self.theta = theta
+
   self.atomic = atomic
   self._id = opt._id
-
-  self.theta = theta
 
   -- Validation variables
   self.valSize = opt.valSize
@@ -30,8 +32,6 @@ function ValidationAgent:_init(opt, policyNet, theta, atomic)
   local actionSpec = self.env:getActionSpec()
   self.m = actionSpec[3][2] - actionSpec[3][1] + 1
   self.actionOffset = 1 - actionSpec[3][1]
-
-  self.policyNet = policyNet:clone('weight', 'bias')
 
   self.ale = opt.ale
 
@@ -82,19 +82,21 @@ function ValidationAgent:eGreedyAction(state)
     return torch.random(1,self.m)
   end
 
-  local Q = self.policyNet:forward(state):squeeze()
+  local Q = self.policyNet_:forward(state):squeeze()
   local _, maxIdx = Q:max(1)
   return maxIdx[1]
 end
 
 
 function ValidationAgent:probabilisticAction(state)
-  local __, probability = unpack(self.policyNet:forward(state))
+  local __, probability = unpack(self.policyNet_:forward(state))
   return torch.multinomial(probability, 1):squeeze()
 end
 
 
 function ValidationAgent:validate()
+  self.theta_:copy(self.theta)
+
   self.stateBuffer:clear()
   if self.ale then self.env:evaluate() end
 
@@ -190,8 +192,8 @@ end
 -- Reports absolute network weights and gradients
 function ValidationAgent:weightsReport()
   -- Collect layer with weights
-  local weightLayers = self.policyNet:findModules('nn.SpatialConvolution')
-  local fcLayers = self.policyNet:findModules('nn.Linear')
+  local weightLayers = self.policyNet_:findModules('nn.SpatialConvolution')
+  local fcLayers = self.policyNet_:findModules('nn.Linear')
   weightLayers = _.append(weightLayers, fcLayers)
   
   -- Array of norms and maxima
@@ -228,10 +230,10 @@ function ValidationAgent:validationStats()
 
   local totalV
   if self.a3c then
-    local Vs = self.policyNet:forward(transitions)[1]
+    local Vs = self.policyNet_:forward(transitions)[1]
     totalV = Vs:sum()
   else
-    local QPrimes = self.policyNet:forward(transitions) -- in real learning targetNet but doesnt matter for validation
+    local QPrimes = self.policyNet_:forward(transitions) -- in real learning targetNet but doesnt matter for validation
     local VPrime = torch.max(QPrimes, 3)
     totalV = VPrime:sum()
   end
