@@ -80,6 +80,7 @@ cmd:option('-randomStarts', 30, 'Max number of no-op actions played before prese
 cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
 cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
 -- Experiment options
+cmd:option('-experiments', 'experiments', 'Base directory to store experiments')
 cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
 cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
 cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
@@ -102,17 +103,17 @@ if opt._id == '' then
 end
 
 -- Create experiment directory
-if not paths.dirp('experiments') then
-  paths.mkdir('experiments')
+if not paths.dirp(opt.experiments) then
+  paths.mkdir(opt.experiments)
 end
-paths.mkdir(paths.concat('experiments', opt._id))
+paths.mkdir(paths.concat(opt.experiments, opt._id))
 -- Save options for reference
-local file = torch.DiskFile(paths.concat('experiments', opt._id, 'opts.json'), 'w')
+local file = torch.DiskFile(paths.concat(opt.experiments, opt._id, 'opts.json'), 'w')
 file:writeString(cjson.encode(opt))
 file:close()
 
 -- Set up logs
-local flog = logroll.file_logger(paths.concat('experiments', opt._id, 'log.txt'))
+local flog = logroll.file_logger(paths.concat(opt.experiments, opt._id, 'log.txt'))
 local plog = logroll.print_logger()
 log = logroll.combine(flog, plog)
 
@@ -247,12 +248,12 @@ if paths.filep(opt.network) then
   -- Load saved agent if specified
   log.info('Loading pretrained network weights')
   agent:loadWeights(opt.network)
-elseif paths.filep(paths.concat('experiments', opt._id, 'agent.t7')) then
+elseif paths.filep(paths.concat(opt.experiments, opt._id, 'agent.t7')) then
   -- Ask to load saved agent if found in experiment folder (resuming training)
   log.info('Saved agent found - load (y/n)?')
   if io.read() == 'y' then
     log.info('Loading saved agent')
-    agent = torch.load(paths.concat('experiments', opt._id, 'agent.t7'))
+    agent = torch.load(paths.concat(opt.experiments, opt._id, 'agent.t7'))
 
     -- Reset globals (step) from agent
     Singleton.setInstance(agent.globals)
@@ -289,7 +290,7 @@ if opt.mode == 'train' then
     log.info('Save agent (y/n)?')
     if io.read() == 'y' then
       log.info('Saving agent')
-      torch.save(paths.concat('experiments', opt._id, 'agent.t7'), agent) -- Save agent to resume training
+      torch.save(paths.concat(opt.experiments, opt._id, 'agent.t7'), agent) -- Save agent to resume training
     end
     log.warn('Exiting')
     os.exit(128 + signum)
@@ -432,7 +433,7 @@ if opt.mode == 'train' then
         bestValScore = valTotalScore
 
         log.info('Saving weights')
-        agent:saveWeights(paths.concat('experiments', opt._id, 'weights.t7'))
+        agent:saveWeights(paths.concat(opt.experiments, opt._id, 'weights.t7'))
       end
 
       log.info('Resuming training')
