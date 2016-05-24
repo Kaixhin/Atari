@@ -26,6 +26,8 @@ function BinaryHeap:_init(init)
     -- Otherwise assume tensor to build heap from
     self.array = init
     self.size = init:size(1)
+    -- Convert values to hash table
+    self.hash = torch.totable(self.array:select(2, 2))
     -- Rebalance
     for i = math.floor(self.size/2) - 1, 1, -1 do
       self:downHeap(i)
@@ -168,7 +170,7 @@ function BinaryHeap:__tostring()
   local str = ''
   local level = -1
   local maxLevel = math.floor(math.log(self.size, 2))
-  
+
   -- Print each level
   for i = 1, self.size do
     -- Add a new line and spacing for each new level
@@ -197,6 +199,25 @@ end
 -- Retrieves a list of values by using the value (using the hash table)
 function BinaryHeap:getValuesByVal(hashIndices)
   return _.at(self.hash, table.unpack(hashIndices))
+end
+
+-- Rebalances the heap
+-- Note from Tom Schaul: Solution for rebalancing (below) is good; original solution not revealed
+function BinaryHeap:rebalance()
+  -- Sort underlying array
+  local sortArray, sortIndices = torch.sort(self.array, 1, true)
+  -- Retrieve values (indices) in descending priority order
+  sortIndices = self.array:index(1, sortIndices:select(2, 1)):select(2, 2)
+  -- Put values with corresponding priorities
+  sortArray[{{}, {2}}] = sortIndices
+  -- Convert values to hash table
+  self.hash = torch.totable(sortIndices)
+  -- Replace array
+  self.array = sortArray
+  -- Fix heap
+  for i = math.floor(self.size/2) - 1, 1, -1 do
+    self:downHeap(i)
+  end
 end
 
 return BinaryHeap

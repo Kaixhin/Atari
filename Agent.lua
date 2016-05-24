@@ -39,6 +39,10 @@ function Agent:_init(env, opt)
   self.head = 1 -- Identity of current episode bootstrap head
   self.heads = math.max(opt.bootstraps, 1) -- Number of heads
 
+  -- Recurrency
+  self.recurrent = opt.recurrent
+  self.histLen = opt.histLen
+
   -- Reinforcement learning parameters
   self.gamma = opt.gamma
   self.rewardClip = opt.rewardClip
@@ -49,11 +53,13 @@ function Agent:_init(env, opt)
   self.PALpha = opt.PALpha
 
   -- State buffer
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
   -- Experience replay memory
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
   self.memNSamples = opt.memNSamples
+  self.memSize = opt.memSize
+  self.memPriority = opt.memPriority
 
   -- Training mode
   self.isTraining = false
@@ -90,7 +96,6 @@ function Agent:_init(env, opt)
   self.origWidth = opt.origWidth
   self.origHeight = opt.origHeight
   self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
-  self.histLen = opt.histLen
   self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
 
   -- Get singleton instance for step
@@ -107,6 +112,11 @@ function Agent:training()
   if self.bootstraps > 0 then
     self.head = torch.random(self.bootstraps)
   end
+  -- Forget last sequence
+  if self.recurrent then
+    self.policyNet:forget()
+    self.targetNet:forget()
+  end
 end
 
 -- Sets evaluation mode
@@ -120,6 +130,10 @@ function Agent:evaluate()
   -- Reset bootstrap head
   if self.bootstraps > 0 then
     self.head = torch.random(self.bootstraps)
+  end
+  -- Forget last sequence
+  if self.recurrent then
+    self.policyNet:forget()
   end
 end
   
@@ -185,7 +199,7 @@ function Agent:observe(reward, rawObservation, terminal)
     else
       -- Retrieve estimates from all heads
       local QHeads = self.policyNet:forward(state)
-      
+
       -- Sample from current episode head (indexes on first dimension with no batch)
       local Qs = QHeads:select(1, self.head)
       local maxQ = Qs[1]
@@ -232,11 +246,21 @@ function Agent:observe(reward, rawObservation, terminal)
       self.targetNet = self.policyNet:clone()
       self.targetNet:evaluate()
     end
+
+    -- Rebalance priority queue for prioritised experience replay
+    if self.globals.step % self.memSize == 0 and self.memPriority ~= 'none' then
+      self.memory:rebalance()
+    end
   end
 
-  -- Change bootstrap head for next episode
-  if terminal and self.bootstraps > 0 then
-    self.head = torch.random(self.bootstraps)
+  if terminal then
+    if self.bootstraps > 0 then
+      -- Change bootstrap head for next episode
+      self.head = torch.random(self.bootstraps)
+    elseif self.recurrent then
+      -- Forget last sequence
+      self.policyNet:forget()
+    end
   end
 
   -- Return action index with offset applied
@@ -244,7 +268,7 @@ function Agent:observe(reward, rawObservation, terminal)
 end
 
 -- Learns from experience
-function Agent:learn(x, indices, ISWeights)
+function Agent:learn(x, indices, ISWeights, isValidation)
   -- Copy x to parameters θ if necessary
   if x ~= self.theta then
     self.theta:copy(x)
@@ -253,8 +277,15 @@ function Agent:learn(x, indices, ISWeights)
   self.dTheta:zero()
 
   -- Retrieve experience tuples
-  local states, actions, rewards, transitions, terminals = self.memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
+  local memory = isValidation and self.valMemory or self.memory
+  local states, actions, rewards, transitions, terminals = memory:retrieve(indices) -- Terminal status is for transition (can't act in terminal state)
   local N = actions:size(1)
+
+  if self.recurrent then
+    -- Forget last sequence
+    self.policyNet:forget()
+    self.targetNet:forget()
+  end
 
   -- Perform argmax action selection
   local APrimeMax, APrimeMaxInds
@@ -282,6 +313,9 @@ function Agent:learn(x, indices, ISWeights)
   Y:mul(self.gamma):add(rewards:repeatTensor(1, self.heads))
 
   -- Get all predicted Q-values from the current state
+  if self.recurrent and self.doubleQ then
+    self.policyNet:forget()
+  end
   local QCurr = self.policyNet:forward(states) -- Correct internal state of policy network before backprop
   local QTaken = self.Tensor(N, self.heads)
   -- Get prediction of current Q-values with given actions
@@ -295,6 +329,9 @@ function Agent:learn(x, indices, ISWeights)
   -- Calculate Advantage Learning update(s)
   if self.PALpha > 0 then
     -- Calculate Q(s, a) and V(s) using target network
+    if self.recurrent then
+      self.targetNet:forget()
+    end
     local Qs = self.targetNet:forward(states)
     local Q = self.Tensor(N, self.heads)
     for n = 1, N do
@@ -330,6 +367,12 @@ function Agent:learn(x, indices, ISWeights)
     -- Squared loss
     loss = torch.mean(self.tdErr:clone():pow(2):mul(0.5)) -- Average over heads
   end
+
+  -- Exit if being used for validation metrics
+  if isValidation then
+    return
+  end
+
   -- Send TD-errors δ to be used as priorities
   self.memory:updatePriorities(indices, torch.mean(self.tdErr, 2)) -- Use average error over heads
   
@@ -337,15 +380,22 @@ function Agent:learn(x, indices, ISWeights)
   QCurr:zero()
   -- Set TD-errors δ with given actions
   for n = 1, N do
-     -- Correct prioritisation bias with importance-sampling weights
+    -- Correct prioritisation bias with importance-sampling weights
     QCurr[n][{{}, {actions[n]}}] = torch.mul(-self.tdErr[n], ISWeights[n]) -- Negate target to use gradient descent (not ascent) optimisers
   end
 
   -- Backpropagate (network accumulates gradients internally)
-  self.policyNet:backward(states, QCurr)
+  self.policyNet:backward(states, QCurr) -- TODO: Work out why DRQN crashes on different batch sizes
   -- Clip the L2 norm of the gradients
   if self.gradClip > 0 then
     self.policyNet:gradParamClip(self.gradClip)
+  end
+
+  if self.recurrent then
+    -- Forget last sequence
+    self.policyNet:forget()
+    self.targetNet:forget()
+    -- Previous hidden state of policy net not restored as model parameters changed
   end
 
   return loss, self.dTheta
@@ -423,7 +473,7 @@ function Agent:validate()
     indices = torch.linspace(startIndex, endIndex, batchSize):long()
 
     -- Perform "learning" (without optimisation)
-    self:learn(self.theta, indices, ISWeights:narrow(1, 1, batchSize))
+    self:learn(self.theta, indices, ISWeights:narrow(1, 1, batchSize), true)
 
     -- Calculate V(s') and TD-error δ
     if self.PALpha == 0 then
@@ -515,15 +565,15 @@ function Agent:computeSaliency(state, index, ensemble)
   local maxTarget = self.Tensor(self.heads, self.m):fill(0)
   if ensemble then
     -- Set target on all heads (when using ensemble policy)
-    maxTarget[{{}, {index}}] = 2
+    maxTarget[{{}, {index}}] = 1
   else
     -- Set target on current head
-    maxTarget[self.head][index] = 2
+    maxTarget[self.head][index] = 1
   end
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.histLen):float()), self.origWidth, self.origHeight)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float()), self.origWidth, self.origHeight)
 
   -- Switch back to normal backpropagation
   self.model:normalBackprop()

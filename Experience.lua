@@ -4,6 +4,10 @@ local BinaryHeap = require 'structures/BinaryHeap'
 local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 
+--[[
+--   WARNING: Experience performs a float -> byte compression of state, assuming discretised elements ∈ {0, 1/256, 2/256, ..., 1}
+--]]
+
 local Experience = classic.class('Experience')
 
 -- Creates experience replay memory
@@ -45,55 +49,55 @@ function Experience:_init(capacity, opt, isValidation)
   self.index = 1
   self.isFull = false
   self.size = 0
-  
+
   -- TD-error δ-based priorities
   self.priorityQueue = BinaryHeap(capacity) -- Stored at time t
   self.smallConst = 1e-12
   -- Sampling priority
   if not isValidation and opt.memPriority == 'rank' then
-  -- Cache partition indices for several values of N as α is static
-  self.distributions = {}
-  local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
-  local partitionNum = 1
-  local partitionDivision = math.floor(capacity/nPartitions)
+    -- Cache partition indices for several values of N as α is static
+    self.distributions = {}
+    local nPartitions = 100 -- learnStart must be at least 1/100 of capacity (arbitrary constant)
+    local partitionNum = 1
+    local partitionDivision = math.floor(capacity/nPartitions)
 
-  for n = partitionDivision, capacity, partitionDivision do
-    if n >= opt.learnStart or n == capacity then -- Do not calculate distributions for before learnStart occurs
-      -- Set up power-law PDF and CDF
-      local distribution = {}
-      distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
-      local pdfSum = torch.sum(distribution.pdf)
-      distribution.pdf:div(pdfSum) -- Normalise PDF
-      local cdf = torch.cumsum(distribution.pdf)
+    for n = partitionDivision, capacity, partitionDivision do
+      if n >= opt.learnStart or n == capacity then -- Do not calculate distributions for before learnStart occurs
+        -- Set up power-law PDF and CDF
+        local distribution = {}
+        distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
+        local pdfSum = torch.sum(distribution.pdf)
+        distribution.pdf:div(pdfSum) -- Normalise PDF
+        local cdf = torch.cumsum(distribution.pdf)
 
-      -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
-      distribution.strataEnds = torch.LongTensor(opt.batchSize + 1)
-      distribution.strataEnds[1] = 0 -- First index is 0 (+1)
-      distribution.strataEnds[opt.batchSize + 1] = n -- Last index is n
-      -- Use linear search to find strata indices
-      local stratumEnd = 1/opt.batchSize
-      local index = 1
-      for s = 2, opt.batchSize do
-        while cdf[index] < stratumEnd do
-          index = index + 1
+        -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
+        distribution.strataEnds = torch.LongTensor(opt.batchSize + 1)
+        distribution.strataEnds[1] = 0 -- First index is 0 (+1)
+        distribution.strataEnds[opt.batchSize + 1] = n -- Last index is n
+        -- Use linear search to find strata indices
+        local stratumEnd = 1/opt.batchSize
+        local index = 1
+        for s = 2, opt.batchSize do
+          while cdf[index] < stratumEnd do
+            index = index + 1
+          end
+          distribution.strataEnds[s] = index -- Save index
+          stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
         end
-        distribution.strataEnds[s] = index -- Save index
-        stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
-      end
 
-      -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
-      if distribution.strataEnds[2] - distribution.strataEnds[1] <= opt.histLen then
-        log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
-        error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
-      end
+        -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
+        if distribution.strataEnds[2] - distribution.strataEnds[1] <= opt.histLen then
+          log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+          error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+        end
 
         -- Store distribution
-      self.distributions[partitionNum] = distribution
-    end
+        self.distributions[partitionNum] = distribution
+      end
 
-    partitionNum = partitionNum + 1
+      partitionNum = partitionNum + 1
+    end
   end
-end
 
   -- Initialise first time step (s0)
   self.states[1]:zero() -- Blank out state
@@ -118,11 +122,13 @@ end
 function Experience:store(reward, state, terminal, action)
   self.rewards[self.index] = reward
   -- Store with maximal priority
-  local maxPriority = self.priorityQueue:findMax() or 1 -- First priority = 1
-  if self.isFull then
-    self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
-  else
-    self.priorityQueue:insert(maxPriority, self.index)
+  if self.memPriority ~= 'none' then
+    local maxPriority = self.priorityQueue:findMax() or 1 -- First priority = 1
+    if self.isFull then
+      self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
+    else
+      self.priorityQueue:insert(maxPriority, self.index)
+    end
   end
 
   -- Increment index and size
@@ -165,8 +171,8 @@ function Experience:retrieve(indices)
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
-      -- Copy state
-      self.transTuples.states[n][histIndex] = torch.div(self.states[memIndex], self.imgDiscLevels) -- byte -> float
+      -- Copy state (converting to float first for non-integer division)
+      self.transTuples.states[n][histIndex]:div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -180,7 +186,7 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen] = torch.div(self.states[memTIndex], self.imgDiscLevels) -- byte -> float
+      self.transTuples.transitions[n][self.histLen]:div(self.states[memTIndex]:typeAs(self.transTuples.transitions), self.imgDiscLevels) -- byte -> float
     end
   end
 
@@ -247,13 +253,14 @@ function Experience:sample()
     -- Compute importance-sampling weights w = (N * p(rank))^-β
     local beta = math.min(self.betaZero + (self.globals.step - self.learnStart - 1)*self.betaGrad, 1)
     self.w = distribution.pdf:index(1, rankIndices):mul(N):pow(-beta) -- torch.index does memory copy
-    -- Calculate max importance-sampling weight (from smallest P)
-    local wMax = math.pow(distribution.pdf[distribution.pdf:size(1)]*N, -beta)
+    -- Calculate max importance-sampling weight
+    -- Note from Tom Schaul: Calculated over minibatch, not entire distribution
+    local wMax = torch.max(self.w)
     -- Normalise weights so updates only scale downwards (for stability)
     self.w:div(wMax)
 
   elseif self.memPriority == 'proportional' then
-  
+
     -- TODO: Proportional prioritised experience replay
 
   end
@@ -263,14 +270,21 @@ end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
-  local priorities = torch.abs(delta):float() -- Use absolute values
-  if self.memPriority == 'proportional' then
-    priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0
-  end
+  if self.memPriority ~= 'none' then
+    local priorities = torch.abs(delta):float() -- Use absolute values
+    if self.memPriority == 'proportional' then
+      priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0
+    end
 
-  for p = 1, indices:size(1) do
-    self.priorityQueue:updateByVal(indices[p], priorities[p], indices[p]) 
+    for p = 1, indices:size(1) do
+      self.priorityQueue:updateByVal(indices[p], priorities[p], indices[p]) 
+    end
   end
+end
+
+-- Rebalance prioritised experience replay heap
+function Experience:rebalance()
+  self.priorityQueue:rebalance()
 end
 
 return Experience
