@@ -83,6 +83,7 @@ function A3CAgent:accumulateGradients(terminal, state)
     
     local action = self.actions[i]
     local V, probability = unpack(self.policyNet_:forward(self.states[i]))
+    probability:add(1e-100) -- could contain 0 -> log(0)= -nan -> theta = nans
 
     self.vTarget[1] = -0.5 * (R - V)
 
