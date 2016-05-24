@@ -60,11 +60,13 @@ cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)
 -- Async
 cmd:option('-async', 'OneStepQ', 'async method')
 cmd:option('-novalidation', 'false', 'dont run validation thread (for debugging)')
+cmd:option('-recurrent', 'false', 'Use LSTM with single frames')
 local opt = cmd:parse(arg)
 
 -- Process boolean options (Torch fails to accept false on the command line)
 opt.duel = opt.duel == 'true' or false
 opt.doubleQ = opt.doubleQ == 'true' or false
+opt.recurrent = opt.recurrent == 'true' or false
 opt.reportWeights = opt.reportWeights == 'true' or false
 opt.fullActions = opt.fullActions == 'true' or false
 opt.verbose = opt.verbose == 'true' or false

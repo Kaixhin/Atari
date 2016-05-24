@@ -14,6 +14,9 @@ function ValidationAgent:_init(opt, theta, atomic)
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
   self.policyNet_ = asyncModel:createNet()
+  log.info('%s',self.policyNet_)
+
+  self.lstm = opt.recurrent and self.policyNet_:findModules('nn.FastLSTM')[1]
 
   self.theta_ = self.policyNet_:getParameters()
   self.theta = theta
@@ -37,7 +40,7 @@ function ValidationAgent:_init(opt, theta, atomic)
 
   if self.ale then self.env:training() end
 
-  self.stateBuffer = CircularQueue(opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
   self.progFreq = opt.progFreq
   self.Tensor = opt.Tensor
 
@@ -78,11 +81,14 @@ end
 
 function ValidationAgent:eGreedyAction(state)
   local epsilon = 0.001 -- Taken from tuned DDQN evaluation
+
+  local Q = self.policyNet_:forward(state):squeeze()
+
   if torch.uniform() < epsilon then
     return torch.random(1,self.m)
   end
 
-  local Q = self.policyNet_:forward(state):squeeze()
+
   local _, maxIdx = Q:max(1)
   return maxIdx[1]
 end
@@ -96,9 +102,11 @@ end
 
 function ValidationAgent:validate()
   self.theta_:copy(self.theta)
+  if self.lstm then self.lstm:forget() end
 
   self.stateBuffer:clear()
   if self.ale then self.env:evaluate() end
+  self.policyNet_:evaluate()
 
   local valStepStrFormat = '%0' .. (math.floor(math.log10(self.valSteps)) + 1) .. 'd'
   local valEpisode = 1
@@ -121,6 +129,8 @@ function ValidationAgent:validate()
       reward, observation, terminal = self.env:step(action - self.actionOffset)
       valEpisodeScore = valEpisodeScore + reward
     else
+      if self.lstm then self.lstm:forget() end
+
       -- Print score every 10 episodes
       if valEpisode % 10 == 0 then
         local avgScore = valTotalScore/math.max(valEpisode - 1, 1)

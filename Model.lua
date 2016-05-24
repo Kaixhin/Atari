@@ -27,6 +27,7 @@ function Model:_init(opt)
   self.bootstraps = opt.bootstraps
   self.recurrent = opt.recurrent
   self.ale = opt.ale
+  self.async = opt.async
   self.a3c = opt.async == 'A3C'
 end
 
@@ -127,6 +128,10 @@ function Model:create(m)
       local lstm = nn.FastLSTM(convOutputSize, hiddenSize, self.histLen)
       lstm.i2g:init({'bias', {{3*hiddenSize+1, 4*hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
       head:add(lstm)
+      if self.async then
+        lstm:remember('both')
+        head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM, but lets do it anyway...
+      end
     else
       head:add(nn.Linear(convOutputSize, hiddenSize))
       head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
@@ -177,7 +182,7 @@ function Model:create(m)
     net:add(nn.JoinTable(1, 1))
     net:add(nn.View(heads, m))
 
-    if self.recurrent then
+    if not self.async and self.recurrent then
       local sequencer = nn.Sequencer(net)
       sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
       net = nn.Sequential():add(nn.SplitTable(1, 4)):add(sequencer):add(nn.SelectTable(-1))

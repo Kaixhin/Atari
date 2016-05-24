@@ -34,6 +34,8 @@ local function torchSetup(opt)
   return function()
     log.info('Setting up Torch7')
     require 'nn'
+    require 'rnn'
+    require 'nngraph'
     require 'modules/GradientRescale'
     -- Use enhanced garbage collector
     torch.setheaptracking(true)

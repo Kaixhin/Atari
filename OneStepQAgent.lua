@@ -8,6 +8,8 @@ local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')
 function OneStepQAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.agentName = 'OneStepQAgent'
+  self.lstm = opt.recurrent and self.policyNet:findModules('nn.FastLSTM')[1]
+  self.lstmTarget = opt.recurrent and self.targetNet:findModules('nn.FastLSTM')[1]
   classic.strict(self)
 end
 
@@ -40,11 +42,19 @@ function OneStepQAgent:learn(steps, from)
     if not terminal then
       state = state_
     else
+      if self.lstm then
+        self.lstm:forget()
+        self.lstmTarget:forget()
+      end
       state = nil
     end
 
     if self.batchIdx == self.batchSize or terminal then
       self:applyGradients(self.policyNet, self.dTheta, self.theta)
+      if self.lstm then
+        self.lstm:forget()
+        self.lstmTarget:forget()
+      end
       self.batchIdx = 0
     end
 
@@ -57,6 +67,9 @@ end
 
 function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
   local Y = reward
+  if self.lstm then -- LSTM targetNet needs to see all states as well
+    self.targetNet:forward(state) 
+  end 
   if not terminal then
       local QPrimes = self.targetNet:forward(state_):squeeze()
       local APrimeMax = QPrimes:max(1):squeeze()
