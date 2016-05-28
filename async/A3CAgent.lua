@@ -1,5 +1,6 @@
 local classic = require 'classic'
 local optim = require 'optim'
+local AsyncAgent = require 'async/AsyncAgent'
 require 'modules/sharedRmsProp'
 
 local A3CAgent,super = classic.class('A3CAgent', 'AsyncAgent')

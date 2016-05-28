@@ -1,4 +1,5 @@
 local classic = require 'classic'
+local QAgent = require 'async/OneStepQAgent'
 
 local SarsaAgent, super = classic.class('SarsaAgent', 'OneStepQAgent')
 

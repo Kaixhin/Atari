@@ -1,10 +1,12 @@
 require 'socket'
-local AsyncModel = require 'AsyncModel'
-local OneStepQAgent = require 'OneStepQAgent'
-local NStepQAgent = require 'NStepQAgent'
-local A3CAgent = require 'A3CAgent'
-local ValidationAgent = require 'ValidationAgent'
-local class = require 'classic'
+local AsyncModel = require 'async/AsyncModel'
+local AsyncAgent = require 'async/AsyncAgent'
+local QAgent = require 'async/QAgent'
+local OneStepQAgent = require 'async/OneStepQAgent'
+local NStepQAgent = require 'async/NStepQAgent'
+local A3CAgent = require 'async/A3CAgent'
+local ValidationAgent = require 'async/ValidationAgent'
+local classic = require 'classic'
 local threads = require 'threads'
 local signal = require 'posix.signal'
 local tds = require 'tds'
@@ -118,7 +120,7 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(torchSetup(opt))
   self.controlPool:addjob(function()
     local signal = require 'posix.signal'
-    local ValidationAgent = require 'ValidationAgent'
+    local ValidationAgent = require 'async/ValidationAgent'
     validAgent = ValidationAgent(opt, theta, atomic)
     if not opt.novalidation then
       signal.signal(signal.SIGINT, function(signum)
@@ -149,7 +151,7 @@ function AsyncMaster:_init(opt)
       local threads1 = require 'threads'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local Agent = require(methods[opt.async])
+      local Agent = require('async/'..methods[opt.async])
       agent = Agent(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
       mutex1:unlock()
     end

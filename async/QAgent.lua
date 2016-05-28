@@ -1,4 +1,5 @@
 local classic = require 'classic'
+local QAgent = require 'async/AsyncAgent'
 
 local QAgent, super = classic.class('QAgent', 'AsyncAgent')
 

@@ -1,5 +1,5 @@
 local _ = require 'moses'
-local AsyncModel = require 'AsyncModel'
+local AsyncModel = require 'async/AsyncModel'
 local Evaluator = require 'Evaluator'
 local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'

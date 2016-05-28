@@ -1,5 +1,6 @@
 local classic = require 'classic'
 local optim = require 'optim'
+local QAgent = require 'async/QAgent'
 require 'modules/sharedRmsProp'
 
 local OneStepQAgent, super = classic.class('OneStepQAgent', 'QAgent')

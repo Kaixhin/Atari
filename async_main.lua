@@ -1,5 +1,5 @@
 require 'logroll'
-local AsyncMaster = require 'AsyncMaster'
+local AsyncMaster = require 'async/AsyncMaster'
 
 local cmd = torch.CmdLine()
 -- Base Torch7 options

@@ -1,4 +1,4 @@
-local AsyncModel = require 'AsyncModel'
+local AsyncModel = require 'async/AsyncModel'
 local CircularQueue = require 'structures/CircularQueue'
 local classic = require 'classic'
 local optim = require 'optim'
