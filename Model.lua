@@ -28,6 +28,8 @@ function Model:_init(opt)
   self.bootstraps = opt.bootstraps
   self.recurrent = opt.recurrent
   self.ale = opt.ale
+  self.async = opt.async
+  self.a3c = opt.async == 'A3C'
 end
 
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
@@ -125,6 +127,10 @@ function Model:create(m)
       local lstm = nn.FastLSTM(convOutputSize, self.hiddenSize, self.histLen)
       lstm.i2g:init({'bias', {{3*self.hiddenSize+1, 4*self.hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
       head:add(lstm)
+      if self.async then
+        lstm:remember('both')
+        head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM, but lets do it anyway...
+      end
     else
       head:add(nn.Linear(convOutputSize, self.hiddenSize))
       head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
@@ -147,19 +153,39 @@ function Model:create(m)
     end
     net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
     net:add(headConcat)
+  elseif self.a3c then
+    net:add(nn.Linear(convOutputSize, self.hiddenSize))
+    net:add(nn.ReLU(true))
+
+    local valueAndPolicy = nn.ConcatTable()
+
+    local valueFunction = nn.Sequential()
+    valueFunction:add(nn.Linear(self.hiddenSize, 1))
+
+    local policy = nn.Sequential()
+    policy:add(nn.Linear(self.hiddenSize, m))
+    policy:add(nn.SoftMax())
+
+    valueAndPolicy:add(valueFunction)
+    valueAndPolicy:add(policy)
+
+    net:add(valueAndPolicy)
   else
     -- Add head via ConcatTable (simplifies bootstrap code in agent)
     local headConcat = nn.ConcatTable()
     headConcat:add(head)
     net:add(headConcat)
   end
-  net:add(nn.JoinTable(1, 1))
-  net:add(nn.View(heads, m))
 
-  if self.recurrent then
-    local sequencer = nn.Sequencer(net)
-    sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
-    net = nn.Sequential():add(nn.SplitTable(1, 4)):add(sequencer):add(nn.SelectTable(-1))
+  if not self.a3c then
+    net:add(nn.JoinTable(1, 1))
+    net:add(nn.View(heads, m))
+
+    if not self.async and self.recurrent then
+      local sequencer = nn.Sequencer(net)
+      sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
+      net = nn.Sequential():add(nn.SplitTable(1, 4)):add(sequencer):add(nn.SelectTable(-1))
+    end
   end
 
   -- GPU conversion
@@ -172,6 +198,10 @@ function Model:create(m)
   self.net = net
 
   return net
+end
+
+function Model:setNetwork(net)
+  self.net = net
 end
 
 -- Return list of convolutional filters as list of images
