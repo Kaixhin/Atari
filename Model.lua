@@ -154,16 +154,16 @@ function Model:create(m)
     net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
     net:add(headConcat)
   elseif self.a3c then
-    net:add(nn.Linear(convOutputSize, hiddenSize))
+    net:add(nn.Linear(convOutputSize, self.hiddenSize))
     net:add(nn.ReLU(true))
 
     local valueAndPolicy = nn.ConcatTable()
 
     local valueFunction = nn.Sequential()
-    valueFunction:add(nn.Linear(hiddenSize, 1))
+    valueFunction:add(nn.Linear(self.hiddenSize, 1))
 
     local policy = nn.Sequential()
-    policy:add(nn.Linear(hiddenSize, m))
+    policy:add(nn.Linear(self.hiddenSize, m))
     policy:add(nn.SoftMax())
 
     valueAndPolicy:add(valueFunction)

@@ -38,7 +38,7 @@ export OMP_NUM_THREADS=1
 
 if [ "$PAPER" == "demo" ]; then
   # Catch demo
-  th async_main.lua -async $ASYNC -eta 0.00025 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 4 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -PALpha 0 "$@"
+  th async_main.lua -async $ASYNC -hiddenSize 32 -eta 0.00025 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 4 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -PALpha 0 "$@"
 elif [ "$PAPER" == "nature" ]; then
   # Nature
   th async_main.lua -async $ASYNC -game $GAME -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ false -PALpha 0 -eta 0.0007 -gradClip 0 "$@"

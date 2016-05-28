@@ -13,6 +13,7 @@ cmd:option('-height', 84, 'Resized screen height')
 cmd:option('-width', 84, 'Resize screen width')
 cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
 -- Agent options
+cmd:option('-hiddenSize', 512, 'Number of units in the hidden fully connected layer')
 cmd:option('-histLen', 4, 'Number of consecutive states processed')
 cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
 -- Experience replay options (only for valMemory)
