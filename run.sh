@@ -27,7 +27,7 @@ fi
 
 if [ "$PAPER" == "demo" ]; then
   # Catch demo
-  th main.lua -gpu 0 -optimiser adam -steps 500000 -learnStart 20000 -tau 4 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
+  th main.lua -gpu 0 -hiddenSize 32 -optimiser adam -steps 500000 -learnStart 20000 -tau 4 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
 elif [ "$PAPER" == "nature" ]; then
   # Nature
   th main.lua -game $GAME -duel false -bootstraps 0 -memPriority none -epsilonEnd 0.1 -tau 10000 -doubleQ false -PALpha 0 -eta 0.00025 -gradClip 0 "$@"
