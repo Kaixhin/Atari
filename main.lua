@@ -1,13 +1,11 @@
 local signal = require 'posix.signal'
 local _ = require 'moses'
-local image = require 'image'
 local gnuplot = require 'gnuplot'
 local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
 local Evaluator = require 'Evaluator'
 local Setup = require 'Setup'
--- Detect QT for image display
-local qt = pcall(require, 'qt')
+local Display = require 'Display'
 
 local setup = Setup(arg)
 local opt = setup.opt
@@ -15,22 +13,6 @@ local opt = setup.opt
 -- Set up singleton global object for transferring step
 local globals = Singleton({step = 1}) -- Initial step
 
--- Computes saliency map for display
-local createSaliencyMap = function(state, agent)
-  local screen -- Clone of state that can be adjusted
-  
-  -- Convert Catch screen to RGB
-  if opt.game == 'catch' then
-    screen = torch.repeatTensor(state, 3, 1, 1)
-  else
-    screen = state:select(1, 1):clone()
-  end
-
-  -- Use red channel for saliency map
-  screen:select(1, 1):copy(agent.saliencyMap)
-
-  return screen
-end
 
 ----- Environment + Agent Setup -----
 
@@ -90,11 +72,7 @@ log.info('Starting game: ' .. opt.game)
 local reward, state, terminal = 0, env:start(), false
 local action
 
--- Activate display if using QT
-local zoom = opt.ale and 1 or 4
-local screen = state -- Use separate screen for displaying saliency maps
-local window = qt and image.display({image=screen, zoom=zoom})
-
+local display = Display(opt, state)
 
 if opt.mode == 'train' then
 
@@ -150,11 +128,7 @@ if opt.mode == 'train' then
       episodeScore = reward -- Reset episode score
     end
 
-    -- Update display
-    if qt then
-      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
-      image.display({image=screen, zoom=zoom, win=window})
-    end
+    display:display(agent, state)
 
     -- Trigger learning after a while (wait to accumulate experience)
     if step == opt.learnStart then
@@ -210,11 +184,7 @@ if opt.mode == 'train' then
           valEpisodeScore = reward -- Reset episode score
         end
 
-        -- Update display
-        if qt then
-          screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or state
-          image.display({image=screen, zoom=zoom, win=window})
-        end
+        display:display(agent, state)
       end
 
       -- If no episodes completed then use score from incomplete episode
@@ -275,15 +245,6 @@ elseif opt.mode == 'eval' then
   -- Report episode score
   local episodeScore = reward
 
-  -- Set up recording
-  if opt.record then
-    -- Recreate scratch directory
-    paths.rmall('scratch', 'yes')
-    paths.mkdir('scratch')
-
-    log.info('Recording screen')
-  end
-
   -- Play one game (episode)
   local step = 1
   while not terminal do
@@ -293,39 +254,12 @@ elseif opt.mode == 'eval' then
     reward, state, terminal = env:step(action)
     episodeScore = episodeScore + reward
 
-    if qt or opt.record then
-      -- Extract screen in RGB format for saving images for FFmpeg
-      screen = opt.saliency ~= 'none' and createSaliencyMap(state, agent) or (opt.game == 'catch' and torch.repeatTensor(state, 3, 1, 1) or state:select(1, 1))
-      if qt then
-        image.display({image=screen, zoom=zoom, win=window})
-      end
-      if opt.record then
-        image.save(paths.concat('scratch', opt.game .. '_' .. string.format('%06d', step) .. '.jpg'), screen)
-      end
-    end
-
+    display:recordAndDisplay(agent, state, step)
     -- Increment evaluation step counter
     step = step + 1
   end
   log.info('Final Score: ' .. episodeScore)
 
-  -- Export recording as video
-  if opt.record then
-    log.info('Recorded screen')
-
-    -- Create videos directory
-    if not paths.dirp('videos') then
-      paths.mkdir('videos')
-    end
-
-    -- Use FFmpeg to create a video from the screens
-    log.info('Creating video')
-    local fps = opt.game == 'catch' and 10 or 60
-    os.execute('ffmpeg -framerate ' .. fps .. ' -start_number 1 -i scratch/' .. opt.game .. '_%06d.jpg -c:v libvpx-vp9 -crf 0 -b:v 0 videos/' .. opt.game .. '.webm')
-    log.info('Created video')
-
-    -- Clear scratch space
-    paths.rmall('scratch', 'yes')
-  end
+  display:createVideo()
 
 end
