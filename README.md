@@ -2,7 +2,7 @@
 
 **Work In Progress:** Crossed out items have been partially implemented.
 
-~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references). Or PERPALB(triple-D)RQN for short...
+~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) with asynchronous[[12]](#references) modes. Or PERPALB(triple-D)RQN for short...
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[9]](#references), optionally using guided [[10]](#references) or "deconvnet" [[11]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
@@ -24,6 +24,7 @@ Requires [Torch7](http://torch.ch/), and uses CUDA if available. Also requires t
 - rnn
 - dpnn
 - nninit
+- tds
 - **xitari**
 - **alewrap**
 - **rlenvs**
@@ -34,6 +35,12 @@ xitari, alewrap and rlenvs can be installed using the following commands:
 luarocks install https://raw.githubusercontent.com/Kaixhin/xitari/master/xitari-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewrap-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/rlenvs-scm-1.rockspec
+```
+
+for async mode use this xitari instead that has fixes for multithreaded usage
+
+```
+luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitari-0-0.rockspec
 ```
 
 ## Acknowledgements
@@ -54,3 +61,4 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 [9] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
 [10] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
 [11] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  
+[12] [Asynchronous Methods for Deep Reinforcement Learning](http://arxiv.org/abs/1602.01783)  
