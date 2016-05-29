@@ -1,17 +1,24 @@
 local Setup = require 'Setup'
 local ExperienceReplay = require 'ExperienceReplay'
+local AsyncMaster = require 'async/AsyncMaster'
 
 local setup = Setup(arg)
 local opt = setup.opt
 
-local experienceReplay = ExperienceReplay(opt)
+if opt.async then
+  log.info(opt)
+  local master = AsyncMaster(opt)
+  master:start()
 
-if opt.mode == 'train' then
+else
+  local experienceReplay = ExperienceReplay(opt)
 
-  experienceReplay:train()
+  if opt.mode == 'train' then
+    experienceReplay:train()
 
-elseif opt.mode == 'eval' then
+  elseif opt.mode == 'eval' then
+    experienceReplay:evaluate()
 
-  experienceReplay:evaluate()
+  end
 
 end

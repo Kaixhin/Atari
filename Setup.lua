@@ -63,7 +63,7 @@ function Setup:options(arg)
   local cmd = torch.CmdLine()
   -- Base Torch7 options
   cmd:option('-seed', 1, 'Random seed')
-  cmd:option('-threads', 4, 'Number of BLAS threads')
+  cmd:option('-threads', 4, 'Number of BLAS or async threads')
   cmd:option('-tensorType', 'torch.FloatTensor', 'Default tensor type')
   cmd:option('-gpu', cuda and 1 or 0, 'GPU device ID (0 to disable)')
   -- Game
@@ -119,6 +119,10 @@ function Setup:options(arg)
   cmd:option('-randomStarts', 30, 'Max number of no-op actions played before presenting the start of each training episode')
   cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
   cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
+  -- Async options
+  cmd:option('-async', 'false', 'async method') -- OneStepQ|NStepQ|Sarsa|A3C
+  cmd:option('-rmsEpsilon', 0.1, 'Epsilon for sharedRmsProp')
+  cmd:option('-novalidation', 'false', 'dont run validation thread in async') -- for debugging
   -- Experiment options
   cmd:option('-experiments', 'experiments', 'Base directory to store experiments')
   cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
@@ -136,6 +140,9 @@ function Setup:options(arg)
   opt.fullActions = opt.fullActions == 'true'
   opt.verbose = opt.verbose == 'true'
   opt.record = opt.record == 'true'
+  opt.novalidation = opt.novalidation == 'true'
+  if opt.async == 'false' then opt.async = false end
+  if opt.async then opt.gpu = 0 end
 
   -- Set ID as game name if not set
   if opt._id == '' then
