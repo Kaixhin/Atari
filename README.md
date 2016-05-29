@@ -32,15 +32,9 @@ Requires [Torch7](http://torch.ch/), and uses CUDA if available. Also requires t
 xitari, alewrap and rlenvs can be installed using the following commands:
 
 ```sh
-luarocks install https://raw.githubusercontent.com/Kaixhin/xitari/master/xitari-0-0.rockspec
+luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitari-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewrap-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/rlenvs-scm-1.rockspec
-```
-
-for async mode use this xitari instead that has fixes for multithreaded usage
-
-```
-luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitari-0-0.rockspec
 ```
 
 ## Acknowledgements
