@@ -6,13 +6,14 @@ local Model = require 'Model'
 local Experience = require 'Experience'
 local CircularQueue = require 'structures/CircularQueue'
 local Singleton = require 'structures/Singleton'
+local AbstractAgent = require 'async/AbstractAgent'
 require 'classic.torch' -- Enables serialisation
 require 'modules/rmspropm' -- Add RMSProp with momentum
 
 -- Detect QT for image display
 local qt = pcall(require, 'qt')
 
-local Agent = classic.class('Agent')
+local Agent = classic.class('Agent', AbstractAgent)
 
 -- Creates a DQN agent
 function Agent:_init(env, opt)

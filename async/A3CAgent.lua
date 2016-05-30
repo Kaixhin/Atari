@@ -67,7 +67,7 @@ function A3CAgent:learn(steps, from)
     end
 
     self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
-  until self.step == steps
+  until self.step >= steps
 
   log.info('A3CAgent ended learning steps=%d', steps)
 end

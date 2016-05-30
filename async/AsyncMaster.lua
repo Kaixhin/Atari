@@ -12,14 +12,10 @@ local signal = require 'posix.signal'
 local tds = require 'tds'
 threads.Threads.serialization('threads.sharedserialize')
 
+local FINISHED = -99999999
+
 local AsyncMaster = classic.class('AsyncMaster')
 
-local methods = {
-  OneStepQ = 'OneStepQAgent',
-  Sarsa = 'SarsaAgent',
-  NStepQ = 'NStepQAgent',
-  A3C = 'A3CAgent'
-}
 
 local function checkNotNan(t)
   local sum = t:sum()
@@ -149,10 +145,10 @@ function AsyncMaster:_init(opt)
     torchSetup(opt),
     function()
       local threads1 = require 'threads'
+      local AsyncAgent = require 'async/AsyncAgent'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local Agent = require('async/'..methods[opt.async])
-      agent = Agent(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+      agent = AsyncAgent.build(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
       mutex1:unlock()
     end
   )
@@ -219,7 +215,7 @@ function AsyncMaster:start()
   end
 
   self.pool:synchronize()
-  self.atomic:set(-1)
+  self.atomic:set(FINISHED)
 
   self.controlPool:synchronize()
 

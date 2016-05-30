@@ -57,7 +57,7 @@ function NStepQAgent:learn(steps, from)
     end
 
     self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
-  until self.step == steps
+  until self.step >= steps
 
   log.info('NStepQAgent ended learning steps=%d ε=%.4f', steps, self.epsilon)
 end

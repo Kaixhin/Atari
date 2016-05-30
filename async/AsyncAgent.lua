@@ -1,10 +1,23 @@
+local AbstractAgent = require 'async/AbstractAgent'
 local AsyncModel = require 'async/AsyncModel'
 local CircularQueue = require 'structures/CircularQueue'
 local classic = require 'classic'
 local optim = require 'optim'
 require 'modules/sharedRmsProp'
 
-local AsyncAgent = classic.class('AsyncAgent')
+local AsyncAgent = classic.class('AsyncAgent', AbstractAgent)
+
+local methods = {
+  OneStepQ = 'OneStepQAgent',
+  Sarsa = 'SarsaAgent',
+  NStepQ = 'NStepQAgent',
+  A3C = 'A3CAgent'
+}
+
+function AsyncAgent.static.build(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+    local Agent = require('async/'..methods[opt.async])
+    return Agent(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+end
 
 
 function AsyncAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
@@ -90,6 +103,7 @@ function AsyncAgent:applyGradients(net, dTheta, theta)
   end
 
   local feval = function()
+    -- loss needed for validation stats only which is not computed for async yet, so just 0
     local loss = 0 -- 0.5 * tdErr ^2
     return loss, dTheta
   end
@@ -98,6 +112,21 @@ function AsyncAgent:applyGradients(net, dTheta, theta)
   self.optimiser(feval, theta, self.optimParams)
 
   dTheta:zero()
+end
+
+
+function AsyncAgent:observe()
+  error('not implemented yet')
+end
+
+
+function AsyncAgent:training()
+  error('not implemented yet')
+end
+
+
+function AsyncAgent:evaluate()
+  error('not implemented yet')
 end
 
 
