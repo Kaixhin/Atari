@@ -165,54 +165,51 @@ function Setup:options(arg)
 end
 
 
+local function abortIf(notOk, err)
+  if notOk then 
+    log.error(err)
+    error(err)
+  end
+end
+
+
 function Setup:validateOptions(opt)
   -- Calculate number of colour channels
-  if not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace) then
-    self:abort('Unsupported colour space for conversion')
-  end
+  abortIf(not _.contains({'rgb', 'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, opt.colorSpace),
+    'Unsupported colour space for conversion')
   opt.nChannels = opt.colorSpace == 'y' and 1 or 3
 
   -- Check start of learning occurs after at least one minibatch of data has been collected
-  if opt.learnStart <= opt.batchSize then
-    self:abort('learnStart must be greater than batchSize')
-  end
+  abortIf(opt.learnStart <= opt.batchSize, 'learnStart must be greater than batchSize')
 
   -- Check enough validation transitions will be collected before first validation
-  if opt.valFreq <= opt.valSize then
-    self:abort('valFreq must be greater than valSize')
-  end
+  abortIf(opt.valFreq <= opt.valSize, 'valFreq must be greater than valSize')
 
   -- Check prioritised experience replay options
-  if not _.contains({'none', 'rank', 'proportional'}, opt.memPriority) then
-    self:abort('Type of prioritised experience replay unrecognised')
-  end
+  abortIf(not _.contains({'none', 'rank', 'proportional'}, opt.memPriority),
+    'Type of prioritised experience replay unrecognised')
 
   -- Check start of learning occurs after at least 1/100 of memory has been filled
-  if opt.learnStart <= opt.memSize/100 then
-    self:abort('learnStart must be greater than memSize/100')
-  end
+  abortIf(opt.learnStart <= opt.memSize/100, 'learnStart must be greater than memSize/100')
 
   -- Check memory size is multiple of 100 (makes prioritised sampling partitioning simpler)
-  if opt.memSize % 100 ~= 0 then
-    self:abort('memSize must be a multiple of 100')
-  end
+  abortIf(opt.memSize % 100 ~= 0, 'memSize must be a multiple of 100')
 
   -- Check learning occurs after first progress report
-  if opt.learnStart < opt.progFreq then
-    self:abort('learnStart must be greater than progFreq')
-  end
+  abortIf(opt.learnStart < opt.progFreq, 'learnStart must be greater than progFreq')
 
   -- Check saliency map options
-  if not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency) then
-    self:abort('Unrecognised method for visualising saliency maps')
+  abortIf(not _.contains({'none', 'normal', 'guided', 'deconvnet'}, opt.saliency),
+    'Unrecognised method for visualising saliency maps')
+
+  if opt.async then
+    abortIf(opt.recurrent and opt.async ~= 'OneStepQ', 'recurrent only supported for OneStepQ in async for now')
+    abortIf(opt.PALpha > 0, 'PAL not supported in async modes yet')
+    abortIf(opt.bootstraps > 0, 'bootstraps not supported in async mode')
+    abortIf(opt.async == 'A3C' and opt.duel, 'dueling and A3C dont mix')
+    abortIf(opt.async == 'A3C' and opt.doubleQ, 'doubleQ and A3C dont mix')
   end
 end
 
 
-function Setup:abort(err)
-  log.error(err)
-  error(err)
-end
-
 return Setup
-
