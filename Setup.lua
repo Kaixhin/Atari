@@ -97,7 +97,7 @@ function Setup:parseOptions(arg)
   cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
   cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
   cmd:option('-memNSamples', 1, 'Number of times to sample per learning step')
-  cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional')
+  cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional') -- TODO: Implement proportional prioritised experience replay
   cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
   cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
   -- Reinforcement learning parameters
@@ -156,7 +156,7 @@ function Setup:parseOptions(arg)
 
   -- Process async agent options
   if opt.async == 'false' then opt.async = false end
-  if opt.async then opt.gpu = 0 end
+  if opt.async then opt.gpu = 0 end -- Asynchronous agents are CPU-only
 
   -- Set ID as game name if not set
   if opt._id == '' then

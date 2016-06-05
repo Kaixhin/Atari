@@ -4,26 +4,13 @@ local Model = require 'Model'
 local AsyncModel = classic.class('AsyncModel')
 
 function AsyncModel:_init(opt)
+  -- Initialise Catch or Arcade Learning Environment
   log.info('Setting up ' .. (opt.ale and 'Arcade Learning Environment' or 'Catch'))
-
-  if opt.ale then
-    local Atari = require 'rlenvs.Atari'
-    self.env = Atari(opt)
-    local stateSpec = self.env:getStateSpec()
-
-    -- Provide original channels, height and width for resizing from
-    opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
-  else
-    local Catch = require 'rlenvs.Catch'
-    self.env = Catch()
-    local stateSpec = self.env:getStateSpec()
-    
-    -- Provide original channels, height and width for resizing from
-    opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
-
-    -- Adjust height and width
-    opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
-  end
+  local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
+  self.env = Env(opt)
+  local stateSpec = self.env:getStateSpec()
+  -- Provide original channels, height and width for resizing from
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
 
   self.model = Model(opt)
   self.a3c = opt.async == 'A3C'
