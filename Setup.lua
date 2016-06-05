@@ -122,13 +122,13 @@ function Setup:parseOptions(arg)
   -- Evaluation options
   cmd:option('-progFreq', 10000, 'Interval of steps between reporting progress')
   cmd:option('-reportWeights', 'false', 'Report weight and weight gradient statistics')
+  cmd:option('-noValidation', 'false', 'Disable asynchronous agent validation thread') -- TODO: Make behaviour consistent across Master/AsyncMaster
   cmd:option('-valFreq', 250000, 'Interval of steps between validating agent') -- valFreq steps is used as an epoch, hence #epochs = steps/valFreq
   cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
   cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
   -- Async options
   cmd:option('-async', 'false', 'Async agent: false|Sarsa|OneStepQ|NStepQ|A3C') -- TODO: Change names
   cmd:option('-rmsEpsilon', 0.1, 'Epsilon for sharedRmsProp')
-  cmd:option('-noValidation', 'false', 'Disable asynchronous agent validation thread') -- TODO: Make experiment option (not just for async)
   -- ALEWrap options
   cmd:option('-fullActions', 'false', 'Use full set of 18 actions')
   cmd:option('-actRep', 4, 'Times to repeat action') -- Independent of history length

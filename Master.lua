@@ -9,6 +9,7 @@ local Display = require 'Display'
 
 local Master = classic.class('Master')
 
+-- Sets up environment and agent
 function Master:_init(opt)
   self.opt = opt
 
@@ -20,8 +21,17 @@ function Master:_init(opt)
   local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
   self.env = Env(opt)
   local stateSpec = self.env:getStateSpec()
+
   -- Provide original channels, height and width for resizing from
   opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
+  -- Set up fake training mode (if needed)
+  if not self.env.training then
+    self.env.training = function() end
+  end
+  -- Set up fake evaluation mode (if needed)
+  if not self.env.evaluate then
+    self.env.evaluate = function() end
+  end
 
   -- Create DQN agent
   log.info('Creating DQN')
@@ -59,16 +69,17 @@ function Master:_init(opt)
   classic.strict(self)
 end
 
-
+-- Trains agent
 function Master:train()
+  log.info('Training mode')
+
+  -- Catch CTRL-C to save
   self:catchSigInt()
 
   local reward, state, terminal = 0, self.env:start(), false
 
-  log.info('Training mode')
-
   -- Set environment and agent to training mode
-  if self.opt.ale then self.env:training() end
+  self.env:training()
   self.agent:training()
 
   -- Training variables (reported in verbose mode)
@@ -120,7 +131,7 @@ function Master:train()
     end
 
     -- Validate
-    if step >= self.opt.learnStart and step % self.opt.valFreq == 0 then
+    if not self.opt.noValidation and step >= self.opt.learnStart and step % self.opt.valFreq == 0 then
       self:validate()
 
       -- Start new game (as previous one was interrupted)
@@ -135,8 +146,9 @@ end
 
 function Master:validate()
   log.info('Validating')
+
   -- Set environment and agent to evaluation mode
-  if self.opt.ale then self.env:evaluate() end
+  self.env:evaluate()
   self.agent:evaluate()
 
   -- Start new game
@@ -209,7 +221,7 @@ function Master:validate()
 
   log.info('Resuming training')
   -- Set environment and agent to training mode
-  if self.opt.ale then self.env:training() end
+  self.env:training()
   self.agent:training()
 end
 
@@ -217,7 +229,7 @@ end
 function Master:evaluate()
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
-  if self.opt.ale then self.env:evaluate() end
+  self.env:evaluate()
   self.agent:evaluate()
 
   local reward, state, terminal = 0, self.env:start(), false
@@ -243,8 +255,7 @@ function Master:evaluate()
   self.display:createVideo()
 end
 
-
--- Set up SIGINT (Ctrl+C) handler to save network before quitting
+-- Sets up SIGINT (Ctrl+C) handler to save network before quitting
 function Master:catchSigInt()
   signal.signal(signal.SIGINT, function(signum)
     log.warn('SIGINT received')
@@ -257,6 +268,5 @@ function Master:catchSigInt()
     os.exit(128 + signum)
   end)
 end
-
 
 return Master

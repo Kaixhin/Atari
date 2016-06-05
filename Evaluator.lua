@@ -21,7 +21,7 @@ end
 -- Calculates a normalised game score based on random and human performance
 function Evaluator:normaliseScore(score)
   -- Return (score_agent - score_random)/abs(score_human - score_random)
-  return self.index and (score - random[self.index]) / math.abs(human[self.index] - random[self.index]) or nil
+  return self.index and (score - random[self.index]) / math.abs(human[self.index] - random[self.index]) or nil -- Returns nil if game not included
 end
 
 return Evaluator

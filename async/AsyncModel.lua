@@ -9,8 +9,17 @@ function AsyncModel:_init(opt)
   local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
   self.env = Env(opt)
   local stateSpec = self.env:getStateSpec()
+
   -- Provide original channels, height and width for resizing from
   opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
+  -- Set up fake training mode (if needed)
+  if not self.env.training then
+    self.env.training = function() end
+  end
+  -- Set up fake evaluation mode (if needed)
+  if not self.env.evaluate then
+    self.env.evaluate = function() end
+  end
 
   self.model = Model(opt)
   self.a3c = opt.async == 'A3C'
