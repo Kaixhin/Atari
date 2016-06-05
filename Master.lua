@@ -8,9 +8,9 @@ local Evaluator = require 'Evaluator'
 local classic = require 'classic'
 
 
-local ExperienceReplay = classic.class('ExperienceReplay')
+local Master = classic.class('Master')
 
-function ExperienceReplay:_init(opt)
+function Master:_init(opt)
   self.opt = opt
 
   -- Set up singleton global object for transferring step
@@ -76,7 +76,7 @@ function ExperienceReplay:_init(opt)
 end
 
 
-function ExperienceReplay:train()
+function Master:train()
   self:catchSigInt()
 
   local reward, state, terminal = 0, self.env:start(), false
@@ -149,7 +149,7 @@ function ExperienceReplay:train()
 end
 
 
-function ExperienceReplay:validate()
+function Master:validate()
   log.info('Validating')
   -- Set environment and agent to evaluation mode
   if self.opt.ale then self.env:evaluate() end
@@ -230,7 +230,7 @@ function ExperienceReplay:validate()
 end
 
 
-function ExperienceReplay:evaluate()
+function Master:evaluate()
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
   if self.opt.ale then self.env:evaluate() end
@@ -261,7 +261,7 @@ end
 
 
 -- Set up SIGINT (Ctrl+C) handler to save network before quitting
-function ExperienceReplay:catchSigInt()
+function Master:catchSigInt()
   signal.signal(signal.SIGINT, function(signum)
     log.warn('SIGINT received')
     log.info('Save agent (y/n)?')
@@ -275,4 +275,4 @@ function ExperienceReplay:catchSigInt()
 end
 
 
-return ExperienceReplay
+return Master

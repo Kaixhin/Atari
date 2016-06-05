@@ -122,7 +122,7 @@ function AsyncMaster:_init(opt)
     local signal = require 'posix.signal'
     local ValidationAgent = require 'async/ValidationAgent'
     validAgent = ValidationAgent(opt, theta, atomic)
-    if not opt.novalidation then
+    if not opt.noValidation then
       signal.signal(signal.SIGINT, function(signum)
         log.warn('SIGINT received')
         log.info('Saving agent')
@@ -204,7 +204,7 @@ function AsyncMaster:start()
     end
   end
 
-  if not self.opt.novalidation then
+  if not self.opt.noValidation then
     self.controlPool:addjob(validator)
   end
 

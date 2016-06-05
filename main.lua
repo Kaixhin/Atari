@@ -1,24 +1,22 @@
 local Setup = require 'Setup'
-local ExperienceReplay = require 'ExperienceReplay'
+local Master = require 'Master'
 local AsyncMaster = require 'async/AsyncMaster'
 
+-- Parse options and perform setup
 local setup = Setup(arg)
 local opt = setup.opt
 
+-- Start master experiment runner
 if opt.async then
-  log.info(opt)
   local master = AsyncMaster(opt)
-  master:start()
 
+  master:start() -- TODO: Use same API as normal master
 else
-  local experienceReplay = ExperienceReplay(opt)
+  local master = Master(opt)
 
   if opt.mode == 'train' then
-    experienceReplay:train()
-
+    master:train()
   elseif opt.mode == 'eval' then
-    experienceReplay:evaluate()
-
+    master:evaluate()
   end
-
 end
