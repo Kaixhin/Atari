@@ -199,7 +199,7 @@ function Master:validate()
   local normScore = self.evaluator:normaliseScore(valTotalScore)
   if normScore then
     log.info('Normalised Score: ' .. normScore)
-    self.agent.normScores[#agent.normScores + 1] = normScore
+    self.agent.normScores[#self.agent.normScores + 1] = normScore
   end
 
   -- Visualise convolutional filters
