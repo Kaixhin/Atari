@@ -1,7 +1,7 @@
-require 'logroll'
 local _ = require 'moses'
 local classic = require 'classic'
 local cjson = require 'cjson'
+require 'logroll'
 
 local Setup = classic.class('Setup')
 
