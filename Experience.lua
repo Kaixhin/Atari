@@ -228,12 +228,6 @@ function Experience:sample()
     local distribution = self.distributions[distIndex]
     N = distIndex * 100
 
-    -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
-    if distribution.strataEnds[2] - distribution.strataEnds[1] <= self.histLen then -- Cannot be precomputed at start as depends on number of terminal states encountered
-      log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
-      error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
-    end
-
     -- Create table to store indices (by rank)
     local rankIndices = torch.LongTensor(self.batchSize) -- In reality the underlying array-based binary heap is used as an approximation of a ranked (sorted) array
     -- Perform stratified sampling
