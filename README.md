@@ -1,3 +1,6 @@
+[![Build Status](https://img.shields.io/travis/Kaixhin/Atari.svg)](https://travis-ci.org/Kaixhin/Atari)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+
 # Atari ![Space Invader](http://www.rw-designer.com/cursor-view/74522.png)
 
 **Work In Progress:** Crossed out items have been partially implemented.
