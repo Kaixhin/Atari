@@ -5,6 +5,14 @@ require 'classic.torch' -- Enables serialisation
 -- Implements a Priority Queue using a non-standard (Maximum) Binary Heap
 local BinaryHeap = classic.class('BinaryHeap')
 
+--[[
+-- Priority queue elements:
+-- array row 1 (priority/key): absolute TD-error |δ|
+-- array row 2 (value): experience replay index
+-- hash key: experience replay index
+-- hash value: priority queue array index
+--]]
+
 -- Creates a new Binary Heap with a length or existing tensor
 function BinaryHeap:_init(init)
   -- Use values as indices in a hash table
@@ -18,8 +26,10 @@ function BinaryHeap:_init(init)
     -- Otherwise assume tensor to build heap from
     self.array = init
     self.size = init:size(1)
+    -- Convert values to hash table
+    self.hash = torch.totable(self.array:select(2, 2))
     -- Rebalance
-    for i = math.ceil(self.size/2) - 1, 1, -1 do
+    for i = math.floor(self.size/2) - 1, 1, -1 do
       self:downHeap(i)
     end
   end
@@ -77,11 +87,6 @@ end
 -- Returns the maximum priority with value
 function BinaryHeap:findMax()
   return self.size ~= 0 and self.array[1][1] or nil
-end
-
--- Returns the (approximate) minimum priority with value
-function BinaryHeap:findMin()
-  return self.size ~= 0 and self.array[self.size][1] or nil
 end
 
 -- Removes and returns the maximum priority with value
@@ -165,7 +170,7 @@ function BinaryHeap:__tostring()
   local str = ''
   local level = -1
   local maxLevel = math.floor(math.log(self.size, 2))
-  
+
   -- Print each level
   for i = 1, self.size do
     -- Add a new line and spacing for each new level
@@ -194,6 +199,25 @@ end
 -- Retrieves a list of values by using the value (using the hash table)
 function BinaryHeap:getValuesByVal(hashIndices)
   return _.at(self.hash, table.unpack(hashIndices))
+end
+
+-- Rebalances the heap
+-- Note from Tom Schaul: Solution for rebalancing (below) is good; original solution not revealed
+function BinaryHeap:rebalance()
+  -- Sort underlying array
+  local sortArray, sortIndices = torch.sort(self.array, 1, true)
+  -- Retrieve values (indices) in descending priority order
+  sortIndices = self.array:index(1, sortIndices:select(2, 1)):select(2, 2)
+  -- Put values with corresponding priorities
+  sortArray[{{}, {2}}] = sortIndices
+  -- Convert values to hash table
+  self.hash = torch.totable(sortIndices)
+  -- Replace array
+  self.array = sortArray
+  -- Fix heap
+  for i = math.floor(self.size/2) - 1, 1, -1 do
+    self:downHeap(i)
+  end
 end
 
 return BinaryHeap
