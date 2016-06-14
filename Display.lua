@@ -10,7 +10,7 @@ local Display = classic.class('Display')
 function Display:_init(opt, state)
   self.opt = opt
   -- Activate display if using QT
-  self.zoom = opt.rlenv == 'rlenvs.Atari' and 1 or 4
+  self.zoom = opt.zoom
   self.window = qt and image.display({image=state, zoom=self.zoom})
 
   -- Set up recording

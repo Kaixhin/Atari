@@ -164,8 +164,11 @@ function Setup:parseOptions(arg)
   end
 
   -- Process environment options
-  if not opt.rlenv or opt.rlenv == '' then
+  if opt.rlenv == '' then
     opt.rlenv = opt.game ~= 'catch' and 'rlenvs.Atari' or 'rlenvs.Catch'
+  end
+  if opt.zoom == '' then
+    opt.zoom = opt.rlenv == 'rlenvs.Catch' and 4 or 1
   end
 
   return opt
