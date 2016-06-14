@@ -1,5 +1,7 @@
 # Atari ![Space Invader](http://www.rw-designer.com/cursor-view/74522.png)
 
+[![Join the chat at https://gitter.im/Kaixhin/Atari](https://badges.gitter.im/Kaixhin/Atari.svg)](https://gitter.im/Kaixhin/Atari?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+
 **Work In Progress:** Crossed out items have been partially implemented.
 
 ~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) with asynchronous[[12]](#references) modes. Or PERPALB(triple-D)RQN for short...
