@@ -62,30 +62,39 @@ function Experience:_init(capacity, opt, isValidation)
     local partitionDivision = math.floor(capacity/nPartitions)
 
     for n = partitionDivision, capacity, partitionDivision do
-      -- Set up power-law PDF and CDF
-      local distribution = {}
-      distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
-      local pdfSum = torch.sum(distribution.pdf)
-      distribution.pdf:div(pdfSum) -- Normalise PDF
-      local cdf = torch.cumsum(distribution.pdf)
+      if n >= opt.learnStart or n == capacity then -- Do not calculate distributions for before learnStart occurs
+        -- Set up power-law PDF and CDF
+        local distribution = {}
+        distribution.pdf = torch.linspace(1, n, n):pow(-opt.alpha)
+        local pdfSum = torch.sum(distribution.pdf)
+        distribution.pdf:div(pdfSum) -- Normalise PDF
+        local cdf = torch.cumsum(distribution.pdf)
 
-      -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
-      distribution.strataEnds = torch.LongTensor(opt.batchSize + 1)
-      distribution.strataEnds[1] = 0 -- First index is 0 (+1)
-      distribution.strataEnds[opt.batchSize + 1] = n -- Last index is n
-      -- Use linear search to find strata indices
-      local stratumEnd = 1/opt.batchSize
-      local index = 1
-      for s = 2, opt.batchSize do
-        while cdf[index] < stratumEnd do
-          index = index + 1
+        -- Set up strata for stratified sampling (transitions will have varying TD-error magnitudes |δ|)
+        distribution.strataEnds = torch.LongTensor(opt.batchSize + 1)
+        distribution.strataEnds[1] = 0 -- First index is 0 (+1)
+        distribution.strataEnds[opt.batchSize + 1] = n -- Last index is n
+        -- Use linear search to find strata indices
+        local stratumEnd = 1/opt.batchSize
+        local index = 1
+        for s = 2, opt.batchSize do
+          while cdf[index] < stratumEnd do
+            index = index + 1
+          end
+          distribution.strataEnds[s] = index -- Save index
+          stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
         end
-        distribution.strataEnds[s] = index -- Save index
-        stratumEnd = stratumEnd + 1/opt.batchSize -- Set condition for next stratum
+
+        -- Check that enough transitions are available (to prevent an infinite loop of infinite tuples)
+        if distribution.strataEnds[2] - distribution.strataEnds[1] <= opt.histLen then
+          log.error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+          error('Experience replay strata are too small - use a smaller alpha/larger memSize/greater learnStart')
+        end
+
+        -- Store distribution
+        self.distributions[partitionNum] = distribution
       end
 
-      -- Store distribution
-      self.distributions[partitionNum] = distribution
       partitionNum = partitionNum + 1
     end
   end
@@ -130,15 +139,12 @@ function Experience:store(reward, state, terminal, action)
   self.actions[self.index] = action
   self.invalid[self.index] = 0
 
+  -- Store with maximal priority
   if self.memPriority ~= 'none' then
-    -- Delete old state if it exists
-    if self.priorityQueue:contains(self.index) then
-      self.priorityQueue:remove(self.index)
-    end
-    
-    -- Store non-terminal states in queue with maximal priority
-    if not terminal then
-      local maxPriority = self.priorityQueue:findMax()
+    local maxPriority = terminal and 0 or self.priorityQueue:findMax() -- Terminal states cannot be sampled so assign priority 0
+    if self.isFull then
+      self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
+    else
       self.priorityQueue:insert(maxPriority, self.index)
     end
   end
@@ -223,8 +229,8 @@ function Experience:sample()
 
   elseif self.memPriority == 'rank' then
 
-    -- Find closest precomputed distribution by size (of queue, which doesn't contain terminal states)
-    local distIndex = math.floor(self.priorityQueue.size / self.capacity * 100)
+    -- Find closest precomputed distribution by size
+    local distIndex = math.floor(N / self.capacity * 100)
     local distribution = self.distributions[distIndex]
     N = distIndex * 100
 
@@ -259,7 +265,7 @@ function Experience:sample()
 
   elseif self.memPriority == 'proportional' then
 
-    -- TODO: Implement proportional prioritised experience replay
+    -- TODO: Proportional prioritised experience replay
 
   end
 

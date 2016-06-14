@@ -95,12 +95,6 @@ function BinaryHeap:updateByVal(valKey, priority, val)
   self:update(self.ephash[valKey], priority, val)
 end
 
--- Removes an existing value
-function BinaryHeap:remove(valKey)
-  self:update(self.ephash[valKey], 1e100, valKey)
-  self:pop()
-end
-
 -- Returns the maximum priority with value
 function BinaryHeap:findMax()
   return self.size ~= 0 and self.array[1][1] or nil
@@ -203,11 +197,6 @@ function BinaryHeap:__tostring()
   return str
 end
 
--- Checks if item has already been inserted
-function BinaryHeap:contains(valKey)
-  return self.ephash[valKey] ~= nil
-end
-
 -- Retrieves a value by using the value (using the PQ -> ER hash table)
 function BinaryHeap:getValueByVal(hashIndex)
   return self.pehash[hashIndex]
@@ -221,10 +210,8 @@ end
 -- Rebalances the heap
 -- Note from Tom Schaul: Solution for rebalancing (below) is good; original solution not revealed
 function BinaryHeap:rebalance()
-  local capacity = self.array:size(1)
-
   -- Sort underlying array
-  local sortArray, sortIndices = torch.sort(self.array:narrow(1, 1, self.size), 1, true)
+  local sortArray, sortIndices = torch.sort(self.array, 1, true)
   -- Retrieve values (indices) in descending priority order
   sortIndices = self.array:index(1, sortIndices:select(2, 1)):select(2, 2)
   -- Put values with corresponding priorities
@@ -232,15 +219,8 @@ function BinaryHeap:rebalance()
   -- Convert values to form hash tables
   self.pehash = torch.totable(sortIndices)
   self.ephash = _.invert(self.pehash)
-
   -- Replace array
-  if sortArray:size(1) < capacity then
-    -- Resize array if less than max capacity
-    self.array = torch.cat(sortArray, torch.Tensor(capacity - sortArray:size(1), 2), 1)
-  else
-    self.array = sortArray
-  end
-
+  self.array = sortArray
   -- Fix heap
   for i = math.floor(self.size/2) - 1, 1, -1 do
     self:downHeap(i)
