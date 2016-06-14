@@ -163,9 +163,10 @@ function Setup:parseOptions(arg)
     opt._id = opt.game
   end
 
-  -- Set ALE flag
-  -- TODO: Make environment more independent
-  opt.ale = opt.game ~= 'catch'
+  -- Process environment options
+  if not opt.rlenv or opt.rlenv == '' then
+    opt.rlenv = opt.game ~= 'catch' and 'rlenvs.Atari' or 'rlenvs.Catch'
+  end
 
   return opt
 end

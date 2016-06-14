@@ -5,8 +5,8 @@ local AsyncModel = classic.class('AsyncModel')
 
 function AsyncModel:_init(opt)
   -- Initialise Catch or Arcade Learning Environment
-  log.info('Setting up ' .. (opt.ale and 'Arcade Learning Environment' or 'Catch'))
-  local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
+  log.info('Setting up ' .. opt.rlenv)
+  local Env = require(opt.rlenv)
   self.env = Env(opt)
   local stateSpec = self.env:getStateSpec()
 
