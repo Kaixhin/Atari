@@ -17,8 +17,8 @@ function Master:_init(opt)
   self.globals = Singleton({step = 1}) -- Initial step
 
   -- Initialise Catch or Arcade Learning Environment
-  log.info('Setting up ' .. opt.rlenv)
-  local Env = require(opt.rlenv)
+  log.info('Setting up ' .. opt.rlEnv)
+  local Env = require(opt.rlEnv)
   self.env = Env(opt)
   local stateSpec = self.env:getStateSpec()
 

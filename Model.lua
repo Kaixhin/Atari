@@ -27,14 +27,14 @@ function Model:_init(opt)
   self.duel = opt.duel
   self.bootstraps = opt.bootstraps
   self.recurrent = opt.recurrent
-  self.rlenv = opt.rlenv
+  self.rlEnv = opt.rlEnv
   self.async = opt.async
   self.a3c = opt.async == 'A3C'
 end
 
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
 function Model:preprocess(observation)
-  if self.rlenv == 'rlenvs.Atari' then
+  if self.rlEnv == 'rlenvs.Atari' then
     -- Load frame
     local frame = observation:select(1, 1):float() -- Convert from CudaTensor if necessary
     -- Perform colour conversion
@@ -66,7 +66,7 @@ function Model:create(m)
     net:add(nn.Copy(nil, nil, true)) -- Needed when splitting batch x seq x input over seq for DRQN; better than nn.Contiguous
   end
   net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
-  if self.rlenv == 'rlenvs.Atari' then
+  if self.rlEnv == 'rlenvs.Atari' then
     net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
