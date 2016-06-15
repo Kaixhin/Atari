@@ -95,7 +95,7 @@ end
 
 
 function ValidationAgent:probabilisticAction(state)
-  local __, probability = unpack(self.policyNet_:forward(state))
+  local __, probability = table.unpack(self.policyNet_:forward(state))
   return torch.multinomial(probability, 1):squeeze()
 end
 

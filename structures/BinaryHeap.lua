@@ -9,14 +9,17 @@ local BinaryHeap = classic.class('BinaryHeap')
 -- Priority queue elements:
 -- array row 1 (priority/key): absolute TD-error |δ|
 -- array row 2 (value): experience replay index
--- hash key: experience replay index
--- hash value: priority queue array index
+-- ephash key: experience replay index
+-- ephash value: priority queue array index
+-- pehash key: priority queue array index
+-- pehash value: experience replay index
 --]]
 
 -- Creates a new Binary Heap with a length or existing tensor
 function BinaryHeap:_init(init)
-  -- Use values as indices in a hash table
-  self.hash = {}
+  -- Use values as indices in hash tables (ER -> PQ, PQ -> ER)
+  self.ephash = {}
+  self.pehash = {}
 
   if type(init) == 'number' then
     -- init is treated as the length of the heap
@@ -26,13 +29,19 @@ function BinaryHeap:_init(init)
     -- Otherwise assume tensor to build heap from
     self.array = init
     self.size = init:size(1)
-    -- Convert values to hash table
-    self.hash = torch.totable(self.array:select(2, 2))
+    -- Convert values to form hash tables
+    self.ephash = torch.totable(self.array:select(2, 2))
+    self.pehash = _.invert(self.ephash)
     -- Rebalance
     for i = math.floor(self.size/2) - 1, 1, -1 do
       self:downHeap(i)
     end
   end
+end
+
+-- Checks if heap is full
+function BinaryHeap:isFull()
+  return self.size == self.array:size(1)
 end
 
 --[[
@@ -45,7 +54,7 @@ end
 -- Inserts a new value
 function BinaryHeap:insert(priority, val)
   -- Refuse to add values if no space left
-  if self.size == self.array:size(1) then
+  if self:isFull() then
     print('Error: no space left in heap to add value ' .. val .. ' with priority ' .. priority)
     return
   end
@@ -54,8 +63,9 @@ function BinaryHeap:insert(priority, val)
   self.size = self.size + 1
   self.array[self.size][1] = priority
   self.array[self.size][2] = val
-  -- Update hash table
-  self.hash[val] = self.size
+  -- Update hash tables
+  self.ephash[val] = self.size
+  self.pehash[self.size] = val
 
   -- Rebalance
   self:upHeap(self.size)
@@ -71,17 +81,18 @@ function BinaryHeap:update(i, priority, val)
   -- Replace value
   self.array[i][1] = priority
   self.array[i][2] = val
-  -- Update hash table
-  self.hash[val] = i
+  -- Update hash tables
+  self.ephash[val] = i
+  self.pehash[i] = val
 
   -- Rebalance
   self:downHeap(i)
   self:upHeap(i)
 end
 
--- Updates a value by using the value (using the hash table)
+-- Updates a value by using the value (using the ER -> PQ hash table)
 function BinaryHeap:updateByVal(valKey, priority, val)
-  self:update(self.hash[valKey], priority, val)
+  self:update(self.ephash[valKey], priority, val)
 end
 
 -- Returns the maximum priority with value
@@ -102,8 +113,8 @@ function BinaryHeap:pop()
   -- Move the last value (not necessarily the smallest) to the root
   self.array[1] = self.array[self.size]
   self.size = self.size - 1
-  -- Update hash table
-  self.hash[self.array[1][2]] = 1
+  -- Update hash tables
+  self.ephash[self.array[1][2]], self.pehash[1] = 1, self.array[1][2]
 
   -- Rebalance
   self:downHeap(1)
@@ -120,8 +131,8 @@ function BinaryHeap:upHeap(i)
     -- If parent is smaller than child then swap
     if self.array[p][1] < self.array[i][1] then
       self.array[i], self.array[p] = self.array[p]:clone(), self.array[i]:clone()
-      -- Update hash table
-      self.hash[self.array[i][2]], self.hash[self.array[p][2]] = i, p
+      -- Update hash tables
+      self.ephash[self.array[i][2]], self.ephash[self.array[p][2]], self.pehash[i], self.pehash[p] = i, p, self.array[i][2], self.array[p][2]
 
       -- Continue rebalancing
       self:upHeap(p)
@@ -148,8 +159,8 @@ function BinaryHeap:downHeap(i)
   -- Continue rebalancing if necessary
   if greatest ~= i then
     self.array[i], self.array[greatest] = self.array[greatest]:clone(), self.array[i]:clone()
-    -- Update hash table
-    self.hash[self.array[i][2]], self.hash[self.array[greatest][2]] = i, greatest
+    -- Update hash tables
+    self.ephash[self.array[i][2]], self.ephash[self.array[greatest][2]], self.pehash[i], self.pehash[greatest] = i, greatest, self.array[i][2], self.array[greatest][2]
 
     self:downHeap(greatest)
   end
@@ -186,19 +197,14 @@ function BinaryHeap:__tostring()
   return str
 end
 
--- Index using hash table
-function BinaryHeap:__index(key)
-  return self.array[self.hash[key]]
-end
-
--- Retrieves a value by using the value (using the hash table)
+-- Retrieves a value by using the value (using the PQ -> ER hash table)
 function BinaryHeap:getValueByVal(hashIndex)
-  return self.hash[hashIndex]
+  return self.pehash[hashIndex]
 end
 
--- Retrieves a list of values by using the value (using the hash table)
+-- Retrieves a list of values by using the value (using the PQ -> ER hash table)
 function BinaryHeap:getValuesByVal(hashIndices)
-  return _.at(self.hash, table.unpack(hashIndices))
+  return _.at(self.pehash, table.unpack(hashIndices))
 end
 
 -- Rebalances the heap
@@ -210,8 +216,9 @@ function BinaryHeap:rebalance()
   sortIndices = self.array:index(1, sortIndices:select(2, 1)):select(2, 2)
   -- Put values with corresponding priorities
   sortArray[{{}, {2}}] = sortIndices
-  -- Convert values to hash table
-  self.hash = torch.totable(sortIndices)
+  -- Convert values to form hash tables
+  self.pehash = torch.totable(sortIndices)
+  self.ephash = _.invert(self.pehash)
   -- Replace array
   self.array = sortArray
   -- Fix heap

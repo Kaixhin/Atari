@@ -24,7 +24,7 @@ end
 function Validation:validate()
   log.info('Validating')
   -- Set environment and agent to evaluation mode
-  if self.opt.ale then self.env:evaluate() end
+  self.env:evaluate()
   self.agent:evaluate()
 
   -- Start new game
@@ -75,7 +75,7 @@ function Validation:validate()
   local normScore = self.evaluator:normaliseScore(valTotalScore)
   if normScore then
     log.info('Normalised Score: ' .. normScore)
-    self.agent.normScores[#agent.normScores + 1] = normScore
+    self.agent.normScores[#self.agent.normScores + 1] = normScore
   end
 
   -- Visualise convolutional filters
@@ -94,13 +94,17 @@ function Validation:validate()
     log.info('Saving weights')
     self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights.t7'))
   end
+  
+  -- Set environment and agent to training mode
+  self.env:training()
+  self.agent:training()
 end
 
 
 function Validation:evaluate()
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
-  if self.opt.ale then self.env:evaluate() end
+  self.env:evaluate()
   self.agent:evaluate()
 
   local reward, state, terminal = 0, self.env:start(), false

@@ -1,16 +1,24 @@
 # Atari ![Space Invader](http://www.rw-designer.com/cursor-view/74522.png)
-
-[![Join the chat at https://gitter.im/Kaixhin/Atari](https://badges.gitter.im/Kaixhin/Atari.svg)](https://gitter.im/Kaixhin/Atari?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
+[![Build Status](https://img.shields.io/travis/Kaixhin/Atari.svg)](https://travis-ci.org/Kaixhin/Atari)
+[![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/Kaixhin/Atari?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 **Work In Progress:** Crossed out items have been partially implemented.
 
-~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) with asynchronous[[12]](#references) modes. Or PERPALB(triple-D)RQN for short...
+Prioritised experience replay [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references). Or PERPALB(triple-D)RQN for short...
 
-Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[9]](#references), optionally using guided [[10]](#references) or "deconvnet" [[11]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
+Additional asynchronous agents [[9]](#references):
 
-To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that `main.lua` uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
+- One-step Sarsa
+- One-step Q-learning
+- N-step Q-learning
+- Advantage actor-critic
 
-In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that this includes a copy the experience replay memory, so will total ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
+Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[10]](#references), optionally using guided [[11]](#references) or "deconvnet" [[12]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
+
+To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that this code uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
+
+In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that for non-asynchronous agents the experience replay memory will be included, totalling ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 
 In evaluation mode you can create recordings with `-record true` (requires FFmpeg); this does not require using `qlua`. Recordings will be stored in the videos directory.
 
@@ -54,7 +62,7 @@ luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/r
 [6] [Deep Recurrent Q-Learning for Partially Observable MDPs](http://arxiv.org/abs/1507.06527)  
 [7] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
 [8] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  
-[9] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
-[10] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
-[11] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  
-[12] [Asynchronous Methods for Deep Reinforcement Learning](http://arxiv.org/abs/1602.01783)  
+[9] [Asynchronous Methods for Deep Reinforcement Learning](http://arxiv.org/abs/1602.01783)  
+[10] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
+[11] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
+[12] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  

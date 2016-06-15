@@ -1,39 +1,38 @@
-local Display = require 'Display'
+local classic = require 'classic'
 local signal = require 'posix.signal'
 local Singleton = require 'structures/Singleton'
 local Agent = require 'Agent'
-local classic = require 'classic'
+local Display = require 'Display'
 local Validation = require 'Validation'
 
-local ExperienceReplay = classic.class('ExperienceReplay')
+local Master = classic.class('Master')
 
-function ExperienceReplay:_init(opt)
+-- Sets up environment and agent
+function Master:_init(opt)
   self.opt = opt
 
   -- Set up singleton global object for transferring step
   self.globals = Singleton({step = 1}) -- Initial step
 
-  ----- Environment + Agent Setup -----
-
   -- Initialise Catch or Arcade Learning Environment
   log.info('Setting up ' .. (opt.ale and 'Arcade Learning Environment' or 'Catch'))
-  if opt.ale then
-    local Atari = require 'rlenvs.Atari'
-    self.env = Atari(opt)
-    local stateSpec = self.env:getStateSpec()
+  local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
+  self.env = Env(opt)
+  local stateSpec = self.env:getStateSpec()
 
-    -- Provide original channels, height and width for resizing from
-    opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
-  else
-    local Catch = require 'rlenvs.Catch'
-    self.env = Catch()
-    local stateSpec = self.env:getStateSpec()
-    
-    -- Provide original channels, height and width for resizing from
-    opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
-
-    -- Adjust height and width
+  -- Provide original channels, height and width for resizing from
+  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
+  -- Extra safety check for Catch
+  if not opt.ale then -- TODO: Remove eventually
     opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
+  end
+  -- Set up fake training mode (if needed)
+  if not self.env.training then
+    self.env.training = function() end
+  end
+  -- Set up fake evaluation mode (if needed)
+  if not self.env.evaluate then
+    self.env.evaluate = function() end
   end
 
   -- Create DQN agent
@@ -69,16 +68,17 @@ function ExperienceReplay:_init(opt)
   classic.strict(self)
 end
 
+-- Trains agent
+function Master:train()
+  log.info('Training mode')
 
-function ExperienceReplay:train()
+  -- Catch CTRL-C to save
   self:catchSigInt()
 
   local reward, state, terminal = 0, self.env:start(), false
 
-  log.info('Training mode')
-
   -- Set environment and agent to training mode
-  if self.opt.ale then self.env:training() end
+  self.env:training()
   self.agent:training()
 
   -- Training variables (reported in verbose mode)
@@ -130,14 +130,10 @@ function ExperienceReplay:train()
     end
 
     -- Validate
-    if step >= self.opt.learnStart and step % self.opt.valFreq == 0 then
-      self.validation:validate()
+    if not self.opt.noValidation and step >= self.opt.learnStart and step % self.opt.valFreq == 0 then
+      self.validation:validate() -- Sets env and agent to evaluation mode and then back to training mode
 
       log.info('Resuming training')
-      -- Set environment and agent to training mode
-      if self.opt.ale then self.env:training() end
-      self.agent:training()
-
       -- Start new game (as previous one was interrupted)
       reward, state, terminal = 0, self.env:start(), false
       episodeScore = reward
@@ -147,14 +143,12 @@ function ExperienceReplay:train()
   log.info('Finished training')
 end
 
-
-function ExperienceReplay:evaluate()
-  self.validation:evaluate()
+function Master:evaluate()
+  self.validation:evaluate() -- Sets env and agent to evaluation mode
 end
 
-
--- Set up SIGINT (Ctrl+C) handler to save network before quitting
-function ExperienceReplay:catchSigInt()
+-- Sets up SIGINT (Ctrl+C) handler to save network before quitting
+function Master:catchSigInt()
   signal.signal(signal.SIGINT, function(signum)
     log.warn('SIGINT received')
     log.info('Save agent (y/n)?')
@@ -167,5 +161,4 @@ function ExperienceReplay:catchSigInt()
   end)
 end
 
-
-return ExperienceReplay
+return Master

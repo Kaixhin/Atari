@@ -32,7 +32,7 @@ function NStepQAgent:learn(steps, from)
   log.info('NStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
 
-  self.states:resize(self.batchSize, unpack(state:size():totable()))
+  self.states:resize(self.batchSize, table.unpack(state:size():totable()))
   self.tic = torch.tic()
   repeat
     self.theta_:copy(self.theta)
