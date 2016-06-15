@@ -12,6 +12,10 @@ function AsyncModel:_init(opt)
 
   -- Provide original channels, height and width for resizing from
   opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
+  -- Extra safety check for Catch
+  if not opt.ale then -- TODO: Remove eventually
+    opt.height, opt.width = stateSpec[2][2], stateSpec[2][3]
+  end
   -- Set up fake training mode (if needed)
   if not self.env.training then
     self.env.training = function() end

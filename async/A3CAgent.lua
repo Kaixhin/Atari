@@ -39,7 +39,7 @@ function A3CAgent:learn(steps, from)
   log.info('A3CAgent starting | steps=%d', steps)
   local reward, terminal, state = self:start()
 
-  self.states:resize(self.batchSize, unpack(state:size():totable()))
+  self.states:resize(self.batchSize, table.unpack(state:size():totable()))
 
   self.tic = torch.tic()
   repeat
@@ -49,7 +49,7 @@ function A3CAgent:learn(steps, from)
       self.batchIdx = self.batchIdx + 1
       self.states[self.batchIdx]:copy(state)
 
-      local V, probability = unpack(self.policyNet_:forward(state))
+      local V, probability = table.unpack(self.policyNet_:forward(state))
       local action = torch.multinomial(probability, 1):squeeze()
 
       self.actions[self.batchIdx] = action
@@ -67,7 +67,7 @@ function A3CAgent:learn(steps, from)
     end
 
     self:applyGradients(self.policyNet_, self.dTheta_, self.theta)
-  until self.step == steps
+  until self.step >= steps
 
   log.info('A3CAgent ended learning steps=%d', steps)
 end
@@ -83,7 +83,7 @@ function A3CAgent:accumulateGradients(terminal, state)
     R = self.rewards[i] + self.gamma * R
     
     local action = self.actions[i]
-    local V, probability = unpack(self.policyNet_:forward(self.states[i]))
+    local V, probability = table.unpack(self.policyNet_:forward(self.states[i]))
     probability:add(1e-100) -- could contain 0 -> log(0)= -inf -> theta = nans
 
     self.vTarget[1] = -0.5 * (R - V)

@@ -12,14 +12,10 @@ local signal = require 'posix.signal'
 local tds = require 'tds'
 threads.Threads.serialization('threads.sharedserialize')
 
+local FINISHED = -99999999
+
 local AsyncMaster = classic.class('AsyncMaster')
 
-local methods = {
-  OneStepQ = 'OneStepQAgent',
-  Sarsa = 'SarsaAgent',
-  NStepQ = 'NStepQAgent',
-  A3C = 'A3CAgent'
-}
 
 local function checkNotNan(t)
   local sum = t:sum()
@@ -59,7 +55,7 @@ local function threadedFormatter(thread)
     local msg = nil
 
     if #{...} > 1 then
-        msg = string.format(({...})[1], unpack(fn.rest({...})))
+        msg = string.format(({...})[1], table.unpack(fn.rest({...})))
     else
         msg = pprint.pretty_string(({...})[1])
     end
@@ -72,6 +68,14 @@ local function setupLogging(opt, thread)
   local _id = opt._id
   local threadName = thread
   return function()
+    unpack = table.unpack -- TODO: Remove global unpack from dependencies
+    -- Create log10 for Lua 5.2
+    if not math.log10 then
+      math.log10 = function(x)
+        return math.log(x, 10)
+      end
+    end
+
     require 'logroll'
     local thread = threadName or __threadid
     if type(thread) == 'number' then
@@ -149,10 +153,10 @@ function AsyncMaster:_init(opt)
     torchSetup(opt),
     function()
       local threads1 = require 'threads'
+      local AsyncAgent = require 'async/AsyncAgent'
       local mutex1 = threads1.Mutex(mutexId)
       mutex1:lock()
-      local Agent = require('async/'..methods[opt.async])
-      agent = Agent(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
+      agent = AsyncAgent.build(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
       mutex1:unlock()
     end
   )
@@ -219,7 +223,7 @@ function AsyncMaster:start()
   end
 
   self.pool:synchronize()
-  self.atomic:set(-1)
+  self.atomic:set(FINISHED)
 
   self.controlPool:synchronize()
 

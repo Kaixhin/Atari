@@ -141,6 +141,7 @@ function Experience:store(reward, state, terminal, action)
 
   -- Store with maximal priority
   if self.memPriority ~= 'none' then
+    -- TODO: Correct PER by not storing terminal states at all
     local maxPriority = terminal and 0 or self.priorityQueue:findMax() -- Terminal states cannot be sampled so assign priority 0
     if self.isFull then
       self.priorityQueue:updateByVal(self.index, maxPriority, self.index)

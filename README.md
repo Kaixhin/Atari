@@ -1,6 +1,7 @@
 # Atari ![Space Invader](http://www.rw-designer.com/cursor-view/74522.png)
 [![Build Status](https://img.shields.io/travis/Kaixhin/Atari.svg)](https://travis-ci.org/Kaixhin/Atari)
 [![MIT License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/Kaixhin/Atari?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge&utm_content=badge)
 
 **Work In Progress:** Crossed out items have been partially implemented.
 

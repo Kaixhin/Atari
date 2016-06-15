@@ -95,7 +95,7 @@ end
 
 
 function ValidationAgent:probabilisticAction(state)
-  local __, probability = unpack(self.policyNet_:forward(state))
+  local __, probability = table.unpack(self.policyNet_:forward(state))
   return torch.multinomial(probability, 1):squeeze()
 end
 
@@ -306,6 +306,49 @@ function ValidationAgent:plotValidation()
     gnuplot.plotflush()
     torch.save(paths.concat('experiments', self._id, 'normScores.t7'), normScores)
   end
+end
+
+
+function ValidationAgent:evaluate(display)
+  self.theta_:copy(self.theta)
+
+  log.info('Evaluation mode')
+  -- Set environment and agent to evaluation mode
+  if self.ale then self.env:evaluate() end
+
+  local reward, observation, terminal = 0, self.env:start(), false
+
+  -- Report episode score
+  local episodeScore = reward
+
+  -- Play one game (episode)
+  local step = 1
+  while not terminal do
+    observation = self.model:preprocess(observation)
+    if terminal then
+      self.stateBuffer:pushReset(observation)
+    else
+      self.stateBuffer:push(observation)
+    end
+    -- Observe and choose next action (index)
+    local state = self.stateBuffer:readAll()
+    local action = self:selectAction(state)
+
+    -- Act on environment
+    if not terminal then
+      reward, observation, terminal = self.env:step(action - self.actionOffset)
+    else 
+      reward, observation, terminal = 0, self.env:start(), false
+    end
+    episodeScore = episodeScore + reward
+
+    display:recordAndDisplay(self, observation, step)
+    -- Increment evaluation step counter
+    step = step + 1
+  end
+  log.info('Final Score: ' .. episodeScore)
+
+  display:createVideo()
 end
 
 
