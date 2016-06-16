@@ -10,7 +10,7 @@ local Display = classic.class('Display')
 function Display:_init(opt, state)
   self.opt = opt
   -- Activate display if using QT
-  self.zoom = opt.ale and 1 or 4
+  self.zoom = opt.zoom
   self.window = qt and image.display({image=state, zoom=self.zoom})
 
   -- Set up recording
@@ -52,7 +52,7 @@ end
 -- Computes saliency map for display
 function Display:createSaliencyMap(state, agent)
   local screen -- Clone of state that can be adjusted
-  
+
   -- Convert Catch screen to RGB
   if self.opt.game == 'catch' then
     screen = torch.repeatTensor(state, 3, 1, 1)

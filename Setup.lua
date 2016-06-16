@@ -143,6 +143,9 @@ function Setup:parseOptions(arg)
   cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
   cmd:option('-saliency', 'none', 'Display saliency maps (requires QT): none|normal|guided|deconvnet')
   cmd:option('-record', 'false', 'Record screen (only in eval mode)')
+  -- Environment options
+  cmd:option('-env', '', 'Environment class (Class name to be loaded)')
+  cmd:option('-zoom', '', 'Environment zoom (requires QT)')
   local opt = cmd:parse(arg)
 
   -- Process boolean options (Torch fails to accept false on the command line)
@@ -164,9 +167,13 @@ function Setup:parseOptions(arg)
     opt._id = opt.game
   end
 
-  -- Set ALE flag
-  -- TODO: Make environment more independent
-  opt.ale = opt.game ~= 'catch'
+  -- Process environment options
+  if opt.env == '' then
+    opt.env = opt.game ~= 'catch' and 'rlenvs.Atari' or 'rlenvs.Catch'
+  end
+  if opt.zoom == '' then
+    opt.zoom = opt.env == 'rlenvs.Catch' and 4 or 1
+  end
 
   return opt
 end
