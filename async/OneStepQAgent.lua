@@ -19,7 +19,7 @@ function OneStepQAgent:learn(steps, from)
   self.step = from or 0
   self.policyNet:training()
   self.stateBuffer:clear()
-  if self.ale then self.env:training() end
+  self.env:training()
 
   log.info('%s starting | steps=%d | ε=%.2f -> %.2f', self.agentName, steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
@@ -69,8 +69,8 @@ end
 function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
   local Y = reward
   if self.lstm then -- LSTM targetNet needs to see all states as well
-    self.targetNet:forward(state) 
-  end 
+    self.targetNet:forward(state)
+  end
   if not terminal then
       local QPrimes = self.targetNet:forward(state_):squeeze()
       local APrimeMax = QPrimes:max(1):squeeze()

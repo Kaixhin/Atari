@@ -36,9 +36,7 @@ function ValidationAgent:_init(opt, theta, atomic)
   self.m = actionSpec[3][2] - actionSpec[3][1] + 1
   self.actionOffset = 1 - actionSpec[3][1]
 
-  self.ale = opt.ale
-
-  if self.ale then self.env:training() end
+  self.env:training()
 
   self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
   self.progFreq = opt.progFreq
@@ -95,7 +93,7 @@ end
 
 
 function ValidationAgent:probabilisticAction(state)
-  local __, probability = unpack(self.policyNet_:forward(state))
+  local __, probability = table.unpack(self.policyNet_:forward(state))
   return torch.multinomial(probability, 1):squeeze()
 end
 
@@ -105,7 +103,7 @@ function ValidationAgent:validate()
   if self.lstm then self.lstm:forget() end
 
   self.stateBuffer:clear()
-  if self.ale then self.env:evaluate() end
+  self.env:evaluate()
   self.policyNet_:evaluate()
 
   local valStepStrFormat = '%0' .. (math.floor(math.log10(self.valSteps)) + 1) .. 'd'
@@ -205,7 +203,7 @@ function ValidationAgent:weightsReport()
   local weightLayers = self.policyNet_:findModules('nn.SpatialConvolution')
   local fcLayers = self.policyNet_:findModules('nn.Linear')
   weightLayers = _.append(weightLayers, fcLayers)
-  
+
   -- Array of norms and maxima
   local wNorms = {}
   local wMaxima = {}
@@ -353,4 +351,3 @@ end
 
 
 return ValidationAgent
-

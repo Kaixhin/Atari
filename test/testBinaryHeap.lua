@@ -32,9 +32,9 @@ function Test:BinaryHeap_Test()
 end
 
 
-tester:add(Test)
 
 if standalone then
+  tester:add(Test)
   tester:run()
 end
 

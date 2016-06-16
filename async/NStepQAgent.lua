@@ -17,7 +17,7 @@ function NStepQAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic
   self.actions = torch.ByteTensor(self.batchSize)
   self.states = torch.Tensor(0)
 
-  if self.ale then self.env:training() end
+  self.env:training()
 
   self.alwaysComputeGreedyQ = false
 
@@ -32,7 +32,7 @@ function NStepQAgent:learn(steps, from)
   log.info('NStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
 
-  self.states:resize(self.batchSize, unpack(state:size():totable()))
+  self.states:resize(self.batchSize, table.unpack(state:size():totable()))
   self.tic = torch.tic()
   repeat
     self.theta_:copy(self.theta)
@@ -52,7 +52,7 @@ function NStepQAgent:learn(steps, from)
 
     self:accumulateGradients(terminal, state)
 
-    if terminal then 
+    if terminal then
       reward, terminal, state = self:start()
     end
 
@@ -80,7 +80,7 @@ function NStepQAgent:accumulateGradients(terminal, state)
     R = self.rewards[i] + self.gamma * R
     local Q_i = self.policyNet_:forward(self.states[i]):squeeze()
     local tdErr = R - Q_i[self.actions[i]]
-    self:accumulateGradientTdErr(self.states[i], self.actions[i], tdErr, self.policyNet_) 
+    self:accumulateGradientTdErr(self.states[i], self.actions[i], tdErr, self.policyNet_)
   end
 end
 

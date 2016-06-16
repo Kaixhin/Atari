@@ -55,7 +55,7 @@ local function threadedFormatter(thread)
     local msg = nil
 
     if #{...} > 1 then
-        msg = string.format(({...})[1], unpack(fn.rest({...})))
+        msg = string.format(({...})[1], table.unpack(fn.rest({...})))
     else
         msg = pprint.pretty_string(({...})[1])
     end
@@ -68,6 +68,14 @@ local function setupLogging(opt, thread)
   local _id = opt._id
   local threadName = thread
   return function()
+    unpack = table.unpack -- TODO: Remove global unpack from dependencies
+    -- Create log10 for Lua 5.2
+    if not math.log10 then
+      math.log10 = function(x)
+        return math.log(x, 10)
+      end
+    end
+
     require 'logroll'
     local thread = threadName or __threadid
     if type(thread) == 'number' then
@@ -118,7 +126,7 @@ function AsyncMaster:_init(opt)
     local signal = require 'posix.signal'
     local ValidationAgent = require 'async/ValidationAgent'
     validAgent = ValidationAgent(opt, theta, atomic)
-    if not opt.novalidation then
+    if not opt.noValidation then
       signal.signal(signal.SIGINT, function(signum)
         log.warn('SIGINT received')
         log.info('Saving agent')
@@ -200,7 +208,7 @@ function AsyncMaster:start()
     end
   end
 
-  if not self.opt.novalidation then
+  if not self.opt.noValidation then
     self.controlPool:addjob(validator)
   end
 

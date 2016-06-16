@@ -104,6 +104,9 @@ function Experience:_init(capacity, opt, isValidation)
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
   self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
+  if self.memPriority ~= 'none' then
+    self.priorityQueue:insert(1, 1) -- First priority = 1
+  end
 
   -- Calculate β growth factor (linearly annealed till end of training)
   self.betaGrad = (1 - opt.betaZero)/(opt.steps - opt.learnStart)
@@ -121,15 +124,6 @@ end
 -- Stores experience tuple parts (including pre-emptive action)
 function Experience:store(reward, state, terminal, action)
   self.rewards[self.index] = reward
-  -- Store with maximal priority
-  if self.memPriority ~= 'none' then
-    local maxPriority = self.priorityQueue:findMax() or 1 -- First priority = 1
-    if self.isFull then
-      self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
-    else
-      self.priorityQueue:insert(maxPriority, self.index)
-    end
-  end
 
   -- Increment index and size
   self.index = self.index + 1
@@ -144,6 +138,17 @@ function Experience:store(reward, state, terminal, action)
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
   self.invalid[self.index] = 0
+
+  -- Store with maximal priority
+  if self.memPriority ~= 'none' then
+    -- TODO: Correct PER by not storing terminal states at all
+    local maxPriority = terminal and 0 or self.priorityQueue:findMax() -- Terminal states cannot be sampled so assign priority 0
+    if self.isFull then
+      self.priorityQueue:updateByVal(self.index, maxPriority, self.index)
+    else
+      self.priorityQueue:insert(maxPriority, self.index)
+    end
+  end
 end
 
 -- Sets current state as invalid (utilised when switching to evaluation mode)
@@ -243,7 +248,7 @@ function Experience:sample()
         rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1])
         -- Retrieve actual transition index
         index = self.priorityQueue:getValueByVal(rankIndices[n])
-        isValid = self:validateTransition(index)
+        isValid = self:validateTransition(index) -- The last stratum might be full of terminal states, leading to many checks
       end
 
       -- Store actual transition index
