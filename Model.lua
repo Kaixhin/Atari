@@ -33,24 +33,25 @@ function Model:_init(opt)
   self.env = opt.env
   self.async = opt.async
   self.a3c = opt.async == 'A3C'
+  
+  self.resize = opt.width ~= opt.origWidth or opt.height ~= opt.origHeight
 end
 
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
 function Model:preprocess(observation)
-  if self.env == 'rlenvs.Atari' then
-    -- Load frame
-    local frame = observation:select(1, 1):float() -- Convert from CudaTensor if necessary
-    -- Perform colour conversion
-    if self.colorSpace ~= 'rgb' then
-      frame = image['rgb2' .. self.colorSpace](frame)
-    end
-
-    -- Resize 210x160 screen
-    return image.scale(frame, self.width, self.height)
-  else
-    -- Return normal Catch screen
-    return observation:clone()
+  local frame = observation:type(self.tensorType) -- Convert from CudaTensor if necessary
+  
+  -- Perform colour conversion if needed
+  if frame:size(1) == 3 and self.colorSpace ~= 'rgb' then
+    frame = image['rgb2' .. self.colorSpace](frame)
   end
+  
+  -- Resize screen if needed
+  if self.resize then
+    frame = image.scale(frame, self.width, self.height)
+  end
+
+  return frame
 end
 
 -- Creates a DQN/AC model body
