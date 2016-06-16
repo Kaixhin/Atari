@@ -87,6 +87,7 @@ function Setup:parseOptions(arg)
   cmd:option('-width', 84, 'Resize screen width')
   cmd:option('-colorSpace', 'y', 'Colour space conversion (screen is RGB): rgb|y|lab|yuv|hsl|hsv|nrgb')
   -- Model options
+  cmd:option('-modelBody', '', 'Path to Torch nn model to be used as DQN "body"')
   cmd:option('-hiddenSize', 512, 'Number of units in the hidden fully connected layer')
   cmd:option('-histLen', 4, 'Number of consecutive states processed/used for backpropagation-through-time') -- DQN standard is 4, DRQN is 10
   cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')

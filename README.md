@@ -18,6 +18,10 @@ Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The m
 
 To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that this code uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
 
+You can use a custom (visual) environment using `-env`, as long as the class provided respects the `rlenvs` [API](https://github.com/Kaixhin/rlenvs#api). If it has separate behaviour during training and testing it should also implement `training` and `evaluate` methods - otherwise these will be added as empty methods during runtime.
+
+You can also use a custom model (body) with `-modelBody`, which replaces the usual DQN convolutional layers with a saved Torch model (which may include pretrained weights). The model will receive the previous frames in a separate dimension to the colour channels, and must reshape them manually if needed; this allows the use of spatiotemporal convolutions. The DQN "heads" will then be constructed as normal, with `-hiddenSize` used to change the size of the fully connected layer if needed.
+
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that for non-asynchronous agents the experience replay memory will be included, totalling ~7GB. The main script also automatically saves the weights of the best performing DQN (according to the average validation score).
 
 In evaluation mode you can create recordings with `-record true` (requires FFmpeg); this does not require using `qlua`. Recordings will be stored in the videos directory.
