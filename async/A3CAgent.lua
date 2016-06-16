@@ -25,7 +25,7 @@ function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, s
   self.states = torch.Tensor(0)
   self.beta = 0.01
 
-  if self.ale then self.env:training() end
+  self.env:training()
 
   classic.strict(self)
 end
@@ -62,7 +62,7 @@ function A3CAgent:learn(steps, from)
 
     self:accumulateGradients(terminal, state)
 
-    if terminal then 
+    if terminal then
       reward, terminal, state = self:start()
     end
 
@@ -81,7 +81,7 @@ function A3CAgent:accumulateGradients(terminal, state)
 
   for i=self.batchIdx,1,-1 do
     R = self.rewards[i] + self.gamma * R
-    
+
     local action = self.actions[i]
     local V, probability = table.unpack(self.policyNet_:forward(self.states[i]))
     probability:add(1e-100) -- could contain 0 -> log(0)= -inf -> theta = nans
@@ -110,4 +110,3 @@ function A3CAgent:progress(steps)
 end
 
 return A3CAgent
-

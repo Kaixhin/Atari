@@ -15,8 +15,8 @@ function Master:_init(opt)
   self.globals = Singleton({step = 1}) -- Initial step
 
   -- Initialise Catch or Arcade Learning Environment
-  log.info('Setting up ' .. (opt.ale and 'Arcade Learning Environment' or 'Catch'))
-  local Env = opt.ale and require 'rlenvs.Atari' or require 'rlenvs.Catch'
+  log.info('Setting up ' .. opt.env)
+  local Env = require(opt.env)
   self.env = Env(opt)
   local stateSpec = self.env:getStateSpec()
 
@@ -90,7 +90,7 @@ function Master:train()
   local stepStrFormat = '%0' .. (math.floor(math.log10(self.opt.steps)) + 1) .. 'd' -- String format for padding step with zeros
   for step = initStep, self.opt.steps do
     self.globals.step = step -- Pass step number to globals for use in other modules
-    
+
     -- Observe results of previous transition (r, s', terminal') and choose next action (index)
     local action = self.agent:observe(reward, state, terminal) -- As results received, learn in training mode
     if not terminal then
