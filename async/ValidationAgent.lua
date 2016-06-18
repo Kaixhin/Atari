@@ -32,13 +32,12 @@ function ValidationAgent:_init(opt, theta, atomic)
   self.valScores = {} -- Validation scores (passed from main script)
   self.normScores = {} -- Normalised validation scores (passed from main script)
 
-  local actionSpec = self.env:getActionSpec()
-  self.m = actionSpec[3][2] - actionSpec[3][1] + 1
-  self.actionOffset = 1 - actionSpec[3][1]
+  self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
+  self.actionOffset = 1 - opt.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
 
   self.env:training()
 
-  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, opt.stateSpec[2])
   self.progFreq = opt.progFreq
   self.Tensor = opt.Tensor
 
@@ -312,7 +311,7 @@ function ValidationAgent:evaluate(display)
 
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
-  if self.ale then self.env:evaluate() end
+  self.env:evaluate()
 
   local reward, observation, terminal = 0, self.env:start(), false
 

@@ -97,7 +97,7 @@ function Setup:parseOptions(arg)
   --cmd:option('-bootstrapMask', 1, 'Independent probability of masking a transition for each bootstrap head ~ Ber(bootstrapMask) (1 to disable)')
   cmd:option('-recurrent', 'false', 'Use recurrent connections')
   -- Experience replay options
-  cmd:option('-discretiseMem', 'true', 'Discretise states to ints in [0, 255] for storage')
+  cmd:option('-discretiseMem', 'true', 'Discretise states to integers ∈ [0, 255] for storage')
   cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
   cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
   cmd:option('-memNSamples', 1, 'Number of times to sample per learning step')

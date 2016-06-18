@@ -33,10 +33,7 @@ function AsyncModel:getEnvAndModel()
 end
 
 function AsyncModel:createNet()
-  local actionSpec = self.env:getActionSpec()
-  local m = actionSpec[3][2] - actionSpec[3][1] + 1 -- Number of discrete actions
-  return self.model:create(m)
+  return self.model:create()
 end
-
 
 return AsyncModel

@@ -1,4 +1,7 @@
-require 'socket'
+local classic = require 'classic'
+local threads = require 'threads'
+local tds = require 'tds'
+local signal = require 'posix.signal'
 local AsyncModel = require 'async/AsyncModel'
 local AsyncAgent = require 'async/AsyncAgent'
 local QAgent = require 'async/QAgent'
@@ -6,10 +9,7 @@ local OneStepQAgent = require 'async/OneStepQAgent'
 local NStepQAgent = require 'async/NStepQAgent'
 local A3CAgent = require 'async/A3CAgent'
 local ValidationAgent = require 'async/ValidationAgent'
-local classic = require 'classic'
-local threads = require 'threads'
-local signal = require 'posix.signal'
-local tds = require 'tds'
+require 'socket'
 threads.Threads.serialization('threads.sharedserialize')
 
 local FINISHED = -99999999
@@ -37,13 +37,11 @@ local function torchSetup(opt)
     require 'modules/GradientRescale'
     -- Use enhanced garbage collector
     torch.setheaptracking(true)
-    -- Set number of BLAS threads
-    -- must be 1 for each thread
+    -- Set number of BLAS threads to 1 (per thread)
     torch.setnumthreads(1)
     -- Set default Tensor type (float is more efficient than double)
     torch.setdefaulttensortype(tensorType)
-    -- Set manual seed: but different for each thread
-    -- to have different experiences, eg. catch randomness
+    -- Set manual seed (different for each thread to have different experiences)
     torch.manualSeed(seed * __threadid)
   end
 end  
