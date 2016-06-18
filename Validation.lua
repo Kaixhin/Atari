@@ -5,12 +5,11 @@ local _ = require 'moses'
 
 local Validation = classic.class('Validation')
 
-
 function Validation:_init(opt, agent, env, display)
   self.opt = opt
   self.agent = agent
   self.env = env
-  self.display = display
+  self.display = display -- May be nil
 
   -- Create (Atari normalised score) evaluator
   self.evaluator = Evaluator(opt.game)
@@ -57,7 +56,10 @@ function Validation:validate()
       valEpisodeScore = reward -- Reset episode score
     end
 
-    self.display:display(self.agent, state)
+    -- Display (if available)
+    if self.display then
+      self.display:display(self.agent, self.env:getDisplay())
+    end
   end
 
   -- If no episodes completed then use score from incomplete episode
@@ -121,13 +123,19 @@ function Validation:evaluate()
     reward, state, terminal = self.env:step(action)
     episodeScore = episodeScore + reward
 
-    self.display:recordAndDisplay(self.agent, state, step)
+    -- Record (if available)
+    if self.display then
+      self.display:recordAndDisplay(self.agent, self.env:getDisplay(), step)
+    end
     -- Increment evaluation step counter
     step = step + 1
   end
   log.info('Final Score: ' .. episodeScore)
 
-  self.display:createVideo()
+  -- Record (if available)
+  if self.display then
+    self.display:createVideo()
+  end
 end
 
 

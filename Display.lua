@@ -7,11 +7,11 @@ local qt = pcall(require, 'qt')
 local Display = classic.class('Display')
 
 
-function Display:_init(opt, state)
+function Display:_init(opt, display)
   self.opt = opt
   -- Activate display if using QT
   self.zoom = opt.zoom
-  self.window = qt and image.display({image=state, zoom=self.zoom})
+  self.window = qt and image.display({image=display, zoom=self.zoom})
 
   -- Set up recording
   if opt.mode == 'eval' and opt.record then
@@ -26,10 +26,10 @@ function Display:_init(opt, state)
 end
 
 
-function Display:recordAndDisplay(agent, state, step)
+function Display:recordAndDisplay(agent, display, step)
   if qt or self.opt.record then
     -- Extract screen in RGB format for saving images for FFmpeg
-    local screen = self.opt.saliency ~= 'none' and createSaliencyMap(state, agent) or (self.opt.game == 'catch' and torch.repeatTensor(state, 3, 1, 1) or state:select(1, 1))
+    local screen = self.opt.saliency ~= 'none' and self:createSaliencyMap(display, agent) or display
     if qt then
       image.display({image=screen, zoom=self.zoom, win=self.window})
     end
@@ -41,24 +41,17 @@ end
 
 
 -- Update display
-function Display:display(agent, state)
+function Display:display(agent, display)
   if not qt then return end
 
-  local screen = self.opt.saliency ~= 'none' and self:createSaliencyMap(state, agent) or state
+  local screen = self.opt.saliency ~= 'none' and self:createSaliencyMap(display, agent) or display
   image.display({image=screen, zoom=self.zoom, win=self.window})
 end
 
 
 -- Computes saliency map for display
-function Display:createSaliencyMap(state, agent)
-  local screen -- Clone of state that can be adjusted
-
-  -- Convert Catch screen to RGB
-  if self.opt.game == 'catch' then
-    screen = torch.repeatTensor(state, 3, 1, 1)
-  else
-    screen = state:select(1, 1):clone()
-  end
+function Display:createSaliencyMap(display, agent) -- TODO: Fix saliency display
+  local screen = display:clone()
 
   -- Use red channel for saliency map
   screen:select(1, 1):copy(agent.saliencyMap)

@@ -35,6 +35,9 @@ function Setup:_init(arg)
   -- Validate command-line options (logging errors)
   self:validateOptions()
 
+  -- Augment environments to meet spec
+  self:augmentEnv()
+
   -- Torch setup
   log.info('Setting up Torch7')
   -- Use enhanced garbage collector
@@ -177,6 +180,10 @@ function Setup:parseOptions(arg)
   local env = Env(opt)
   opt.stateSpec = env:getStateSpec()
   opt.actionSpec = env:getActionSpec()
+  -- Process display if available
+  if env.getDisplay then
+    opt.displaySpec = env:getDisplaySpec()
+  end
 
   return opt
 end
@@ -236,6 +243,9 @@ function Setup:validateOptions()
 
   -- Check saliency map options
   abortIf(not _.contains({'none', 'normal', 'guided', 'deconvnet'}, self.opt.saliency), 'Unrecognised method for visualising saliency maps')
+  
+  -- Check saliency is valid
+  abortIf(self.opt.saliency ~= 'none' and not self.opt.displaySpec, 'Saliency cannot be shown without env:getDisplay()')
 
   -- Check async options
   if self.opt.async then
@@ -244,6 +254,21 @@ function Setup:validateOptions()
     abortIf(self.opt.bootstraps > 0, 'bootstraps not supported in async mode')
     abortIf(self.opt.async == 'A3C' and self.opt.duel, 'dueling and A3C dont mix')
     abortIf(self.opt.async == 'A3C' and self.opt.doubleQ, 'doubleQ and A3C dont mix')
+  end
+end
+
+-- Augments environments with extra methods if missing
+function Setup:augmentEnv()
+  local Env = require(self.opt.env)
+  local env = Env(self.opt)
+
+  -- Set up fake training mode (if needed)
+  if not env.training then
+    Env.training = function() end
+  end
+  -- Set up fake evaluation mode (if needed)
+  if not env.evaluate then
+    Env.evaluate = function() end
   end
 end
 

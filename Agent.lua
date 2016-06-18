@@ -94,10 +94,12 @@ function Agent:_init(opt)
 
   -- Saliency display
   self:setSaliency(opt.saliency) -- Set saliency option on agent and model
-  self.origWidth = opt.stateSpec[2][3] -- TODO: Have display spec
-  self.origHeight = opt.stateSpec[2][2]
-  self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3])
-  self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
+  if opt.displaySpec then
+    self.displayWidth = opt.displaySpec[2][3]
+    self.displayHeight = opt.displaySpec[2][2]
+    self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3])
+    self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
+  end
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -574,7 +576,8 @@ function Agent:computeSaliency(state, index, ensemble)
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float()), self.origWidth, self.origHeight)
+  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float()), self.displayWidth, self.displayHeight)
+  print(self.saliencyMap:size())
 
   -- Switch back to normal backpropagation
   self.model:normalBackprop()

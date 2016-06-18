@@ -64,6 +64,10 @@ script:
   - export TESTLUA=$(which luajit lua | head -n 1)
   - ${TESTLUA} test/testAll.lua
 notifications:
+  email:
+    on_success: change
+    on_failure: change
+    on_start: never
   webhooks:
     urls:
       - https://webhooks.gitter.im/e/faf2d7f3cc77829f144c

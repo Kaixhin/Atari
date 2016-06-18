@@ -163,7 +163,6 @@ function Model:create()
       head:add(lstm)
       if self.async then
         lstm:remember('both')
-        head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM, but lets do it anyway...
       end
     else
       head:add(nn.Linear(bodyOutputSize, self.hiddenSize))

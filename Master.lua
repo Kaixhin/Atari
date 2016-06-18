@@ -19,19 +19,6 @@ function Master:_init(opt)
   local Env = require(opt.env)
   self.env = Env(opt) -- Environment instantiation
 
-  -- Set up fake training mode (if needed)
-  if not self.env.training then
-    self.env.training = function() end
-  end
-  -- Set up fake evaluation mode (if needed)
-  if not self.env.evaluate then
-    self.env.evaluate = function() end
-  end
-  -- Set up fake display (if needed)
-  if not self.env.getDisplay then
-    self.env.getDisplay = function() end -- TODO: Implement for Atari and Catch
-  end
-
   -- Create DQN agent
   log.info('Creating DQN')
   self.agent = Agent(opt)
@@ -58,8 +45,13 @@ function Master:_init(opt)
   -- Start gaming
   log.info('Starting game: ' .. opt.game)
   local state = self.env:start()
-  self.display = Display(opt, state)
 
+  -- Set up display (if available)
+  if opt.displaySpec then
+    self.display = Display(opt, self.env:getDisplay())
+  end
+
+  -- Set up validation (with display if available)
   self.validation = Validation(opt, self.agent, self.env, self.display)
 
   classic.strict(self)
@@ -107,7 +99,10 @@ function Master:train()
       episodeScore = reward -- Reset episode score
     end
 
-    self.display:display(self.agent, state)
+    -- Display (if available)
+    if self.display then
+      self.display:display(self.agent, self.env:getDisplay())
+    end
 
     -- Trigger learning after a while (wait to accumulate experience)
     if step == self.opt.learnStart then
