@@ -4,14 +4,11 @@ local Model = require 'Model'
 local AsyncModel = classic.class('AsyncModel')
 
 function AsyncModel:_init(opt)
-  -- Initialise Catch or Arcade Learning Environment
+  -- Initialise environment
   log.info('Setting up ' .. opt.env)
   local Env = require(opt.env)
-  self.env = Env(opt)
-  local stateSpec = self.env:getStateSpec()
+  self.env = Env(opt) -- Environment instantiation
 
-  -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
   -- Set up fake training mode (if needed)
   if not self.env.training then
     self.env.training = function() end
@@ -19,6 +16,10 @@ function AsyncModel:_init(opt)
   -- Set up fake evaluation mode (if needed)
   if not self.env.evaluate then
     self.env.evaluate = function() end
+  end
+  -- Set up fake display (if needed)
+  if not self.env.getDisplay then
+    self.env.getDisplay = function() end -- TODO: Implement for Atari and Catch
   end
 
   self.model = Model(opt)

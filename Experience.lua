@@ -4,10 +4,6 @@ local BinaryHeap = require 'structures/BinaryHeap'
 local Singleton = require 'structures/Singleton'
 require 'classic.torch' -- Enables serialisation
 
---[[
---   WARNING: Experience performs a float -> byte compression of state, assuming discretised elements ∈ {0, 1/256, 2/256, ..., 1}
---]]
-
 local Experience = classic.class('Experience')
 
 -- Creates experience replay memory
@@ -17,17 +13,19 @@ function Experience:_init(capacity, opt, isValidation)
   self.batchSize = opt.batchSize
   self.histLen = opt.histLen
   self.gpu = opt.gpu
+  self.discretiseMem = opt.discretiseMem
   self.memPriority = opt.memPriority
   self.learnStart = opt.learnStart
   self.alpha = opt.alpha
   self.betaZero = opt.betaZero
 
   -- Create transition tuples buffer
+  local bufferStateSize = torch.LongStorage(_.append({opt.batchSize, opt.histLen}, opt.stateSpec[2]))
   self.transTuples = {
-    states = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    states = opt.Tensor(bufferStateSize),
     actions = torch.ByteTensor(opt.batchSize),
     rewards = opt.Tensor(opt.batchSize),
-    transitions = opt.Tensor(opt.batchSize, opt.histLen, opt.nChannels, opt.height, opt.width),
+    transitions = opt.Tensor(bufferStateSize),
     terminals = torch.ByteTensor(opt.batchSize),
     priorities = opt.Tensor(opt.batchSize)
   }
@@ -35,10 +33,14 @@ function Experience:_init(capacity, opt, isValidation)
   self.w = opt.Tensor(opt.batchSize):fill(1) -- Importance-sampling weights w, 1 if no correction needed
 
   -- Allocate memory for experience
-  local stateSize = torch.LongStorage({capacity, opt.nChannels, opt.height, opt.width}) -- Calculate state storage size
+  local stateSize = torch.LongStorage(_.append({capacity}, opt.stateSpec[2])) -- Calculate state storage size
   self.imgDiscLevels = 255 -- Number of discretisation levels for images (used for float <-> byte conversion)
-  -- For the standard DQN problem, float vs. byte storage is 24GB vs. 6GB memory, so this prevents/minimises slow swap usage
-  self.states = torch.ByteTensor(stateSize) -- ByteTensor to avoid massive memory usage
+  if opt.discretiseMem then
+    -- For the standard DQN problem, float vs. byte storage is 24GB vs. 6GB memory, so this prevents/minimises slow swap usage
+    self.states = torch.ByteTensor(stateSize) -- ByteTensor to avoid massive memory usage
+  else
+    self.states = torch.Tensor(stateSize)
+  end
   self.actions = torch.ByteTensor(capacity) -- Discrete action indices
   self.rewards = torch.FloatTensor(capacity) -- Stored at time t (not t + 1)
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
@@ -134,7 +136,11 @@ function Experience:store(reward, state, terminal, action)
     self.index = 1 -- Reset index
   end
 
-  self.states[self.index] = torch.mul(state, self.imgDiscLevels) -- float -> byte
+  if self.discretiseMem then
+    self.states[self.index] = torch.mul(state, self.imgDiscLevels) -- float -> byte
+  else
+    self.states[self.index] = state:clone()
+  end
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
   self.invalid[self.index] = 0
@@ -176,8 +182,12 @@ function Experience:retrieve(indices)
     -- Go back in history whilst episode exists
     local histIndex = self.histLen
     repeat
-      -- Copy state (converting to float first for non-integer division)
-      self.transTuples.states[n][histIndex]:div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
+      if self.discretiseMem then
+        -- Copy state (converting to float first for non-integer division)
+        self.transTuples.states[n][histIndex]:div(self.states[memIndex]:typeAs(self.transTuples.states), self.imgDiscLevels) -- byte -> float
+      else
+        self.transTuples.states[n][histIndex] = self.states[memIndex]:typeAs(self.transTuples.states)
+      end
       -- Adjust indices
       memIndex = self:circIndex(memIndex - 1)
       histIndex = histIndex - 1
@@ -191,7 +201,11 @@ function Experience:retrieve(indices)
       end
       -- Get transition frame
       local memTIndex = self:circIndex(indices[n] + 1)
-      self.transTuples.transitions[n][self.histLen]:div(self.states[memTIndex]:typeAs(self.transTuples.transitions), self.imgDiscLevels) -- byte -> float
+      if self.discretiseMem then
+        self.transTuples.transitions[n][self.histLen]:div(self.states[memTIndex]:typeAs(self.transTuples.transitions), self.imgDiscLevels) -- byte -> float
+      else
+        self.transTuples.transitions[n][self.histLen] = self.states[memTIndex]:typeAs(self.transTuples.transitions)
+      end
     end
   end
 

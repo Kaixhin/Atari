@@ -14,14 +14,11 @@ function Master:_init(opt)
   -- Set up singleton global object for transferring step
   self.globals = Singleton({step = 1}) -- Initial step
 
-  -- Initialise Catch or Arcade Learning Environment
+  -- Initialise environment
   log.info('Setting up ' .. opt.env)
   local Env = require(opt.env)
-  self.env = Env(opt)
-  local stateSpec = self.env:getStateSpec()
+  self.env = Env(opt) -- Environment instantiation
 
-  -- Provide original channels, height and width for resizing from
-  opt.origChannels, opt.origHeight, opt.origWidth = table.unpack(stateSpec[2])
   -- Set up fake training mode (if needed)
   if not self.env.training then
     self.env.training = function() end
@@ -30,10 +27,14 @@ function Master:_init(opt)
   if not self.env.evaluate then
     self.env.evaluate = function() end
   end
+  -- Set up fake display (if needed)
+  if not self.env.getDisplay then
+    self.env.getDisplay = function() end -- TODO: Implement for Atari and Catch
+  end
 
   -- Create DQN agent
   log.info('Creating DQN')
-  self.agent = Agent(self.env, opt)
+  self.agent = Agent(opt)
   if paths.filep(opt.network) then
     -- Load saved agent if specified
     log.info('Loading pretrained network weights')

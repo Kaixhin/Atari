@@ -23,7 +23,6 @@ function Model:_init(opt)
   self.colorSpace = opt.colorSpace
   self.width = opt.width
   self.height = opt.height
-  self.nChannels = opt.nChannels
   self.modelBody = opt.modelBody
   self.hiddenSize = opt.hiddenSize
   self.histLen = opt.histLen
@@ -33,8 +32,15 @@ function Model:_init(opt)
   self.env = opt.env
   self.async = opt.async
   self.a3c = opt.async == 'A3C'
+  self.stateSpec = opt.stateSpec
   
-  self.resize = opt.width ~= opt.origWidth or opt.height ~= opt.origHeight
+  self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
+  -- Set up resizing
+  if opt.width ~= 0 or opt.height ~= 0 then
+    self.resize = true
+    self.width = opt.width ~= 0 and opt.width or opt.stateSpec[2][3]
+    self.height = opt.height ~= 0 and opt.height or opt.stateSpec[2][2]
+  end
 end
 
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
@@ -42,13 +48,18 @@ function Model:preprocess(observation)
   local frame = observation:type(self.tensorType) -- Convert from CudaTensor if necessary
   
   -- Perform colour conversion if needed
-  if frame:size(1) == 3 and self.colorSpace ~= 'rgb' then
+  if self.colorSpace ~= '' then
     frame = image['rgb2' .. self.colorSpace](frame)
   end
   
   -- Resize screen if needed
   if self.resize then
     frame = image.scale(frame, self.width, self.height)
+  end
+
+  -- Clone if needed
+  if frame == observation then
+    frame = frame:clone()
   end
 
   return frame
@@ -61,12 +72,12 @@ function Model:createBody()
   local net
   
   if paths.filep(self.modelBody) then
-    net = torch.load(self.modelBody) -- Model must take in TxCxHxW; can use VolumetricConvolution etc.
+    net = require(self.modelBody)
     net:type(self.tensorType)
   elseif self.env == 'rlenvs.Atari' then
     net = nn.Sequential()
-    net:add(nn.View(histLen*self.nChannels, self.height, self.width)) -- Concatenate history in channel dimension
-    net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 8, 8, 4, 4, 1, 1))
+    net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3])) -- Concatenate history in channel dimension
+    net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 8, 8, 4, 4, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
     net:add(nn.ReLU(true))
@@ -74,8 +85,8 @@ function Model:createBody()
     net:add(nn.ReLU(true))
   else
     net = nn.Sequential()
-    net:add(nn.View(histLen*self.nChannels, self.height, self.width))
-    net:add(nn.SpatialConvolution(histLen*self.nChannels, 32, 5, 5, 2, 2, 1, 1))
+    net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3]))
+    net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 5, 5, 2, 2, 1, 1))
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(32, 32, 5, 5, 2, 2))
     net:add(nn.ReLU(true))
@@ -90,7 +101,7 @@ local function getOutputSize(net, inputDims)
 end
 
 -- Creates a DQN/AC model based on a number of discrete actions
-function Model:create(m)
+function Model:create()
   -- Number of input frames for recurrent networks is always 1
   local histLen = self.recurrent and 1 or self.histLen
 
@@ -103,7 +114,7 @@ function Model:create(m)
   -- Add network body
   net:add(self:createBody())
   -- Calculate body output size
-  local bodyOutputSize = torch.prod(torch.Tensor(getOutputSize(net, {histLen, self.nChannels, self.height, self.width})))
+  local bodyOutputSize = torch.prod(torch.Tensor(getOutputSize(net, _.append({histLen}, self.stateSpec[2]))))
   net:add(nn.View(bodyOutputSize))
 
   -- Network head
@@ -132,7 +143,7 @@ function Model:create(m)
       advStream:add(nn.Linear(bodyOutputSize, self.hiddenSize))
       advStream:add(nn.ReLU(true))
     end
-    advStream:add(nn.Linear(self.hiddenSize, m)) -- Predicts action-conditional advantage
+    advStream:add(nn.Linear(self.hiddenSize, self.m)) -- Predicts action-conditional advantage
 
     -- Streams container
     local streams = nn.ConcatTable()
@@ -144,7 +155,7 @@ function Model:create(m)
     -- Create dueling streams
     head:add(streams)
     -- Add dueling streams aggregator module
-    head:add(DuelAggregator(m))
+    head:add(DuelAggregator(self.m))
   else
     if self.recurrent then
       local lstm = nn.FastLSTM(bodyOutputSize, self.hiddenSize, self.histLen)
@@ -158,7 +169,7 @@ function Model:create(m)
       head:add(nn.Linear(bodyOutputSize, self.hiddenSize))
       head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
     end
-    head:add(nn.Linear(self.hiddenSize, m)) -- Note: Tuned DDQN uses shared bias at last layer
+    head:add(nn.Linear(self.hiddenSize, self.m)) -- Note: Tuned DDQN uses shared bias at last layer
   end
 
   if self.bootstraps > 0 then
@@ -177,16 +188,18 @@ function Model:create(m)
     net:add(nn.GradientRescale(1/self.bootstraps)) -- Normalise gradients by number of heads
     net:add(headConcat)
   elseif self.a3c then
+    -- Actor-critic does not use the normal head but instead a concatenated value function V and policy π
     net:add(nn.Linear(bodyOutputSize, self.hiddenSize))
     net:add(nn.ReLU(true))
 
-    local valueAndPolicy = nn.ConcatTable()
+    local valueAndPolicy = nn.ConcatTable() -- π and V share all layers except the last
 
-    local valueFunction = nn.Sequential()
-    valueFunction:add(nn.Linear(self.hiddenSize, 1))
+    -- Value function V(s; θv)
+    local valueFunction = nn.Linear(self.hiddenSize, 1)
 
+    -- Policy π(a | s; θπ)
     local policy = nn.Sequential()
-    policy:add(nn.Linear(self.hiddenSize, m))
+    policy:add(nn.Linear(self.hiddenSize, self.m))
     policy:add(nn.SoftMax())
 
     valueAndPolicy:add(valueFunction)
@@ -202,12 +215,12 @@ function Model:create(m)
 
   if not self.a3c then
     net:add(nn.JoinTable(1, 1))
-    net:add(nn.View(heads, m))
+    net:add(nn.View(heads, self.m))
 
     if not self.async and self.recurrent then
       local sequencer = nn.Sequencer(net)
       sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
-      net = nn.Sequential():add(nn.SplitTable(1, 4)):add(sequencer):add(nn.SelectTable(-1))
+      net = nn.Sequential():add(nn.SplitTable(1, #self.stateSpec[2] + 1)):add(sequencer):add(nn.SelectTable(-1))
     end
   end
 

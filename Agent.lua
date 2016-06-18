@@ -16,19 +16,18 @@ local qt = pcall(require, 'qt')
 local Agent = classic.class('Agent', AbstractAgent)
 
 -- Creates a DQN agent
-function Agent:_init(env, opt)
+function Agent:_init(opt)
   -- Experiment ID
   self._id = opt._id
   self.experiments = opt.experiments
   -- Actions
-  self.actionSpec = env:getActionSpec()
-  self.m = self.actionSpec[3][2] - self.actionSpec[3][1] + 1 -- Number of discrete actions
-  self.actionOffset = 1 - self.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
+  self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
+  self.actionOffset = 1 - opt.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
 
   -- Initialise model helper
   self.model = Model(opt)
   -- Create policy and target networks
-  self.policyNet = self.model:create(self.m)
+  self.policyNet = self.model:create()
   self.targetNet = self.policyNet:clone() -- Create deep copy for target network
   self.targetNet:evaluate() -- Target network always in evaluation mode
   self.tau = opt.tau
@@ -55,7 +54,7 @@ function Agent:_init(env, opt)
   self.PALpha = opt.PALpha
 
   -- State buffer
-  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, opt.stateSpec[2])
   -- Experience replay memory
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
@@ -95,10 +94,10 @@ function Agent:_init(env, opt)
 
   -- Saliency display
   self:setSaliency(opt.saliency) -- Set saliency option on agent and model
-  self.origWidth = opt.origWidth
-  self.origHeight = opt.origHeight
-  self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
-  self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
+  self.origWidth = opt.stateSpec[2][3] -- TODO: Have display spec
+  self.origHeight = opt.stateSpec[2][2]
+  self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3])
+  self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
