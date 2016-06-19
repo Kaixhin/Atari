@@ -1,7 +1,7 @@
-local classic = require 'classic'
-local Evaluator = require 'Evaluator'
-local gnuplot = require 'gnuplot'
 local _ = require 'moses'
+local classic = require 'classic'
+local gnuplot = require 'gnuplot'
+local Evaluator = require 'Evaluator'
 
 local Validation = classic.class('Validation')
 

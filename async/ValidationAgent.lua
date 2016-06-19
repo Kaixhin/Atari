@@ -14,7 +14,6 @@ function ValidationAgent:_init(opt, theta, atomic)
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
   self.policyNet_ = asyncModel:createNet()
-  log.info('%s',self.policyNet_)
 
   self.lstm = opt.recurrent and self.policyNet_:findModules('nn.FastLSTM')[1]
 
