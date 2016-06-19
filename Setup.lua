@@ -252,11 +252,12 @@ function Setup:validateOptions()
 
   -- Check async options
   if self.opt.async then
-    abortIf(self.opt.recurrent and self.opt.async ~= 'OneStepQ', 'recurrent only supported for OneStepQ in async for now')
-    abortIf(self.opt.PALpha > 0, 'PAL not supported in async modes yet')
-    abortIf(self.opt.bootstraps > 0, 'bootstraps not supported in async mode')
-    abortIf(self.opt.async == 'A3C' and self.opt.duel, 'dueling and A3C dont mix')
-    abortIf(self.opt.async == 'A3C' and self.opt.doubleQ, 'doubleQ and A3C dont mix')
+    abortIf(self.opt.recurrent and self.opt.async ~= 'OneStepQ', 'Recurrent connections only supported for OneStepQ in async for now')
+    abortIf(self.opt.PALpha > 0, 'Persistent advantage learning not supported in async modes yet')
+    abortIf(self.opt.bootstraps > 0, 'Bootstrap heads not supported in async mode yet')
+    abortIf(self.opt.async == 'A3C' and self.opt.duel, 'Dueling networks and A3C are incompatible')
+    abortIf(self.opt.async == 'A3C' and self.opt.doubleQ, 'Double Q-learning and A3C are incompatible')
+    abortIf(self.opt.saliency, 'Saliency maps not supported in async modes yet')
   end
 end
 

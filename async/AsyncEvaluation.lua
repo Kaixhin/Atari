@@ -21,7 +21,7 @@ function AsyncEvaluation:_init(opt)
   self.validAgent = ValidationAgent(opt, theta, atomic)
 
   local state = env:start()
-  self.display = Display(opt, state)
+  self.display = Display(opt, env:getDisplay())
 
   classic.strict(self)
 end

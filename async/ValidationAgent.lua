@@ -84,7 +84,6 @@ function ValidationAgent:eGreedyAction(state)
     return torch.random(1,self.m)
   end
 
-
   local _, maxIdx = Q:max(1)
   return maxIdx[1]
 end
@@ -338,7 +337,7 @@ function ValidationAgent:evaluate(display)
     end
     episodeScore = episodeScore + reward
 
-    display:display(self, observation, step)
+    display:display(self, self.env:getDisplay(), step)
     -- Increment evaluation step counter
     step = step + 1
   end
