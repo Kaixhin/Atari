@@ -106,7 +106,7 @@ function Experience:_init(capacity, opt, isValidation)
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
   self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
-  if self.memPriority ~= 'none' then
+  if self.memPriority ~= '' then
     self.priorityQueue:insert(1, 1) -- First priority = 1
   end
 
@@ -146,7 +146,7 @@ function Experience:store(reward, state, terminal, action)
   self.invalid[self.index] = 0
 
   -- Store with maximal priority
-  if self.memPriority ~= 'none' then
+  if self.memPriority then
     -- TODO: Correct PER by not storing terminal states at all
     local maxPriority = terminal and 0 or self.priorityQueue:findMax() -- Terminal states cannot be sampled so assign priority 0
     if self.isFull then
@@ -225,7 +225,7 @@ function Experience:sample()
   local N = self.size
 
   -- Priority 'none' = uniform sampling
-  if self.memPriority == 'none' then
+  if not self.memPriority then
 
     -- Keep uniformly picking random indices until indices filled
     for n = 1, self.batchSize do
@@ -289,7 +289,7 @@ end
 
 -- Update experience priorities using TD-errors δ
 function Experience:updatePriorities(indices, delta)
-  if self.memPriority ~= 'none' then
+  if self.memPriority then
     local priorities = torch.abs(delta):float() -- Use absolute values
     if self.memPriority == 'proportional' then
       priorities:add(self.smallConstant) -- Allows transitions to be sampled even if error is 0

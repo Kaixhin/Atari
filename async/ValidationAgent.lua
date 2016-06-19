@@ -338,7 +338,7 @@ function ValidationAgent:evaluate(display)
     end
     episodeScore = episodeScore + reward
 
-    display:recordAndDisplay(self, observation, step)
+    display:display(self, observation, step)
     -- Increment evaluation step counter
     step = step + 1
   end

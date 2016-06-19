@@ -71,7 +71,7 @@ end
 
 function Test:TestExperience_TestUniform()
   torch.manualSeed(1)
-  opt.memPriority = 'none'
+  opt.memPriority = ''
   local means = samplePriorityMeans(1000)
 
   for i=1,means:size(1) do

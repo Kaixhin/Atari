@@ -125,7 +125,7 @@ function Validation:evaluate()
 
     -- Record (if available)
     if self.display then
-      self.display:recordAndDisplay(self.agent, self.env:getDisplay(), step)
+      self.display:display(self.agent, self.env:getDisplay(), step)
     end
     -- Increment evaluation step counter
     step = step + 1

@@ -10,6 +10,14 @@ local Master = classic.class('Master')
 -- Sets up environment and agent
 function Master:_init(opt)
   self.opt = opt
+  self.verbose = opt.verbose
+  self.learnStart = opt.learnStart
+  self.progFreq = opt.progFreq
+  self.reportWeights = opt.reportWeights
+  self.noValidation = opt.noValidation
+  self.valFreq = opt.valFreq
+  self.experiments = opt.experiments
+  self._id = opt._id
 
   -- Set up singleton global object for transferring step
   self.globals = Singleton({step = 1}) -- Initial step
@@ -88,7 +96,7 @@ function Master:train()
       -- Track score
       episodeScore = episodeScore + reward
     else
-      if self.opt.verbose then
+      if self.verbose then
         -- Print score for episode
         log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. self.opt.steps .. ' | Episode ' .. episode .. ' | Score: ' .. episodeScore)
       end
@@ -105,15 +113,15 @@ function Master:train()
     end
 
     -- Trigger learning after a while (wait to accumulate experience)
-    if step == self.opt.learnStart then
+    if step == self.learnStart then
       log.info('Learning started')
     end
 
     -- Report progress
-    if step % self.opt.progFreq == 0 then
+    if step % self.progFreq == 0 then
       log.info('Steps: ' .. string.format(stepStrFormat, step) .. '/' .. self.opt.steps)
       -- Report weight and weight gradient statistics
-      if self.opt.reportWeights then
+      if self.reportWeights then
         local reports = self.agent:report()
         for r = 1, #reports do
           log.info(reports[r])
@@ -122,7 +130,7 @@ function Master:train()
     end
 
     -- Validate
-    if not self.opt.noValidation and step >= self.opt.learnStart and step % self.opt.valFreq == 0 then
+    if not self.noValidation and step >= self.learnStart and step % self.valFreq == 0 then
       self.validation:validate() -- Sets env and agent to evaluation mode and then back to training mode
 
       log.info('Resuming training')
@@ -146,7 +154,7 @@ function Master:catchSigInt()
     log.info('Save agent (y/n)?')
     if io.read() == 'y' then
       log.info('Saving agent')
-      torch.save(paths.concat(self.opt.experiments, self.opt._id, 'agent.t7'), self.agent) -- Save agent to resume training
+      torch.save(paths.concat(self.experiments, self._id, 'agent.t7'), self.agent) -- Save agent to resume training
     end
     log.warn('Exiting')
     os.exit(128 + signum)

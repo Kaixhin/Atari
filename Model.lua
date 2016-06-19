@@ -48,7 +48,7 @@ function Model:preprocess(observation)
   local frame = observation:type(self.tensorType) -- Convert from CudaTensor if necessary
   
   -- Perform colour conversion if needed
-  if self.colorSpace ~= '' then
+  if self.colorSpace then
     frame = image['rgb2' .. self.colorSpace](frame)
   end
   
@@ -83,7 +83,7 @@ function Model:createBody()
     net:add(nn.ReLU(true))
     net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
     net:add(nn.ReLU(true))
-  else
+  else -- Default network/Catch network
     net = nn.Sequential()
     net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3]))
     net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 5, 5, 2, 2, 1, 1))

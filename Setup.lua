@@ -104,7 +104,7 @@ function Setup:parseOptions(arg)
   cmd:option('-memSize', 1e6, 'Experience replay memory size (number of tuples)')
   cmd:option('-memSampleFreq', 4, 'Interval of steps between sampling from memory to learn')
   cmd:option('-memNSamples', 1, 'Number of times to sample per learning step')
-  cmd:option('-memPriority', 'rank', 'Type of prioritised experience replay: none|rank|proportional') -- TODO: Implement proportional prioritised experience replay
+  cmd:option('-memPriority', '', 'Type of prioritised experience replay: <none>|rank|proportional') -- TODO: Implement proportional prioritised experience replay
   cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
   cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
   -- Reinforcement learning parameters
@@ -134,7 +134,7 @@ function Setup:parseOptions(arg)
   cmd:option('-valSteps', 125000, 'Number of steps to use for validation')
   cmd:option('-valSize', 500, 'Number of transitions to use for calculating validation statistics')
   -- Async options
-  cmd:option('-async', 'false', 'Async agent: false|Sarsa|OneStepQ|NStepQ|A3C') -- TODO: Change names
+  cmd:option('-async', '', 'Async agent: <none>|Sarsa|OneStepQ|NStepQ|A3C') -- TODO: Change names
   cmd:option('-rmsEpsilon', 0.1, 'Epsilon for sharedRmsProp')
   -- ALEWrap options
   cmd:option('-fullActions', 'false', 'Use full set of 18 actions')
@@ -147,7 +147,7 @@ function Setup:parseOptions(arg)
   cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
   cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
   cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
-  cmd:option('-saliency', 'none', 'Display saliency maps (requires QT): none|normal|guided|deconvnet')
+  cmd:option('-saliency', '', 'Display saliency maps (requires QT): <none>|normal|guided|deconvnet')
   cmd:option('-record', 'false', 'Record screen (only in eval mode)')
   local opt = cmd:parse(arg)
 
@@ -162,8 +162,11 @@ function Setup:parseOptions(arg)
   opt.record = opt.record == 'true'
   opt.noValidation = opt.noValidation == 'true'
 
-  -- Process async agent options
-  if opt.async == 'false' then opt.async = false end
+  -- Process boolean/enum options
+  if opt.colorSpace == '' then opt.colorSpace = false end
+  if opt.memPriority == '' then opt.memPriority = false end
+  if opt.async == '' then opt.async = false end
+  if opt.saliency == '' then opt.saliency = false end
   if opt.async then opt.gpu = 0 end -- Asynchronous agents are CPU-only
 
   -- Set ID as env (plus game name) if not set
@@ -180,7 +183,7 @@ function Setup:parseOptions(arg)
   local env = Env(opt)
   opt.stateSpec = env:getStateSpec()
   opt.actionSpec = env:getActionSpec()
-  -- Process display if available
+  -- Process display if available (can be used for saliency recordings even without QT)
   if env.getDisplay then
     opt.displaySpec = env:getDisplaySpec()
   end
@@ -213,7 +216,7 @@ function Setup:validateOptions()
   end
 
   -- Check colour conversions
-  if self.opt.colorSpace ~= '' then
+  if self.opt.colorSpace then
     abortIf(not _.contains({'y', 'lab', 'yuv', 'hsl', 'hsv', 'nrgb'}, self.opt.colorSpace), 'Unsupported colour space for conversion')
     abortIf(self.opt.stateSpec[2][1] ~= 3, 'Original colour space must be RGB for conversion')
     -- Change state spec if converting from colour to greyscale
@@ -229,7 +232,7 @@ function Setup:validateOptions()
   abortIf(self.opt.valFreq <= self.opt.valSize, 'valFreq must be greater than valSize')
 
   -- Check prioritised experience replay options
-  abortIf(not _.contains({'none', 'rank', 'proportional'}, self.opt.memPriority), 'Type of prioritised experience replay unrecognised')
+  abortIf(self.opt.memPriority and not _.contains({'rank', 'proportional'}, self.opt.memPriority), 'Type of prioritised experience replay unrecognised')
   abortIf(self.opt.memPriority == 'proportional', 'Proportional prioritised experience replay not implemented yet') -- TODO: Implement
 
   -- Check start of learning occurs after at least 1/100 of memory has been filled
@@ -242,10 +245,10 @@ function Setup:validateOptions()
   abortIf(self.opt.learnStart < self.opt.progFreq, 'learnStart must be greater than progFreq')
 
   -- Check saliency map options
-  abortIf(not _.contains({'none', 'normal', 'guided', 'deconvnet'}, self.opt.saliency), 'Unrecognised method for visualising saliency maps')
+  abortIf(self.opt.saliency and not _.contains({'normal', 'guided', 'deconvnet'}, self.opt.saliency), 'Unrecognised method for visualising saliency maps')
   
   -- Check saliency is valid
-  abortIf(self.opt.saliency ~= 'none' and not self.opt.displaySpec, 'Saliency cannot be shown without env:getDisplay()')
+  abortIf(self.opt.saliency and not self.opt.displaySpec, 'Saliency cannot be shown without env:getDisplay()')
 
   -- Check async options
   if self.opt.async then
