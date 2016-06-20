@@ -5,7 +5,7 @@
 
 **Work In Progress:** Crossed out items have been partially implemented.
 
-Prioritised experience replay [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) (and [custom environments](#custom)). Or PERPALB(triple-D)RQN for short...
+~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) (and [custom environments](#custom)). Or PERPALB(triple-D)RQN for short...
 
 Additional asynchronous agents [[9]](#references):
 
