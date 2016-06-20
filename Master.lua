@@ -55,7 +55,9 @@ function Master:_init(opt)
   local state = self.env:start()
 
   -- Set up display (if available)
+  self.hasDisplay = false
   if opt.displaySpec then
+    self.hasDisplay = true
     self.display = Display(opt, self.env:getDisplay())
   end
 
@@ -108,7 +110,7 @@ function Master:train()
     end
 
     -- Display (if available)
-    if self.display then
+    if self.hasDisplay then
       self.display:display(self.agent, self.env:getDisplay())
     end
 

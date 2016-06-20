@@ -171,10 +171,11 @@ function Setup:parseOptions(arg)
 
   -- Set ID as env (plus game name) if not set
   if opt._id == '' then
+    local envName = paths.basename(opt.env)
     if opt.game == '' then
-      opt._id = opt.env
+      opt._id = envName
     else
-      opt._id = opt.env .. '.' .. opt.game
+      opt._id = envName .. '.' .. opt.game
     end
   end
   
@@ -249,6 +250,7 @@ function Setup:validateOptions()
   
   -- Check saliency is valid
   abortIf(self.opt.saliency and not self.opt.displaySpec, 'Saliency cannot be shown without env:getDisplay()')
+  abortIf(self.opt.saliency and #self.opt.stateSpec[2] ~= 3 and (self.opt.stateSpec[2][1] ~= 3 or self.opt.stateSpec[2][1] ~= 1), 'Saliency cannot be shown without visual state')
 
   -- Check async options
   if self.opt.async then

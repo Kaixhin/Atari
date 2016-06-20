@@ -8,6 +8,7 @@ if [ -z "$1" ]; then
   echo "Please enter paper, e.g. ./run nature"
   echo "Atari Choices: nature|doubleq|duel|prioritised|priorduel|persistent|bootstrap|recurrent|async-nstep|async-a3c"
   echo "Catch Choices: demo|demo-async|demo-async-a3c"
+  echo "Example Choices: demo-grid"
   exit 0
 else
   PAPER=$1
@@ -71,6 +72,11 @@ elif [ "$PAPER" == "async-nstep" ]; then
   th main.lua -env rlenvs.Atari -game $GAME -height 84 -width 84 -colorSpace y -async NStepQ -bootstraps 0 -batchSize 5 -momentum 0.99 -rmsEpsilon 0.1 -steps 80000000 -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ false -PALpha 0 -eta 0.0007 -gradClip 0 "$@"
 elif [ "$PAPER" == "async-a3c" ]; then
   th main.lua -env rlenvs.Atari -game $GAME -height 84 -width 84 -colorSpace y -async A3C -bootstraps 0 -batchSize 5 -momentum 0.99 -rmsEpsilon 0.1 -steps 80000000 -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ false -PALpha 0 -eta 0.0007 -gradClip 0 "$@"
+
+# Examples
+elif [ "$PAPER" == "demo-grid" ]; then
+  # GridWorld
+  th main.lua -env examples/GridWorldVis -modelBody examples/GridWorldNet -histLen 1 -async A3C -zoom 4 -hiddenSize 32 -optimiser adam -steps 400000 -tau 4 -memSize 20000 -valFreq 10000 -valSteps 6000 -doubleQ false -duel false -bootstraps 0 -PALpha 0 "$@"
 else
   echo "Invalid options"
 fi

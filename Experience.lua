@@ -106,7 +106,7 @@ function Experience:_init(capacity, opt, isValidation)
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
   self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
-  if self.memPriority ~= '' then
+  if self.memPriority then
     self.priorityQueue:insert(1, 1) -- First priority = 1
   end
 

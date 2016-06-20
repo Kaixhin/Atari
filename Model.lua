@@ -71,7 +71,7 @@ function Model:createBody()
   local histLen = self.recurrent and 1 or self.histLen
   local net
   
-  if paths.filep(self.modelBody) then
+  if paths.filep(self.modelBody .. '.lua') then
     net = require(self.modelBody)
     net:type(self.tensorType)
   elseif self.env == 'rlenvs.Atari' then

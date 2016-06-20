@@ -9,7 +9,12 @@ function Validation:_init(opt, agent, env, display)
   self.opt = opt
   self.agent = agent
   self.env = env
-  self.display = display -- May be nil
+
+  self.hasDisplay = false
+  if display then
+    self.hasDisplay = true
+    self.display = display
+  end
 
   -- Create (Atari normalised score) evaluator
   self.evaluator = Evaluator(opt.game)
@@ -57,7 +62,7 @@ function Validation:validate()
     end
 
     -- Display (if available)
-    if self.display then
+    if self.hasDisplay then
       self.display:display(self.agent, self.env:getDisplay())
     end
   end
@@ -124,7 +129,7 @@ function Validation:evaluate()
     episodeScore = episodeScore + reward
 
     -- Record (if available)
-    if self.display then
+    if self.hasDisplay then
       self.display:display(self.agent, self.env:getDisplay(), step)
     end
     -- Increment evaluation step counter
@@ -133,7 +138,7 @@ function Validation:evaluate()
   log.info('Final Score: ' .. episodeScore)
 
   -- Record (if available)
-  if self.display then
+  if self.hasDisplay then
     self.display:createVideo()
   end
 end

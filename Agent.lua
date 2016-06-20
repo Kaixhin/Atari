@@ -94,8 +94,10 @@ function Agent:_init(opt)
 
   -- Saliency display
   self:setSaliency(opt.saliency) -- Set saliency option on agent and model
-  self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3]):zero()
-  self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.stateSpec[2][2], opt.stateSpec[2][3]):zero() -- Gradients with respect to the input (for saliency maps)
+  if #opt.stateSpec[2] == 3 then -- Make saliency map only for visual states
+    self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3]):zero()
+    self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.stateSpec[2][2], opt.stateSpec[2][3]):zero() -- Gradients with respect to the input (for saliency maps)
+  end
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -247,7 +249,7 @@ function Agent:observe(reward, rawObservation, terminal)
     end
 
     -- Rebalance priority queue for prioritised experience replay
-    if self.globals.step % self.memSize == 0 and self.memPriority ~= '' then
+    if self.globals.step % self.memSize == 0 and self.memPriority then
       self.memory:rebalance()
     end
   end

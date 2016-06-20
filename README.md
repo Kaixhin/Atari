@@ -55,6 +55,8 @@ If the environment has separate behaviour during training and testing it should 
 
 You can also use a custom model (body) with `-modelBody`, which replaces the usual DQN convolutional layers with a custom Torch neural network (as the path to a Lua file). The model will receive a stack of the previous states (as determined by `-histLen`), and must reshape them manually if needed. The DQN "heads" will then be constructed as normal, with `-hiddenSize` used to change the size of the fully connected layer if needed.
 
+For an example on a GridWorld environment, run `./run.sh demo-grid` - the demo also works with `qlua` and experience replay agents. The custom environment and network can be found in the [examples](https://github.com/Kaixhin/Atari/tree/master/examples) folder.
+
 ## Acknowledgements
 
 - [@GeorgOstrovski](https://github.com/GeorgOstrovski) for confirmation on network usage in advantage operators + note on interaction with Double DQN.
