@@ -21,14 +21,19 @@ function AsyncEvaluation:_init(opt)
   self.validAgent = ValidationAgent(opt, theta, atomic)
 
   local state = env:start()
-  self.display = Display(opt, state)
+  self.hasDisplay = false
+  if opt.displaySpec then
+    self.hasDisplay = true
+    self.display = Display(opt, env:getDisplay())
+  end
 
   classic.strict(self)
 end
 
 
 function AsyncEvaluation:evaluate()
-  self.validAgent:evaluate(self.display)
+  local display = self.hasDisplay and self.display or nil
+  self.validAgent:evaluate(display)
 end
 
 return AsyncEvaluation
