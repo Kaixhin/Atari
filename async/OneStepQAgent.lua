@@ -66,7 +66,7 @@ function OneStepQAgent:learn(steps, from)
 end
 
 
-function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
+function OneStepQAgent:computeTdErrQ(state, action, state_, reward, terminal)
   local Y = reward
   if self.lstm then -- LSTM targetNet needs to see all states as well
     self.targetNet:forward(state)
@@ -87,8 +87,11 @@ function OneStepQAgent:accumulateGradient(state, action, state_, reward, termina
     self.QCurr = self.policyNet:forward(state):squeeze()
   end
 
-  local tdErr = Y - self.QCurr[action]
+  return Y - self.QCurr[action]
+end
 
+function OneStepQAgent:accumulateGradient(state, action, state_, reward, terminal)
+  local tdErr = self:computeTdErrQ(state, action, state_, reward, terminal)
   self:accumulateGradientTdErr(state, action, tdErr, self.policyNet)
 end
 

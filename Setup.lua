@@ -116,7 +116,9 @@ function Setup:parseOptions(arg)
   cmd:option('-rewardClip', 1, 'Clips reward magnitude at rewardClip (0 to disable)')
   cmd:option('-tdClip', 1, 'Clips TD-error δ magnitude at tdClip (0 to disable)')
   cmd:option('-doubleQ', 'true', 'Use Double Q-learning')
-  -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
+  cmd:option('-pseudoBeta', 0, 'Beta in exploration bonus')
+  cmd:option('-mcEta', 0.1, 'η for mixing in MC returns in Episodic agents')
+    -- Note from Georg Ostrovski: The advantage operators and Double DQN are not entirely orthogonal as the increased action gap seems to reduce the statistical bias that leads to value over-estimation in a similar way that Double DQN does
   cmd:option('-PALpha', 0.9, 'Persistent advantage learning parameter α (0 to disable)')
   -- Training options
   cmd:option('-optimiser', 'rmspropm', 'Training algorithm') -- RMSProp with momentum as found in "Generating Sequences With Recurrent Neural Networks"

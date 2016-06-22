@@ -8,6 +8,7 @@ require 'modules/sharedRmsProp'
 local AsyncAgent = classic.class('AsyncAgent', AbstractAgent)
 
 local methods = {
+  EpisodicOneStepQ = 'EpisodicOneStepQAgent',
   OneStepQ = 'OneStepQAgent',
   Sarsa = 'SarsaAgent',
   NStepQ = 'NStepQAgent',
