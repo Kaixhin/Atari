@@ -64,6 +64,12 @@ elif [ "$PAPER" == "recurrent" ]; then
 elif [ "$PAPER" == "demo-async" ]; then
   # N-Step Q-learning Catch demo
   th main.lua -zoom 4 -async NStepQ -eta 0.00025 -momentum 0.99 -bootstraps 0 -batchSize 5 -hiddenSize 32 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 4 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
+elif [ "$PAPER" == "demo-async-1step" ]; then
+  # 1-Step Q-learning Catch demo
+  th main.lua -zoom 4 -async OneStepQ -eta 0.00025 -momentum 0.99 -bootstraps 0 -batchSize 5 -hiddenSize 32 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 100 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
+elif [ "$PAPER" == "demo-async-episodic-1" ]; then
+  # 1-Step Episodic Q-learning Catch demo
+  th main.lua -zoom 4 -async EpisodicOneStepQ -eta 0.00025 -momentum 0.99 -bootstraps 0 -batchSize 5 -hiddenSize 32 -doubleQ true -duel false -optimiser adam -steps 15000000 -tau 100 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
 elif [ "$PAPER" == "demo-async-a3c" ]; then
   # A3C Catch demo
   th main.lua -zoom 4 -async A3C -eta 0.0007 -momentum 0.99 -bootstraps 0 -batchSize 5 -hiddenSize 32 -doubleQ false -duel false -optimiser adam -steps 15000000 -tau 4 -memSize 20000 -epsilonSteps 10000 -valFreq 10000 -valSteps 6000 -bootstraps 0 -PALpha 0 "$@"
