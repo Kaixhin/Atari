@@ -14,6 +14,7 @@ function EpisodicOneStepQAgent:_init(opt, policyNet, targetNet, theta, targetThe
   self.Qs = {}
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.agentName = 'EpisodicOneStepQAgent'
+  self.alwaysComputeGreedyQ = true
 end
 
 
@@ -65,9 +66,6 @@ end
 
 
 function EpisodicOneStepQAgent:learnEpisode(steps)
---  log.info('learning episode length=%d', #self.rewards)
-local suc = self.rewards[self.batchIdx]  > 0
-
   for i=2,#self.rewards do
     local terminal = i == self.batchIdx
     local state = self.states[i-1]
@@ -79,20 +77,20 @@ local suc = self.rewards[self.batchIdx]  > 0
 
     local totalReward = 0
     local gamma = 1
-    if self.eta < 1 then
+    if self.eta > 0 then
       for r=i,#self.rewards do
         totalReward = gamma * self.rewards[r]
         gamma = gamma * self.gamma
         if gamma < 0.001 then break end
       end
     end
+
     local mcReturn = totalReward - self.Qs[i][action]
 
-    local mixedDelta = self.eta * tdErrQ + (1- self.eta) * mcReturn
+    local mixedDelta = (1 - self.eta) * tdErrQ + self.eta * mcReturn
 
-if suc then
---    log.info('tdQ %f + mc %f = %f r=%f R=%f', tdErrQ, mcReturn, mixedDelta, self.rewards[i], totalReward)
-end
+    -- log.info('tdQ %f + mc %f = %f r=%f R=%f', tdErrQ, mcReturn, mixedDelta, self.rewards[i], totalReward)
+
     self:accumulateGradientTdErr(state, action, mixedDelta, self.policyNet)
 
     if i % self.batchSize == 0 or terminal then
