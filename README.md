@@ -38,6 +38,7 @@ Requires [Torch7](http://torch.ch/), and uses CUDA if available. Also requires t
 - **xitari**
 - **alewrap**
 - **rlenvs**
+- **pseudo-count-atari** (optional for pseudo counts feature, requires boost)
 
 xitari, alewrap and rlenvs can be installed using the following commands:
 
@@ -45,6 +46,7 @@ xitari, alewrap and rlenvs can be installed using the following commands:
 luarocks install https://raw.githubusercontent.com/lake4790k/xitari/master/xitari-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/alewrap/master/alewrap-0-0.rockspec
 luarocks install https://raw.githubusercontent.com/Kaixhin/rlenvs/master/rocks/rlenvs-scm-1.rockspec
+luarocks install https://raw.githubusercontent.com/lake4790k/pseudo-count-atari/master/rocks/pseudo-count-atari-scm-1.rockspec
 ```
 
 ## Custom
