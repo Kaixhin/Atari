@@ -1,7 +1,6 @@
 local classic = require 'classic'
 local optim = require 'optim'
 local QAgent = require 'async/OneStepQAgent'
-local ExplorationBonus = require 'modules/ExplorationBonus'
 require 'modules/sharedRmsProp'
 
 local EpisodicOneStepQAgent, super = classic.class('EpisodicOneStepQAgent', 'OneStepQAgent')
@@ -14,7 +13,11 @@ function EpisodicOneStepQAgent:_init(opt, policyNet, targetNet, theta, targetThe
   self.states = {}
   self.Qs = {}
 
-  self.bonus = opt.pseudoBeta > 0 and ExplorationBonus(opt)
+  self.bonus = false
+  if opt.pseudoBeta > 0 then
+    local ExplorationBonus = require 'modules/ExplorationBonus'
+    self.bonus = ExplorationBonus(opt)
+  end
 
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.agentName = 'EpisodicOneStepQAgent'
