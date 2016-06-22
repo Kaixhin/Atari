@@ -144,6 +144,7 @@ function Setup:parseOptions(arg)
   cmd:option('-randomStarts', 30, 'Max number of no-op actions played before presenting the start of each training episode')
   cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
   cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
+  cmd:option('-lifeLossTerminal', 'true', 'Use life loss as terminal signal (training only)')
   -- Experiment options
   cmd:option('-experiments', 'experiments', 'Base directory to store experiments')
   cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
@@ -160,6 +161,7 @@ function Setup:parseOptions(arg)
   opt.doubleQ = opt.doubleQ == 'true'
   opt.reportWeights = opt.reportWeights == 'true'
   opt.fullActions = opt.fullActions == 'true'
+  opt.lifeLossTerminal = opt.lifeLossTerminal == 'true'
   opt.verbose = opt.verbose == 'true'
   opt.record = opt.record == 'true'
   opt.noValidation = opt.noValidation == 'true'
