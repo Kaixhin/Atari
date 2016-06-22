@@ -79,7 +79,7 @@ elif [ "$PAPER" == "async-nstep" ]; then
 elif [ "$PAPER" == "async-a3c" ]; then
   th main.lua -env rlenvs.Atari -game $GAME -height 84 -width 84 -colorSpace y -async A3C -bootstraps 0 -batchSize 5 -momentum 0.99 -rmsEpsilon 0.1 -steps 80000000 -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ false -PALpha 0 -eta 0.0007 -gradClip 0 "$@"
 elif [ "$PAPER" == "async-pseudo-1" ]; then
-  th main.lua -env rlenvs.Atari -game $GAME -height 84 -width 84 -colorSpace y -async EpisodicOneStepQ -bootstraps 0 -batchSize 5 -momentum 0.99 -rmsEpsilon 0.1 -steps 80000000 -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ true -pseudoBeta 0.05 -PALpha 0 -eta 0.0007 -gradClip 0 "$@"
+  th main.lua -env rlenvs.Atari -game $GAME -height 84 -width 84 -colorSpace y -async EpisodicOneStepQ -bootstraps 0 -batchSize 5 -momentum 0.99 -rmsEpsilon 0.1 -steps 80000000 -duel false -tau 40000 -optimiser sharedRmsProp -epsilonSteps 4000000 -doubleQ true -pseudoBeta 0.05 -PALpha 0 -eta 0.0007 -gradClip 0 -lifeLossTerminal false "$@"
 
 # Examples
 elif [ "$PAPER" == "demo-grid" ]; then
