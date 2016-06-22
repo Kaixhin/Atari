@@ -5,6 +5,7 @@ require 'modules/sharedRmsProp'
 
 local A3CAgent,super = classic.class('A3CAgent', 'AsyncAgent')
 
+local TINY_EPSILON = 1e-20
 
 function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
@@ -84,7 +85,7 @@ function A3CAgent:accumulateGradients(terminal, state)
 
     local action = self.actions[i]
     local V, probability = table.unpack(self.policyNet_:forward(self.states[i]))
-    probability:add(1e-100) -- could contain 0 -> log(0)= -inf -> theta = nans
+    probability:add(TINY_EPSILON) -- could contain 0 -> log(0)= -inf -> theta = nans
 
     self.vTarget[1] = -0.5 * (R - V)
 
