@@ -2,7 +2,7 @@ local classic = require 'classic'
 local qt = pcall(require, 'qt')
 local image = require 'image'
 
-local PseudoCount = require 'PseudoCount'
+local PseudoCount = require 'pseudocount'
 
 local ExplorationBonus = classic.class('ExplorationBonus')
 
@@ -14,25 +14,18 @@ function ExplorationBonus:_init(opt)
   self.count = PseudoCount(42)
   self.counter = 0
   self.started = 0
+  self.histLen = opt.histLen
   classic.strict(self)
 end
 
 function ExplorationBonus:bonus(screen)
-  screen = image.rgb2y(screen)
-  screen = image.scale(screen, 42, 42)
-  print(self.count:pseudoCount(screen))
+  screen = image.scale(screen[self.histLen], 42, 42):mul(255):byte()
 
-  if self.started == 0 then self.started = torch.tic() end
-  self.counter = self.counter + 1
-  local since = torch.toc(self.started)
-  local speed = self.counter / since
-  print('speed='.. speed)
+  local pseudoCount = self.count:pseudoCount(screen)
+  local bonus = self.beta * math.pow(pseudoCount + 0.01, -.5)
 
---  if true then return end
-
-  -- TODO to Bytes
-  self.window = image.display({image=screen, zoom=self.zoom, win=self.window})
-
+  -- print(pseudoCount ..' : '.. bonus)
+  return bonus
 end
 
 

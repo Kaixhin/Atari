@@ -1,6 +1,7 @@
 local classic = require 'classic'
 local optim = require 'optim'
 local QAgent = require 'async/OneStepQAgent'
+local ExplorationBonus = require 'modules/ExplorationBonus'
 require 'modules/sharedRmsProp'
 
 local EpisodicOneStepQAgent, super = classic.class('EpisodicOneStepQAgent', 'OneStepQAgent')
@@ -12,6 +13,9 @@ function EpisodicOneStepQAgent:_init(opt, policyNet, targetNet, theta, targetThe
   self.actions = {}
   self.states = {}
   self.Qs = {}
+
+  self.bonus = opt.pseudoBeta > 0 and ExplorationBonus(opt)
+
   super._init(self, opt, policyNet, targetNet, theta, targetTheta, atomic, sharedG)
   self.agentName = 'EpisodicOneStepQAgent'
   self.alwaysComputeGreedyQ = true
@@ -41,12 +45,14 @@ function EpisodicOneStepQAgent:learn(steps, from)
       reward, terminal, state_ = self:start()
     end
 
+    local bonus = self.bonus and self.bonus:bonus(state_) or 0
+
     self.batchIdx = self.batchIdx + 1
 
     self.states[self.batchIdx] = state_:clone()
     self.actions[self.batchIdx] = action
-    self.rewards[self.batchIdx] = reward
     self.Qs[self.batchIdx] = self.QCurr:clone()
+    self.rewards[self.batchIdx] = reward + bonus
 
     if not terminal then
       state = state_
