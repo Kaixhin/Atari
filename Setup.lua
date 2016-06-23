@@ -143,6 +143,7 @@ function Setup:parseOptions(arg)
   cmd:option('-poolFrmsType', 'max', 'Type of pooling over previous emulator frames: max|mean')
   cmd:option('-poolFrmsSize', 2, 'Number of emulator frames to pool over')
   cmd:option('-lifeLossTerminal', 'true', 'Use life loss as terminal signal (training only)')
+  cmd:option('-flickering', 0, 'Probability of screen flickering (Catch only)')
   -- Experiment options
   cmd:option('-experiments', 'experiments', 'Base directory to store experiments')
   cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
