@@ -20,6 +20,7 @@ function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sha
   self.dTheta:zero()
 
   self.doubleQ = opt.doubleQ
+  self.recurrent = opt.recurrent
 
   self.epsilonStart = opt.epsilonStart
   self.epsilon = self.epsilonStart
@@ -60,6 +61,10 @@ function QAgent:eGreedy(state, net)
   end
 
   if torch.uniform() < self.epsilon then
+    -- Forward state anyway if recurrent
+    if self.recurrent then
+      net:forward(state)
+    end
     return torch.random(1,self.m)
   end
 

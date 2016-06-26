@@ -193,6 +193,11 @@ function Agent:observe(reward, rawObservation, terminal)
       -- Choose action by ε-greedy exploration (even with bootstraps)
       aIndex = torch.random(1, self.m)
 
+      -- Forward state anyway if recurrent
+      if self.recurrent then
+        self.policyNet:forward(state)
+      end
+
       -- Reset saliency if action not chosen by network
       if self.saliency then
         self.saliencyMap:zero()
