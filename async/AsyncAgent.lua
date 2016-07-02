@@ -48,7 +48,7 @@ function AsyncAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic,
   self.dTheta = nn.Module.flatten(gradParams)
   self.dTheta:zero()
 
-  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, opt.stateSpec[2])
 
   self.gamma = opt.gamma
   self.rewardClip = opt.rewardClip

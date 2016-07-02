@@ -4,17 +4,24 @@ local image = require 'image'
 -- Detect QT for image display
 local qt = pcall(require, 'qt')
 
+-- Display is responsible for handling QT/recording logic
 local Display = classic.class('Display')
 
-
-function Display:_init(opt, state)
-  self.opt = opt
-  -- Activate display if using QT
+-- Creates display; live if using QT
+function Display:_init(opt, display)
+  self._id = opt._id
   self.zoom = opt.zoom
-  self.window = qt and image.display({image=state, zoom=self.zoom})
+  self.displayHeight = opt.displaySpec[2][2]
+  self.displayWidth = opt.displaySpec[2][3]
+  self.saliency = opt.saliency
+  self.record = opt.mode == 'eval' and opt.record
+  self.fps = 60
+  
+  -- Activate live display if using QT
+  self.window = qt and image.display({image=display, zoom=self.zoom})
 
   -- Set up recording
-  if opt.mode == 'eval' and opt.record then
+  if self.record then
     -- Recreate scratch directory
     paths.rmall('scratch', 'yes')
     paths.mkdir('scratch')
@@ -25,66 +32,52 @@ function Display:_init(opt, state)
   classic.strict(self)
 end
 
-
-function Display:recordAndDisplay(agent, state, step)
-  if qt or self.opt.record then
-    -- Extract screen in RGB format for saving images for FFmpeg
-    local screen = self.opt.saliency ~= 'none' and createSaliencyMap(state, agent) or (self.opt.game == 'catch' and torch.repeatTensor(state, 3, 1, 1) or state:select(1, 1))
-    if qt then
-      image.display({image=screen, zoom=self.zoom, win=self.window})
-    end
-    if self.opt.record then
-      image.save(paths.concat('scratch', self.opt.game .. '_' .. string.format('%06d', step) .. '.jpg'), screen)
-    end
-  end
-end
-
-
--- Update display
-function Display:display(agent, state)
-  if not qt then return end
-
-  local screen = self.opt.saliency ~= 'none' and self:createSaliencyMap(state, agent) or state
-  image.display({image=screen, zoom=self.zoom, win=self.window})
-end
-
-
--- Computes saliency map for display
-function Display:createSaliencyMap(state, agent)
-  local screen -- Clone of state that can be adjusted
-
-  -- Convert Catch screen to RGB
-  if self.opt.game == 'catch' then
-    screen = torch.repeatTensor(state, 3, 1, 1)
-  else
-    screen = state:select(1, 1):clone()
-  end
+-- Computes saliency map for display from agent field
+function Display:createSaliencyMap(agent, display)
+  local screen = display:clone() -- Cloned to prevent side-effects
+  local saliencyMap = agent.saliencyMap:float()
 
   -- Use red channel for saliency map
-  screen:select(1, 1):copy(agent.saliencyMap)
+  screen:select(1, 1):copy(image.scale(saliencyMap, self.displayWidth, self.displayHeight))
 
   return screen
 end
 
+-- Show display (handles recording as well for efficiency)
+function Display:display(agent, display, step)
+  if qt or self.record then
+    local screen = self.saliency and self:createSaliencyMap(agent, display) or display
 
-function Display:createVideo()
-  if not self.opt.record then return end
-  log.info('Recorded screen')
+    -- Display
+    if qt then
+      image.display({image=screen, zoom=self.zoom, win=self.window})
+    end
 
-  -- Create videos directory
-  if not paths.dirp('videos') then
-    paths.mkdir('videos')
+    -- Record
+    if self.record then
+      image.save(paths.concat('scratch', self._id .. '_' .. string.format('%06d', step) .. '.jpg'), screen)
+    end
   end
-
-  -- Use FFmpeg to create a video from the screens
-  log.info('Creating video')
-  local fps = self.opt.game == 'catch' and 10 or 60
-  os.execute('ffmpeg -framerate ' .. fps .. ' -start_number 1 -i scratch/' .. self.opt.game .. '_%06d.jpg -c:v libvpx-vp9 -crf 0 -b:v 0 videos/' .. self.opt.game .. '.webm')
-  log.info('Created video')
-
-  -- Clear scratch space
-  paths.rmall('scratch', 'yes')
 end
 
+-- Creates videos from frames if recording
+function Display:createVideo()
+  if self.record then
+    log.info('Recorded screen')
+
+    -- Create videos directory
+    if not paths.dirp('videos') then
+      paths.mkdir('videos')
+    end
+
+    -- Use FFmpeg to create a video from the screens
+    log.info('Creating video')
+    os.execute('ffmpeg -framerate ' .. self.fps .. ' -start_number 1 -i scratch/' .. self._id .. '_%06d.jpg -c:v libvpx-vp9 -crf 0 -b:v 0 videos/' .. self._id .. '.webm')
+    log.info('Created video')
+
+    -- Clear scratch space
+    paths.rmall('scratch', 'yes')
+  end
+end
 
 return Display

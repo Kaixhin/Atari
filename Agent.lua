@@ -16,19 +16,18 @@ local qt = pcall(require, 'qt')
 local Agent = classic.class('Agent', AbstractAgent)
 
 -- Creates a DQN agent
-function Agent:_init(env, opt)
+function Agent:_init(opt)
   -- Experiment ID
   self._id = opt._id
   self.experiments = opt.experiments
   -- Actions
-  self.actionSpec = env:getActionSpec()
-  self.m = self.actionSpec[3][2] - self.actionSpec[3][1] + 1 -- Number of discrete actions
-  self.actionOffset = 1 - self.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
+  self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
+  self.actionOffset = 1 - opt.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
 
   -- Initialise model helper
   self.model = Model(opt)
   -- Create policy and target networks
-  self.policyNet = self.model:create(self.m)
+  self.policyNet = self.model:create()
   self.targetNet = self.policyNet:clone() -- Create deep copy for target network
   self.targetNet:evaluate() -- Target network always in evaluation mode
   self.tau = opt.tau
@@ -55,7 +54,7 @@ function Agent:_init(env, opt)
   self.PALpha = opt.PALpha
 
   -- State buffer
-  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, opt.stateSpec[2])
   -- Experience replay memory
   self.memory = Experience(opt.memSize, opt)
   self.memSampleFreq = opt.memSampleFreq
@@ -95,10 +94,10 @@ function Agent:_init(env, opt)
 
   -- Saliency display
   self:setSaliency(opt.saliency) -- Set saliency option on agent and model
-  self.origWidth = opt.origWidth
-  self.origHeight = opt.origHeight
-  self.saliencyMap = opt.Tensor(1, opt.origHeight, opt.origWidth)
-  self.inputGrads = opt.Tensor(opt.histLen*opt.nChannels, opt.height, opt.width) -- Gradients with respect to the input (for saliency maps)
+  if #opt.stateSpec[2] == 3 then -- Make saliency map only for visual states
+    self.saliencyMap = opt.Tensor(1, opt.stateSpec[2][2], opt.stateSpec[2][3]):zero()
+    self.inputGrads = opt.Tensor(opt.histLen*opt.stateSpec[2][1], opt.stateSpec[2][2], opt.stateSpec[2][3]):zero() -- Gradients with respect to the input (for saliency maps)
+  end
 
   -- Get singleton instance for step
   self.globals = Singleton.getInstance()
@@ -186,16 +185,21 @@ function Agent:observe(reward, rawObservation, terminal)
         gnuplot.hist(QHeadsMaxInds, self.m, 0.5, self.m + 0.5)
       end
 
-      -- Compute saliency
-      if self.saliency ~= 'none' then
+      -- Compute saliency map
+      if self.saliency then
         self:computeSaliency(state, aIndex, true)
       end
     elseif torch.uniform() < epsilon then 
       -- Choose action by ε-greedy exploration (even with bootstraps)
       aIndex = torch.random(1, self.m)
 
+      -- Forward state anyway if recurrent
+      if self.recurrent then
+        self.policyNet:forward(state)
+      end
+
       -- Reset saliency if action not chosen by network
-      if self.saliency ~= 'none' then
+      if self.saliency then
         self.saliencyMap:zero()
       end
     else
@@ -219,7 +223,7 @@ function Agent:observe(reward, rawObservation, terminal)
       aIndex = bestAs[torch.random(1, #bestAs)]
 
       -- Compute saliency
-      if self.saliency ~= 'none' then
+      if self.saliency then
         self:computeSaliency(state, aIndex, false)
       end
     end
@@ -250,7 +254,7 @@ function Agent:observe(reward, rawObservation, terminal)
     end
 
     -- Rebalance priority queue for prioritised experience replay
-    if self.globals.step % self.memSize == 0 and self.memPriority ~= 'none' then
+    if self.globals.step % self.memSize == 0 and self.memPriority then
       self.memory:rebalance()
     end
   end
@@ -564,7 +568,7 @@ function Agent:computeSaliency(state, index, ensemble)
   self.model:salientBackprop()
 
   -- Create artificial high target
-  local maxTarget = self.Tensor(self.heads, self.m):fill(0)
+  local maxTarget = self.Tensor(self.heads, self.m):zero()
   if ensemble then
     -- Set target on all heads (when using ensemble policy)
     maxTarget[{{}, {index}}] = 1
@@ -575,7 +579,8 @@ function Agent:computeSaliency(state, index, ensemble)
 
   -- Backpropagate to inputs
   self.inputGrads = self.policyNet:backward(state, maxTarget)
-  self.saliencyMap = image.scale(torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float()), self.origWidth, self.origHeight)
+  -- Saliency map ref used by Display
+  self.saliencyMap = torch.abs(self.inputGrads:select(1, self.recurrent and 1 or self.histLen):float())
 
   -- Switch back to normal backpropagation
   self.model:normalBackprop()

@@ -15,9 +15,12 @@ local isValidation = false
 local capacity = 1e4
 local opt = {
   histLen = 1,
-  nChannels = 1,
-  height = 20,
-  width = 20,
+  stateSpec = {
+    'real',
+    {1, 10, 10, 10},
+    {0, 1}
+  },
+  discretiseMem = true,
   batchSize = 10,
   gpu = false,
   memPriority = '',
@@ -30,7 +33,7 @@ local opt = {
 
 
 local function randomPopulate(priorities, experience) 
-  local state = torch.Tensor(opt.nChannels, opt.width, opt.height)
+  local state = torch.Tensor(table.unpack(opt.stateSpec[2]))
   local terminal = false
   local action = 1
   local reward = 1
@@ -68,7 +71,7 @@ end
 
 function Test:TestExperience_TestUniform()
   torch.manualSeed(1)
-  opt.memPriority = 'none'
+  opt.memPriority = false
   local means = samplePriorityMeans(1000)
 
   for i=1,means:size(1) do

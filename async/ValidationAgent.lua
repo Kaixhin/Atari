@@ -14,7 +14,6 @@ function ValidationAgent:_init(opt, theta, atomic)
   local asyncModel = AsyncModel(opt)
   self.env, self.model = asyncModel:getEnvAndModel()
   self.policyNet_ = asyncModel:createNet()
-  log.info('%s',self.policyNet_)
 
   self.lstm = opt.recurrent and self.policyNet_:findModules('nn.FastLSTM')[1]
 
@@ -32,13 +31,12 @@ function ValidationAgent:_init(opt, theta, atomic)
   self.valScores = {} -- Validation scores (passed from main script)
   self.normScores = {} -- Normalised validation scores (passed from main script)
 
-  local actionSpec = self.env:getActionSpec()
-  self.m = actionSpec[3][2] - actionSpec[3][1] + 1
-  self.actionOffset = 1 - actionSpec[3][1]
+  self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
+  self.actionOffset = 1 - opt.actionSpec[3][1] -- Calculate offset if first action is not indexed as 1
 
   self.env:training()
 
-  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, {opt.nChannels, opt.height, opt.width})
+  self.stateBuffer = CircularQueue(opt.recurrent and 1 or opt.histLen, opt.Tensor, opt.stateSpec[2])
   self.progFreq = opt.progFreq
   self.Tensor = opt.Tensor
 
@@ -85,7 +83,6 @@ function ValidationAgent:eGreedyAction(state)
   if torch.uniform() < epsilon then
     return torch.random(1,self.m)
   end
-
 
   local _, maxIdx = Q:max(1)
   return maxIdx[1]
@@ -312,7 +309,7 @@ function ValidationAgent:evaluate(display)
 
   log.info('Evaluation mode')
   -- Set environment and agent to evaluation mode
-  if self.ale then self.env:evaluate() end
+  self.env:evaluate()
 
   local reward, observation, terminal = 0, self.env:start(), false
 
@@ -340,13 +337,17 @@ function ValidationAgent:evaluate(display)
     end
     episodeScore = episodeScore + reward
 
-    display:recordAndDisplay(self, observation, step)
+    if display then
+      display:display(self, self.env:getDisplay(), step)
+    end
     -- Increment evaluation step counter
     step = step + 1
   end
   log.info('Final Score: ' .. episodeScore)
 
-  display:createVideo()
+  if display then
+    display:createVideo()
+  end
 end
 
 

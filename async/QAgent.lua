@@ -33,7 +33,8 @@ function QAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, sha
   self.tic = 0
   self.step = 0
 
-  self.alwaysComputeGreedyQ = not self.doubleQ
+  -- Forward state anyway if recurrent
+  self.alwaysComputeGreedyQ = opt.recurrent or not self.doubleQ
 
   self.QCurr = torch.Tensor(0)
 end
