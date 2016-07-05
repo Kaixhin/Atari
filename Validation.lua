@@ -92,14 +92,18 @@ function Validation:validate()
   local avgV, avgTdErr = self.agent:validate()
   log.info('Average V: ' .. avgV)
   log.info('Average δ: ' .. avgTdErr)
+  
+  -- Save latest weights
+  log.info('Saving weights')
+  self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights_latest.t7'))
 
-  -- Save if best score achieved
+  -- Save "best weights" if best score achieved
   if valTotalScore > self.bestValScore then
     log.info('New best average score')
     self.bestValScore = valTotalScore
 
-    log.info('Saving weights')
-    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights.t7'))
+    log.info('Saving new best weights')
+    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights_best.t7'))
   end
   
   -- Set environment and agent to training mode
