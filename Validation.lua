@@ -95,7 +95,7 @@ function Validation:validate()
   
   -- Save latest weights
   log.info('Saving weights')
-  self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights_latest.t7'))
+  self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'last.weights.t7'))
 
   -- Save "best weights" if best score achieved
   if valTotalScore > self.bestValScore then
@@ -103,7 +103,7 @@ function Validation:validate()
     self.bestValScore = valTotalScore
 
     log.info('Saving new best weights')
-    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'weights_best.t7'))
+    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'best.weights.t7'))
   end
   
   -- Set environment and agent to training mode
