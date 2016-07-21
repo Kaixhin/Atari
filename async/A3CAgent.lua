@@ -24,7 +24,7 @@ function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, s
   self.rewards = torch.Tensor(self.batchSize)
   self.actions = torch.ByteTensor(self.batchSize)
   self.states = torch.Tensor(0)
-  self.beta = 0.01
+  self.beta = opt.entropyBeta
 
   self.env:training()
 
