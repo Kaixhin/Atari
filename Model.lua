@@ -11,7 +11,6 @@ require 'dpnn' -- Adds gradParamClip method
 require 'modules/GuidedReLU'
 require 'modules/DeconvnetReLU'
 require 'modules/GradientRescale'
---nn.FastLSTM.usenngraph = true -- Use faster FastLSTM TODO: Re-enable once nngraph #109 is resolved
 
 local Model = classic.class('Model')
 

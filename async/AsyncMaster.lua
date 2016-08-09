@@ -121,6 +121,8 @@ function AsyncMaster:_init(opt)
   self.controlPool:addjob(setupLogging(opt, 'VA'))
   self.controlPool:addjob(torchSetup(opt))
   self.controlPool:addjob(function()
+    -- distinguish from thread 1 in the agent pool
+    __threadid = 0 
     local signal = require 'posix.signal'
     local ValidationAgent = require 'async/ValidationAgent'
     validAgent = ValidationAgent(opt, theta, atomic)

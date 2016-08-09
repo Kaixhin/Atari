@@ -24,7 +24,7 @@ function A3CAgent:_init(opt, policyNet, targetNet, theta, targetTheta, atomic, s
   self.rewards = torch.Tensor(self.batchSize)
   self.actions = torch.ByteTensor(self.batchSize)
   self.states = torch.Tensor(0)
-  self.beta = 0.01
+  self.beta = opt.entropyBeta
 
   self.env:training()
 
@@ -89,10 +89,16 @@ function A3CAgent:accumulateGradients(terminal, state)
 
     self.vTarget[1] = -0.5 * (R - V)
 
+    -- ∇θ logp(s) = 1/p(a) for chosen a, 0 otherwise
     self.policyTarget:zero()
-    local logProbability = torch.log(probability)
-    self.policyTarget[action] = -(R - V) / probability[action]  - self.beta * logProbability:sum()
+    -- f(s) ∇θ logp(s)
+    self.policyTarget[action] = -(R - V) / probability[action] -- Negative target for gradient descent
 
+    -- Calculate (negative of) gradient of entropy of policy (for gradient descent): -(-logp(s) - 1)
+    local gradEntropy = torch.log(probability) + 1
+    -- Add to target to improve exploration (prevent convergence to suboptimal deterministic policy)
+    self.policyTarget:add(self.beta, gradEntropy)
+    
     self.policyNet_:backward(self.states[i], self.targets)
   end
 end
