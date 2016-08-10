@@ -92,7 +92,7 @@ function Setup:parseOptions(arg)
   cmd:option('-width', 0, 'Resize screen width (0 to disable)')
   cmd:option('-colorSpace', '', 'Colour space conversion (screen is RGB): <none>|y|lab|yuv|hsl|hsv|nrgb')
   -- Model options
-  cmd:option('-modelBody', '', 'Path to Torch nn model to be used as DQN "body"')
+  cmd:option('-modelBody', 'models.Catch', 'Path to Torch nn model to be used as DQN "body"')
   cmd:option('-hiddenSize', 512, 'Number of units in the hidden fully connected layer')
   cmd:option('-histLen', 4, 'Number of consecutive states processed/used for backpropagation-through-time') -- DQN standard is 4, DRQN is 10
   cmd:option('-duel', 'true', 'Use dueling network architecture (learns advantage function)')
@@ -182,7 +182,7 @@ function Setup:parseOptions(arg)
       opt._id = envName .. '.' .. opt.game
     end
   end
-  
+
   -- Create one environment to extract specifications
   local Env = require(opt.env)
   local env = Env(opt)
@@ -198,7 +198,7 @@ end
 
 -- Logs and aborts on error
 local function abortIf(err, msg)
-  if err then 
+  if err then
     log.error(msg)
     error(msg)
   end
@@ -208,15 +208,15 @@ end
 function Setup:validateOptions()
   -- Check environment state is a single tensor
   abortIf(#self.opt.stateSpec ~= 3 or not _.isArray(self.opt.stateSpec[2]), 'Environment state is not a single tensor')
-  
+
   -- Check environment has discrete actions
   abortIf(self.opt.actionSpec[1] ~= 'int' or self.opt.actionSpec[2] ~= 1, 'Environment does not have discrete actions')
 
   -- Change state spec if resizing
-  if self.opt.height ~= 0 then 
+  if self.opt.height ~= 0 then
     self.opt.stateSpec[2][2] = self.opt.height
   end
-  if self.opt.width ~= 0 then 
+  if self.opt.width ~= 0 then
     self.opt.stateSpec[2][3] = self.opt.width
   end
 
@@ -251,7 +251,7 @@ function Setup:validateOptions()
 
   -- Check saliency map options
   abortIf(self.opt.saliency and not _.contains({'normal', 'guided', 'deconvnet'}, self.opt.saliency), 'Unrecognised method for visualising saliency maps')
-  
+
   -- Check saliency is valid
   abortIf(self.opt.saliency and not self.opt.displaySpec, 'Saliency cannot be shown without env:getDisplay()')
   abortIf(self.opt.saliency and #self.opt.stateSpec[2] ~= 3 and (self.opt.stateSpec[2][1] ~= 3 or self.opt.stateSpec[2][1] ~= 1), 'Saliency cannot be shown without visual state')

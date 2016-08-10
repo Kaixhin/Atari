@@ -29,10 +29,11 @@ function Model:_init(opt)
   self.bootstraps = opt.bootstraps
   self.recurrent = opt.recurrent
   self.env = opt.env
+  self.modelBody = opt.modelBody
   self.async = opt.async
   self.a3c = opt.async == 'A3C'
   self.stateSpec = opt.stateSpec
-  
+
   self.m = opt.actionSpec[3][2] - opt.actionSpec[3][1] + 1 -- Number of discrete actions
   -- Set up resizing
   if opt.width ~= 0 or opt.height ~= 0 then
@@ -45,12 +46,12 @@ end
 -- Processes a single frame for DQN input; must not return same memory to prevent side-effects
 function Model:preprocess(observation)
   local frame = observation:type(self.tensorType) -- Convert from CudaTensor if necessary
-  
+
   -- Perform colour conversion if needed
   if self.colorSpace then
     frame = image['rgb2' .. self.colorSpace](frame)
   end
-  
+
   -- Resize screen if needed
   if self.resize then
     frame = image.scale(frame, self.width, self.height)
@@ -62,36 +63,6 @@ function Model:preprocess(observation)
   end
 
   return frame
-end
-
--- Creates a DQN/AC model body
-function Model:createBody()
-  -- Number of input frames for recurrent networks is always 1
-  local histLen = self.recurrent and 1 or self.histLen
-  local net
-  
-  if paths.filep(self.modelBody .. '.lua') then
-    net = require(self.modelBody)
-    net:type(self.tensorType)
-  elseif self.env == 'rlenvs.Atari' then
-    net = nn.Sequential()
-    net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3])) -- Concatenate history in channel dimension
-    net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 8, 8, 4, 4, 1, 1))
-    net:add(nn.ReLU(true))
-    net:add(nn.SpatialConvolution(32, 64, 4, 4, 2, 2))
-    net:add(nn.ReLU(true))
-    net:add(nn.SpatialConvolution(64, 64, 3, 3, 1, 1))
-    net:add(nn.ReLU(true))
-  else -- Default network/Catch network
-    net = nn.Sequential()
-    net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3]))
-    net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 5, 5, 2, 2, 1, 1))
-    net:add(nn.ReLU(true))
-    net:add(nn.SpatialConvolution(32, 32, 5, 5, 2, 2))
-    net:add(nn.ReLU(true))
-  end
-
-  return net
 end
 
 -- Calculates network output size
@@ -109,9 +80,12 @@ function Model:create()
   if self.recurrent then
     net:add(nn.Copy(nil, nil, true)) -- Needed when splitting batch x seq x input over seq for DRQN; better than nn.Contiguous
   end
-  
+
   -- Add network body
-  net:add(self:createBody())
+  log.info('Setting up ' .. self.modelBody)
+  local Body = require(self.modelBody)
+  net:add(Body(self):createBody())
+
   -- Calculate body output size
   local bodyOutputSize = torch.prod(torch.Tensor(getOutputSize(net, _.append({histLen}, self.stateSpec[2]))))
   net:add(nn.View(bodyOutputSize))
