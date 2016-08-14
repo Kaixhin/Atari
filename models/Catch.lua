@@ -1,8 +1,5 @@
 local nn = require 'nn'
-local nninit = require 'nninit'
 require 'classic.torch' -- Enables serialisation
-require 'rnn'
-require 'dpnn' -- Adds gradParamClip method
 
 local Body = classic.class('Body')
 
@@ -18,9 +15,7 @@ end
 function Body:createBody()
   -- Number of input frames for recurrent networks is always 1
   local histLen = self.recurrent and 1 or self.histLen
-  local net
-
-  net = nn.Sequential()
+  local net = nn.Sequential()
   net:add(nn.View(histLen*self.stateSpec[2][1], self.stateSpec[2][2], self.stateSpec[2][3]))
   net:add(nn.SpatialConvolution(histLen*self.stateSpec[2][1], 32, 5, 5, 2, 2, 1, 1))
   net:add(nn.ReLU(true))

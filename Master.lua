@@ -51,7 +51,10 @@ function Master:_init(opt)
   end
 
   -- Start gaming
-  log.info('Starting game: ' .. opt.game)
+  log.info('Starting ' .. opt.env)
+  if opt.game then
+    log.info('Starting game: ' .. opt.game)
+  end
   local state = self.env:start()
 
   -- Set up display (if available)
