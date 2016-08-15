@@ -52,7 +52,7 @@ function Master:_init(opt)
 
   -- Start gaming
   log.info('Starting ' .. opt.env)
-  if opt.game then
+  if opt.game ~= '' then
     log.info('Starting game: ' .. opt.game)
   end
   local state = self.env:start()
