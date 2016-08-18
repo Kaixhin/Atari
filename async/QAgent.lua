@@ -3,7 +3,7 @@ local QAgent = require 'async/AsyncAgent'
 
 local QAgent, super = classic.class('QAgent', 'AsyncAgent')
 
-local EPSILON_ENDS = { 0.01, 0.1, 0.5}
+local EPSILON_ENDS = { 0.1, 0.01, 0.5}
 local EPSILON_PROBS = { 0.4, 0.7, 1 }
 
 
