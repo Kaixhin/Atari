@@ -79,6 +79,7 @@ function Setup:parseOptions(arg)
   cmd:option('-threads', 4, 'Number of BLAS or async threads')
   cmd:option('-tensorType', 'torch.FloatTensor', 'Default tensor type')
   cmd:option('-gpu', cuda and 1 or 0, 'GPU device ID (0 to disable)')
+  cmd:option('-cudnn', 'false', 'Utilise cuDNN (if available)')
   -- Environment options
   cmd:option('-env', 'rlenvs.Catch', 'Environment class (Lua file to be loaded/rlenv)')
   cmd:option('-zoom', 1, 'Display zoom (requires QT)')
@@ -153,6 +154,7 @@ function Setup:parseOptions(arg)
   local opt = cmd:parse(arg)
 
   -- Process boolean options (Torch fails to accept false on the command line)
+  opt.cudnn = opt.cudnn == 'true'
   opt.duel = opt.duel == 'true'
   opt.recurrent = opt.recurrent == 'true'
   opt.discretiseMem = opt.discretiseMem == 'true'

@@ -433,6 +433,10 @@ end
 function Agent:report()
   -- Collect layer with weights
   local weightLayers = self.policyNet:findModules('nn.SpatialConvolution')
+  if #weightLayers == 0 then
+    -- Assume cuDNN convolutions
+    weightLayers = self.policyNet:findModules('cudnn.SpatialConvolution')
+  end
   local fcLayers = self.policyNet:findModules('nn.Linear')
   weightLayers = _.append(weightLayers, fcLayers)
   

@@ -2,6 +2,7 @@ local _ = require 'moses'
 local paths = require 'paths'
 local classic = require 'classic'
 local nn = require 'nn'
+local hasCudnn, cudnn = pcall(require, 'cudnn') -- Use cuDNN if available
 local nninit = require 'nninit'
 local image = require 'image'
 local DuelAggregator = require 'modules/DuelAggregator'
@@ -19,6 +20,7 @@ function Model:_init(opt)
   -- Extract relevant options
   self.tensorType = opt.tensorType
   self.gpu = opt.gpu
+  self.cudnn = opt.cudnn
   self.colorSpace = opt.colorSpace
   self.width = opt.width
   self.height = opt.height
@@ -200,6 +202,17 @@ function Model:create()
   if self.gpu > 0 then
     require 'cunn'
     net:cuda()
+
+    if self.cudnn and hasCudnn then
+      cudnn.convert(net, cudnn)
+      -- The following is legacy code that can make cuDNN deterministic (with a large drop in performance)
+      --[[
+      local convs = net:findModules('cudnn.SpatialConvolution')
+      for i, v in ipairs(convs) do
+        v:setMode('CUDNN_CONVOLUTION_FWD_ALGO_GEMM', 'CUDNN_CONVOLUTION_BWD_DATA_ALGO_1', 'CUDNN_CONVOLUTION_BWD_FILTER_ALGO_1')
+      end
+      --]]
+    end
   end
 
   -- Save reference to network
@@ -217,7 +230,7 @@ function Model:getFilters()
   local filters = {}
 
   -- Find convolutional layers
-  local convs = self.net:findModules('nn.SpatialConvolution')
+  local convs = self.net:findModules(hasCudnn and 'cudnn.SpatialConvolution' or 'nn.SpatialConvolution')
   for i, v in ipairs(convs) do
     -- Add filter to list (with each layer on a separate row)
     filters[#filters + 1] = image.toDisplayTensor(v.weight:view(v.nOutputPlane*v.nInputPlane, v.kH, v.kW), 1, v.nInputPlane, true)
@@ -232,7 +245,7 @@ function Model:setSaliency(saliency)
   self.saliency = saliency
 
   -- Find ReLUs on existing model
-  local relus, relucontainers = self.net:findModules('nn.ReLU')
+  local relus, relucontainers = self.net:findModules(hasCudnn and 'cudnn.ReLU' or 'nn.ReLU')
   if #relus == 0 then
     relus, relucontainers = self.net:findModules('nn.GuidedReLU')
   end
@@ -241,7 +254,7 @@ function Model:setSaliency(saliency)
   end
 
   -- Work out which ReLU to use now
-  local layerConstructor = nn.ReLU
+  local layerConstructor = hasCudnn and cudnn.ReLU or nn.ReLU
   self.relus = {} --- Clear special ReLU list to iterate over for salient backpropagation
   if saliency == 'guided' then
     layerConstructor = nn.GuidedReLU

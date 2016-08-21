@@ -16,7 +16,7 @@ Additional asynchronous agents [[9]](#references):
 
 Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[10]](#references), optionally using guided [[11]](#references) or "deconvnet" [[12]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
-To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that this code uses CUDA by default if available, but the Catch network is small enough that it runs faster on CPU.
+To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that this code uses CUDA if available, but the Catch network is small enough that it runs faster on CPU. If cuDNN is available, it can be enabled using the `-cudnn` flag; note that by default cuDNN is nondeterministic, and its deterministic modes are slower than cutorch.
 
 In training mode if you want to quit using `Ctrl+C` then this will be caught and you will be asked if you would like to save the agent. Note that for non-asynchronous agents the experience replay memory will be included, totalling ~7GB. The main script also automatically saves the last weights (`last.weights.t7`) and the weights of the best performing DQN (according to the average validation score) (`best.weights.t7`).
 
@@ -24,7 +24,7 @@ In evaluation mode you can create recordings with `-record true` (requires FFmpe
 
 ## Requirements
 
-Requires [Torch7](http://torch.ch/), and uses CUDA if available. Also requires the following extra luarocks packages:
+Requires [Torch7](http://torch.ch/), and can use CUDA and cuDNN if available. Also requires the following extra luarocks packages:
 
 - luaposix
 - moses

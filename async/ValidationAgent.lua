@@ -198,6 +198,10 @@ end
 function ValidationAgent:weightsReport()
   -- Collect layer with weights
   local weightLayers = self.policyNet_:findModules('nn.SpatialConvolution')
+  if #weightLayers == 0 then
+    -- Assume cuDNN convolutions
+    weightLayers = self.policyNet:findModules('cudnn.SpatialConvolution')
+  end
   local fcLayers = self.policyNet_:findModules('nn.Linear')
   weightLayers = _.append(weightLayers, fcLayers)
 
