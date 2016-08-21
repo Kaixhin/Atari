@@ -40,8 +40,6 @@ function Setup:_init(arg)
 
   -- Torch setup
   log.info('Setting up Torch7')
-  -- Use enhanced garbage collector
-  torch.setheaptracking(true)
   -- Set number of BLAS threads
   torch.setnumthreads(self.opt.threads)
   -- Set default Tensor type (float is more efficient than double)

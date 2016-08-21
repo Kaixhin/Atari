@@ -35,8 +35,6 @@ local function torchSetup(opt)
     require 'rnn'
     require 'nngraph'
     require 'modules/GradientRescale'
-    -- Use enhanced garbage collector
-    torch.setheaptracking(true)
     -- Set number of BLAS threads to 1 (per thread)
     torch.setnumthreads(1)
     -- Set default Tensor type (float is more efficient than double)
