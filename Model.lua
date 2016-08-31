@@ -230,7 +230,7 @@ function Model:getFilters()
   local filters = {}
 
   -- Find convolutional layers
-  local convs = self.net:findModules(hasCudnn and 'cudnn.SpatialConvolution' or 'nn.SpatialConvolution')
+  local convs = self.net:findModules(self.cudnn and hasCudnn and 'cudnn.SpatialConvolution' or 'nn.SpatialConvolution')
   for i, v in ipairs(convs) do
     -- Add filter to list (with each layer on a separate row)
     filters[#filters + 1] = image.toDisplayTensor(v.weight:view(v.nOutputPlane*v.nInputPlane, v.kH, v.kW), 1, v.nInputPlane, true)
