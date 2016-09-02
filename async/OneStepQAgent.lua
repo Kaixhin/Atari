@@ -24,13 +24,18 @@ function OneStepQAgent:learn(steps, from)
   log.info('%s starting | steps=%d | ε=%.2f -> %.2f', self.agentName, steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
 
-  local action, state_
+  local action, state_, nextAction
 
   self.tic = torch.tic()
   for step1=1,steps do
     if not terminal then
-      action = self:eGreedy(state, self.policyNet)
-      reward, terminal, state_ = self:takeAction(action)
+      if nextAction then
+        -- Allow environment to control next action
+        action = nextAction + self.actionOffset
+      else
+        action = self:eGreedy(state, self.policyNet)
+      end
+      reward, terminal, state_, nextAction = self:takeAction(action)
     else
       reward, terminal, state_ = self:start()
     end
