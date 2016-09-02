@@ -78,6 +78,7 @@ function Master:train()
   self:catchSigInt()
 
   local reward, state, terminal = 0, self.env:start(), false
+  local nextAction
 
   -- Set environment and agent to training mode
   self.env:training()
@@ -93,11 +94,17 @@ function Master:train()
   for step = initStep, self.opt.steps do
     self.globals.step = step -- Pass step number to globals for use in other modules
 
-    -- Observe results of previous transition (r, s', terminal') and choose next action (index)
-    local action = self.agent:observe(reward, state, terminal) -- As results received, learn in training mode
+    local action
+    if nextAction then
+      -- Allow environment to control next action
+      action = nextAction
+    else
+      -- Observe results of previous transition (r, s', terminal') and choose next action (index)
+      action = self.agent:observe(reward, state, terminal) -- As results received, learn in training mode
+    end
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, state, terminal = self.env:step(action)
+      reward, state, terminal, nextAction = self.env:step(action)
       -- Track score
       episodeScore = episodeScore + reward
     else
