@@ -32,6 +32,8 @@ function NStepQAgent:learn(steps, from)
   log.info('NStepQAgent starting | steps=%d | ε=%.2f -> %.2f', steps, self.epsilon, self.epsilonEnd)
   local reward, terminal, state = self:start()
 
+  local taken
+
   self.states:resize(self.batchSize, table.unpack(state:size():totable()))
   self.tic = torch.tic()
   repeat
@@ -44,7 +46,10 @@ function NStepQAgent:learn(steps, from)
       local action = self:eGreedy(state, self.policyNet_)
       self.actions[self.batchIdx] = action
 
-      reward, terminal, state = self:takeAction(action)
+      reward, terminal, state, taken = self:takeAction(action)
+      if taken and taken ~= action then
+        self.actions[self.batchIdx] = taken
+      end
       self.rewards[self.batchIdx] = reward
 
       self:progress(steps)
