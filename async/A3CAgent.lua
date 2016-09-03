@@ -40,6 +40,8 @@ function A3CAgent:learn(steps, from)
   log.info('A3CAgent starting | steps=%d', steps)
   local reward, terminal, state = self:start()
 
+  local actionTaken
+
   self.states:resize(self.batchSize, table.unpack(state:size():totable()))
 
   self.tic = torch.tic()
@@ -55,7 +57,10 @@ function A3CAgent:learn(steps, from)
 
       self.actions[self.batchIdx] = action
 
-      reward, terminal, state = self:takeAction(action)
+      reward, terminal, state, actionTaken = self:takeAction(action)
+      if actionTaken and actionTaken + self.actionOffset ~= action then
+        action = actionTaken + self.actionOffset
+      end
       self.rewards[self.batchIdx] = reward
 
       self:progress(steps)
@@ -98,7 +103,7 @@ function A3CAgent:accumulateGradients(terminal, state)
     local gradEntropy = torch.log(probability) + 1
     -- Add to target to improve exploration (prevent convergence to suboptimal deterministic policy)
     self.policyTarget:add(self.beta, gradEntropy)
-    
+
     self.policyNet_:backward(self.states[i], self.targets)
   end
 end
