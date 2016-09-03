@@ -47,8 +47,8 @@ function NStepQAgent:learn(steps, from)
       self.actions[self.batchIdx] = action
 
       reward, terminal, state, actionTaken = self:takeAction(action)
-      if actionTaken and actionTaken + self.actionOffset ~= action then
-        action = actionTaken + self.actionOffset
+      if actionTaken and actionTaken ~= action then
+        action = actionTaken
       end
       self.rewards[self.batchIdx] = reward
 

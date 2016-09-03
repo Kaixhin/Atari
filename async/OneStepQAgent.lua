@@ -31,8 +31,8 @@ function OneStepQAgent:learn(steps, from)
     if not terminal then
       action = self:eGreedy(state, self.policyNet)
       reward, terminal, state_, actionTaken = self:takeAction(action)
-      if actionTaken and actionTaken + self.actionOffset ~= action then
-        action = actionTaken + self.actionOffset
+      if actionTaken and actionTaken ~= action then
+        action = actionTaken
       end
     else
       reward, terminal, state_ = self:start()
