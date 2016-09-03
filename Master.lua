@@ -100,7 +100,8 @@ function Master:train()
       reward, state, terminal, actionTaken = self.env:step(action)
       -- Update experience memory with actual action
       if actionTaken and actionTaken ~= action then
-        self.agent.memory.actions[self.agent.memory.index] = actionTaken
+        action = actionTaken
+        self.agent.memory.actions[self.agent.memory.index] = action
       end
       -- Track score
       episodeScore = episodeScore + reward

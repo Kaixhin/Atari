@@ -50,6 +50,7 @@ function NStepQAgent:learn(steps, from)
       if actionTaken and actionTaken ~= action then
         action = actionTaken
       end
+      self.actions[self.batchIdx] = action
       self.rewards[self.batchIdx] = reward
 
       self:progress(steps)

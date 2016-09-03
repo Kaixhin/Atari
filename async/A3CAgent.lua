@@ -55,12 +55,11 @@ function A3CAgent:learn(steps, from)
       local V, probability = table.unpack(self.policyNet_:forward(state))
       local action = torch.multinomial(probability, 1):squeeze()
 
-      self.actions[self.batchIdx] = action
-
       reward, terminal, state, actionTaken = self:takeAction(action)
       if actionTaken and actionTaken ~= action then
         action = actionTaken
       end
+      self.actions[self.batchIdx] = action
       self.rewards[self.batchIdx] = reward
 
       self:progress(steps)
