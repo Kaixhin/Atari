@@ -44,7 +44,6 @@ function NStepQAgent:learn(steps, from)
       self.states[self.batchIdx]:copy(state)
 
       local action = self:eGreedy(state, self.policyNet_)
-      self.actions[self.batchIdx] = action
 
       reward, terminal, state, actionTaken = self:takeAction(action)
       if actionTaken and actionTaken ~= action then
