@@ -12,6 +12,7 @@ require 'dpnn' -- Adds gradParamClip method
 require 'modules/GuidedReLU'
 require 'modules/DeconvnetReLU'
 require 'modules/GradientRescale'
+require 'modules/MinDim'
 
 local Model = classic.class('Model')
 
@@ -86,11 +87,21 @@ function Model:create()
   -- Add network body
   log.info('Setting up ' .. self.modelBody)
   local Body = require(self.modelBody)
-  net:add(Body(self):createBody())
+  local body = Body(self):createBody()
 
   -- Calculate body output size
-  local bodyOutputSize = torch.prod(torch.Tensor(getOutputSize(net, _.append({histLen}, self.stateSpec[2]))))
-  net:add(nn.View(bodyOutputSize))
+  local bodyOutputSize = torch.prod(torch.Tensor(getOutputSize(body, _.append({histLen}, self.stateSpec[2]))))
+  if not self.async and self.recurrent then
+    body:add(nn.View(-1, bodyOutputSize))
+    net:add(nn.MinDim(1, 4))
+    net:add(nn.Transpose({1, 2}))
+    body = nn.Bottle(body, 4, 2)
+    net:add(body)
+    net:add(nn.MinDim(1, 3))
+  else
+     body:add(nn.View(bodyOutputSize))
+     net:add(body)
+  end
 
   -- Network head
   local head = nn.Sequential()
@@ -98,10 +109,16 @@ function Model:create()
   if self.duel then
     -- Value approximator V^(s)
     local valStream = nn.Sequential()
-    if self.recurrent then
+    if self.recurrent and self.async then
       local lstm = nn.FastLSTM(bodyOutputSize, self.hiddenSize, self.histLen)
       lstm.i2g:init({'bias', {{3*self.hiddenSize+1, 4*self.hiddenSize}}}, nninit.constant, 1)
+      lstm:remember('both')
       valStream:add(lstm)
+    elseif self.recurrent then
+      local lstm = nn.SeqLSTM(bodyOutputSize, self.hiddenSize)
+      lstm:remember('both')
+      valStream:add(lstm)
+      valStream:add(nn.Select(-3, -1)) -- Select last timestep
     else
       valStream:add(nn.Linear(bodyOutputSize, self.hiddenSize))
       valStream:add(nn.ReLU(true))
@@ -110,10 +127,16 @@ function Model:create()
 
     -- Advantage approximator A^(s, a)
     local advStream = nn.Sequential()
-    if self.recurrent then
+    if self.recurrent and self.async then
       local lstm = nn.FastLSTM(bodyOutputSize, self.hiddenSize, self.histLen)
-      lstm.i2g:init({'bias', {{3*self.hiddenSize+1, 4*self.hiddenSize}}}, nninit.constant, 1)
+      lstm.i2g:init({'bias', {{3*self.hiddenSize+1, 4*self.hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
+      lstm:remember('both')
       advStream:add(lstm)
+    elseif self.recurrent then
+      local lstm = nn.SeqLSTM(bodyOutputSize, self.hiddenSize)
+      lstm:remember('both')
+      advStream:add(lstm)
+      advStream:add(nn.Select(-3, -1)) -- Select last timestep
     else
       advStream:add(nn.Linear(bodyOutputSize, self.hiddenSize))
       advStream:add(nn.ReLU(true))
@@ -132,13 +155,16 @@ function Model:create()
     -- Add dueling streams aggregator module
     head:add(DuelAggregator(self.m))
   else
-    if self.recurrent then
+    if self.recurrent and self.async then
       local lstm = nn.FastLSTM(bodyOutputSize, self.hiddenSize, self.histLen)
       lstm.i2g:init({'bias', {{3*self.hiddenSize+1, 4*self.hiddenSize}}}, nninit.constant, 1) -- Extra: high forget gate bias (Gers et al., 2000)
+      lstm:remember('both')
       head:add(lstm)
-      if self.async then
-        lstm:remember('both')
-      end
+    elseif self.recurrent then
+      local lstm = nn.SeqLSTM(bodyOutputSize, self.hiddenSize)
+      lstm:remember('both')
+      head:add(lstm)
+      head:add(nn.Select(-3, -1)) -- Select last timestep
     else
       head:add(nn.Linear(bodyOutputSize, self.hiddenSize))
       head:add(nn.ReLU(true)) -- DRQN paper reports worse performance with ReLU after LSTM
@@ -190,14 +216,7 @@ function Model:create()
   if not self.a3c then
     net:add(nn.JoinTable(1, 1))
     net:add(nn.View(heads, self.m))
-
-    if not self.async and self.recurrent then
-      local sequencer = nn.Sequencer(net)
-      sequencer:remember('both') -- Keep hidden state between forward calls; requires manual calls to forget
-      net = nn.Sequential():add(nn.SplitTable(1, #self.stateSpec[2] + 1)):add(sequencer):add(nn.SelectTable(-1))
-    end
   end
-
   -- GPU conversion
   if self.gpu > 0 then
     require 'cunn'
@@ -214,7 +233,7 @@ function Model:create()
       --]]
     end
   end
-
+  
   -- Save reference to network
   self.net = net
 
