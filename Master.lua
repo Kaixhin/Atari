@@ -77,7 +77,7 @@ function Master:train()
   -- Catch CTRL-C to save
   self:catchSigInt()
 
-  local reward, state, terminal = 0, self.env:start(), false
+  local reward, state, terminal, actionTaken = 0, self.env:start(), false, false
 
   -- Set environment and agent to training mode
   self.env:training()
@@ -97,7 +97,12 @@ function Master:train()
     local action = self.agent:observe(reward, state, terminal) -- As results received, learn in training mode
     if not terminal then
       -- Act on environment (to cause transition)
-      reward, state, terminal = self.env:step(action)
+      reward, state, terminal, actionTaken = self.env:step(action)
+      -- Update experience memory with actual action
+      if actionTaken and actionTaken ~= action then
+        action = actionTaken
+        self.agent.memory.actions[self.agent.memory.index] = action
+      end
       -- Track score
       episodeScore = episodeScore + reward
     else

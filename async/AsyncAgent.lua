@@ -78,7 +78,10 @@ end
 
 
 function AsyncAgent:takeAction(action)
-  local reward, rawObservation, terminal = self.env:step(action - self.actionOffset)
+  local reward, rawObservation, terminal, actionTaken = self.env:step(action - self.actionOffset)
+  if actionTaken then
+    actionTaken = actionTaken + self.actionOffset
+  end
   if self.rewardClip > 0 then
     reward = math.max(reward, -self.rewardClip)
     reward = math.min(reward, self.rewardClip)
@@ -91,7 +94,7 @@ function AsyncAgent:takeAction(action)
     self.stateBuffer:push(observation)
   end
 
-  return reward, terminal, self.stateBuffer:readAll()
+  return reward, terminal, self.stateBuffer:readAll(), actionTaken
 end
 
 
