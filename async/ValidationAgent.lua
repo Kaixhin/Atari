@@ -254,7 +254,6 @@ end
 
 
 function ValidationAgent:plotValidation()
-  -- TODO: Reduce memory consumption for gnuplot
   -- Plot and save losses
   if #self.losses > 0 then
     local losses = torch.Tensor(self.losses)
@@ -305,6 +304,7 @@ function ValidationAgent:plotValidation()
     gnuplot.plotflush()
     torch.save(paths.concat('experiments', self._id, 'normScores.t7'), normScores)
   end
+  gnuplot.close()
 end
 
 

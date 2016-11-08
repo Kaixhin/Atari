@@ -1,6 +1,5 @@
 local _ = require 'moses'
 local classic = require 'classic'
-local gnuplot = require 'gnuplot'
 local Evaluator = require 'Evaluator'
 
 local Validation = classic.class('Validation')

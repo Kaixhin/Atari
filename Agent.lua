@@ -498,7 +498,6 @@ function Agent:validate()
   self.avgV[#self.avgV + 1] = totalV / self.valSize
   self.avgTdErr[#self.avgTdErr + 1] = totalTdErr / self.valSize
 
-  -- TODO: Reduce memory consumption for gnuplot
   -- Plot and save losses
   if #self.losses > 0 then
     local losses = torch.Tensor(self.losses)
@@ -547,6 +546,7 @@ function Agent:validate()
     gnuplot.plotflush()
     torch.save(paths.concat(self.experiments, self._id, 'normScores.t7'), normScores)
   end
+  gnuplot.close()
 
   return self.avgV[#self.avgV], self.avgTdErr[#self.avgTdErr]
 end
