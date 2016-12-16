@@ -21,6 +21,7 @@ Supported Games
 | Berzerk	            | berzerk           |
 | Bowling	            | bowling           |
 | Boxing	            | boxing            |
+| Breakout            | breakout          |
 | Carnival	          | carnival          |
 | Centipede	          | centipede         |
 | Chopper Command	    | chopper_command   |
