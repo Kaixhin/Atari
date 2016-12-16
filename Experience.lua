@@ -25,12 +25,15 @@ function Experience:_init(capacity, opt, isValidation)
     states = opt.Tensor(bufferStateSize),
     actions = torch.ByteTensor(opt.batchSize),
     rewards = opt.Tensor(opt.batchSize),
+    returns = opt.Tensor(opt.batchSize),
     transitions = opt.Tensor(bufferStateSize),
     terminals = torch.ByteTensor(opt.batchSize),
     priorities = opt.Tensor(opt.batchSize)
   }
   self.indices = torch.LongTensor(opt.batchSize)
   self.w = opt.Tensor(opt.batchSize):fill(1) -- Importance-sampling weights w, 1 if no correction needed
+  -- Create state buffer (for optimality tightening)
+  self.tightenState = opt.Tensor(torch.LongStorage(_.append({opt.histLen}, opt.stateSpec[2])))
 
   -- Allocate memory for experience
   local stateSize = torch.LongStorage(_.append({capacity}, opt.stateSpec[2])) -- Calculate state storage size
@@ -43,6 +46,7 @@ function Experience:_init(capacity, opt, isValidation)
   end
   self.actions = torch.ByteTensor(capacity) -- Discrete action indices
   self.rewards = torch.FloatTensor(capacity) -- Stored at time t (not t + 1)
+  self.returns = torch.FloatTensor(capacity) -- Used for optimality tightening
   -- Terminal conditions stored at time t+1, encoded by 0 = false, 1 = true
   self.terminals = torch.ByteTensor(capacity):fill(1) -- Filling with 1 prevents going back in history at beginning
   -- Validation flags (used if state is stored without transition)
@@ -162,7 +166,7 @@ function Experience:setInvalid()
   self.invalid[self.index] = 1
 end
 
--- Retrieves experience tuples (s, a, r, s', t)
+-- Retrieves experience tuples (s, a, r, s', t) (assumed valid)
 function Experience:retrieve(indices)
   local N = indices:size(1)
   -- Blank out history in one go
@@ -210,6 +214,25 @@ function Experience:retrieve(indices)
   end
 
   return self.transTuples.states[{{1, N}}], self.transTuples.actions[{{1, N}}], self.transTuples.rewards[{{1, N}}], self.transTuples.transitions[{{1, N}}], self.transTuples.terminals[{{1, N}}]
+end
+
+-- Retrieves individual state s (used for optimality tightening)
+function Experience:retrieveState(index)
+  -- Go back in history whilst episode exists
+  local histIndex = self.histLen
+  repeat
+    if self.discretiseMem then
+      -- Copy state (converting to float first for non-integer division)
+      self.tightenState[histIndex]:div(self.states[index]:typeAs(self.tightenState), self.imgDiscLevels) -- byte -> float
+    else
+      self.tightenState[histIndex] = self.states[index]:typeAs(self.tightenState)
+    end
+    -- Adjust indices
+    index = self:circIndex(index - 1)
+    histIndex = histIndex - 1
+  until histIndex == 0 or self.terminals[index] == 1 or self.invalid[index] == 1
+
+  return self.tightenState
 end
 
 -- Determines if an index points to a valid transition state

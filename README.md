@@ -5,16 +5,16 @@
 
 **Work In Progress:** Crossed out items have been partially implemented.
 
-~~Prioritised experience replay~~ [[1]](#references) persistent advantage learning [[2]](#references) ~~bootstrapped~~ [[3]](#references) dueling [[4]](#references) double [[5]](#references) deep ~~recurrent~~ [[6]](#references) Q-network [[7]](#references) for the Arcade Learning Environment [[8]](#references) (and [custom environments](#custom)). Or PERPALB(triple-D)RQN for short...
+Optimality tightened [[1]](#references) ~~prioritised experience replay~~ [[2]](#references) persistent advantage learning [[3]](#references) ~~bootstrapped~~ [[4]](#references) dueling [[5]](#references) double [[6]](#references) deep ~~recurrent~~ [[7]](#references) Q-network [[8]](#references) for the Arcade Learning Environment [[9]](#references) (and [custom environments](#custom)). Or OTPERPALB(triple-D)RQN for short...
 
-Additional asynchronous agents [[9]](#references):
+Additional asynchronous agents [[10]](#references):
 
 - One-step Sarsa
 - One-step Q-learning
 - N-step Q-learning
 - Advantage actor-critic
 
-Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[10]](#references), optionally using guided [[11]](#references) or "deconvnet" [[12]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
+Run `th main.lua` to run headless, or `qlua main.lua` to display the game. The main options are `-game` to choose the ROM (see the [ROM directory](roms/README.md) for more details) and `-mode` as either `train` or `eval`. Can visualise saliency maps [[11]](#references), optionally using guided [[12]](#references) or "deconvnet" [[13]](#references) backpropagation. Saliency map modes are applied at runtime so that they can be applied retrospectively to saved models.
 
 To run experiments based on hyperparameters specified in the individual papers, use `./run.sh <paper> <game> <args>`. `<args>` can be used to overwrite arguments specified earlier (in the script); for more details see the script itself. By default the code trains on a demo environment called Catch - use `./run.sh demo` to run the demo with good default parameters. Note that this code uses CUDA if available, but the Catch network is small enough that it runs faster on CPU. If cuDNN is available, it can be enabled using `-cudnn true`; note that by default cuDNN is nondeterministic, and its deterministic modes are slower than cutorch.
 
@@ -67,15 +67,16 @@ For an example on a GridWorld environment, run `./run.sh demo-grid` - the demo a
 
 ## References
 
-[1] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
-[2] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)  
-[3] [Deep Exploration via Bootstrapped DQN](http://arxiv.org/abs/1602.04621)  
-[4] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
-[5] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
-[6] [Deep Recurrent Q-Learning for Partially Observable MDPs](http://arxiv.org/abs/1507.06527)  
-[7] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
-[8] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  
-[9] [Asynchronous Methods for Deep Reinforcement Learning](http://arxiv.org/abs/1602.01783)  
-[10] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
-[11] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
-[12] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  
+[1] [Learning to Play in a Day: Faster Deep Reinforcement Learning by Optimality Tightening](https://arxiv.org/abs/1611.01606)  
+[2] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
+[3] [Increasing the Action Gap: New Operators for Reinforcement Learning](http://arxiv.org/abs/1512.04860)  
+[4] [Deep Exploration via Bootstrapped DQN](http://arxiv.org/abs/1602.04621)  
+[5] [Dueling Network Architectures for Deep Reinforcement Learning](http://arxiv.org/abs/1511.06581)  
+[6] [Deep Reinforcement Learning with Double Q-learning](http://arxiv.org/abs/1509.06461)  
+[7] [Deep Recurrent Q-Learning for Partially Observable MDPs](http://arxiv.org/abs/1507.06527)  
+[8] [Playing Atari with Deep Reinforcement Learning](http://arxiv.org/abs/1312.5602)  
+[9] [The Arcade Learning Environment: An Evaluation Platform for General Agents](http://arxiv.org/abs/1207.4708)  
+[10] [Asynchronous Methods for Deep Reinforcement Learning](http://arxiv.org/abs/1602.01783)  
+[11] [Deep Inside Convolutional Networks: Visualising Image Classification Models and Saliency Maps](http://arxiv.org/abs/1312.6034)  
+[12] [Striving for Simplicity: The All Convolutional Net](http://arxiv.org/abs/1412.6806)  
+[13] [Visualizing and Understanding Convolutional Networks](http://arxiv.org/abs/1311.2901)  

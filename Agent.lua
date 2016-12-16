@@ -61,6 +61,12 @@ function Agent:_init(opt)
   self.memNSamples = opt.memNSamples
   self.memSize = opt.memSize
   self.memPriority = opt.memPriority
+  self.tightenK = opt.tightenK
+  self.tightenLambda = opt.tightenLambda
+  self.Lmax = opt.Tensor(opt.batchSize) -- Optimality tightening lower bound
+  self.Umin = opt.Tensor(opt.batchSize) -- Optimality tightening upper bound
+  self.LmaxLoss = opt.Tensor(opt.batchSize)
+  self.UminLoss = opt.Tensor(opt.batchSize)
 
   -- Training mode
   self.isTraining = false
@@ -379,6 +385,38 @@ function Agent:learn(x, indices, ISWeights, isValidation)
     return
   end
 
+  -- Calculate optimality tightening bounds
+  if self.tightenK > 0 then
+    -- Calculate lower bound
+    self.Lmax:copy(rewards)
+    for n = 1, N do
+      -- Go forward if not terminal
+      if terminals[n] == 0 then
+        local i = 1 -- Index to tightenK
+        repeat
+          -- Retrieve rewards up to K steps in the future
+          self.Lmax[n] = self.Lmax[n] + math.pow(self.gamma, i) * memory.rewards[memory:circIndex(indices[n] + i)]
+          -- Increase index          
+          i = i + 1
+        until i > self.tightenK or not memory:validateTransition(memory:circIndex(indices[n] + i)) -- Validate state before repeating
+        -- Add max_a Q(s_{k+1}, a) if valid
+        if memory:validateTransition(memory:circIndex(indices[n] + self.tightenK + 1)) then
+          self.Lmax[n] = self.Lmax[n] + math.pow(self.gamma, self.tightenK + 1) * torch.max(self.targetNet:forward(memory:retrieveState(memory:circIndex(indices[n] + self.tightenK + 1))), 2) -- TODO: Double-Q -style
+        end
+      end
+    end
+
+    -- Lower bound loss
+    self.LmaxLoss = self.tightenLambda * torch.cmax(self.Lmax - QTaken, 0):pow(2)
+    loss = loss + torch.mean(self.LmaxLoss) -- Add to reported loss
+
+    -- TODO: Upper bound
+
+    -- Correct internal state of policy network before backprop
+    self.policyNet:forward(states)
+  end
+
+
   -- Send TD-errors δ to be used as priorities
   self.memory:updatePriorities(indices, torch.mean(self.tdErr, 2)) -- Use average error over heads
   
@@ -388,6 +426,14 @@ function Agent:learn(x, indices, ISWeights, isValidation)
   for n = 1, N do
     -- Correct prioritisation bias with importance-sampling weights
     QCurr[n][{{}, {actions[n]}}] = torch.mul(-self.tdErr[n], ISWeights[n]) -- Negate target to use gradient descent (not ascent) optimisers
+
+    -- Add optimality tightening losses
+    if self.tightenK > 0 then
+      if self.LmaxLoss[n] > 0 then
+        QCurr[n][{{}, {actions[n]}}] = QCurr[n][{{}, {actions[n]}}] + 2 * self.tightenLambda * (self.LmaxLoss[n] - QTaken[n]) -- Negate target
+      end
+      -- TODO: Upper bound
+    end
   end
 
   -- Backpropagate (network accumulates gradients internally)

@@ -106,6 +106,8 @@ function Setup:parseOptions(arg)
   cmd:option('-memPriority', '', 'Type of prioritised experience replay: <none>|rank|proportional') -- TODO: Implement proportional prioritised experience replay
   cmd:option('-alpha', 0.65, 'Prioritised experience replay exponent α') -- Best vals are rank = 0.7, proportional = 0.6
   cmd:option('-betaZero', 0.45, 'Initial value of importance-sampling exponent β') -- Best vals are rank = 0.5, proportional = 0.4
+  cmd:option('-tightenK', 4, 'Lookahead steps for optimality tightening (0 to disable)')
+  cmd:option('-tightenLambda', 4, 'Optimality tightening constant λ')
   -- Reinforcement learning parameters
   cmd:option('-gamma', 0.99, 'Discount rate γ')
   cmd:option('-epsilonStart', 1, 'Initial value of greediness ε')
@@ -259,6 +261,7 @@ function Setup:validateOptions()
   -- Check async options
   if self.opt.async then
     abortIf(self.opt.recurrent and self.opt.async ~= 'OneStepQ', 'Recurrent connections only supported for OneStepQ in async for now')
+    abortIf(self.opt.tightenK > 0, 'Optimality tightening not supported in async modes yet')
     abortIf(self.opt.PALpha > 0, 'Persistent advantage learning not supported in async modes yet')
     abortIf(self.opt.bootstraps > 0, 'Bootstrap heads not supported in async mode yet')
     abortIf(self.opt.async == 'A3C' and self.opt.duel, 'Dueling networks and A3C are incompatible')
