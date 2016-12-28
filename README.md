@@ -60,6 +60,30 @@ You can also use a custom model (body) with `-modelBody`, which replaces the usu
 
 For an example on a GridWorld environment, run `./run.sh demo-grid` - the demo also works with `qlua` and experience replay agents. The custom environment and network can be found in the [examples](https://github.com/Kaixhin/Atari/tree/master/examples) folder.
 
+## Results
+
+Single run results from various papers can be seen below.
+
+### DQN (Space Invaders) [[7]](#references)
+
+![DQN](figures/dqn_space_invaders.png)
+
+### Double DQN (Space Invaders) [[5]](#references)
+
+![DDQN](figures/doubleq_space_invaders.png)
+
+### Dueling DQN (Space Invaders) [[4]](#references)
+
+![DuelingDQN](figures/dueling_space_invaders.png)
+
+### Persistent Advantage Learning DQN (Asterix) [[2]](#references)
+
+![PALDQN](figures/pal_asterix.png)
+
+### A3C (Beam Rider) [[9]](#references)
+
+![A3C](figures/a3c_beam_rider.png)
+
 ## Acknowledgements
 
 - [@GeorgOstrovski](https://github.com/GeorgOstrovski) for confirmation on network usage in advantage operators + note on interaction with Double DQN.
