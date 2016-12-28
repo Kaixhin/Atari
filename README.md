@@ -62,7 +62,7 @@ For an example on a GridWorld environment, run `./run.sh demo-grid` - the demo a
 
 ## Results
 
-Single run results from various papers can be seen below.
+Single run results from various papers can be seen below. DQN-based agents use [ε = 0.001](https://github.com/Kaixhin/Atari/blob/master/Agent.lua#L162) for evaluation [[4, 5]](#references). 
 
 ### DQN (Space Invaders) [[7]](#references)
 
