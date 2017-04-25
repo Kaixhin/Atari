@@ -89,6 +89,19 @@ Single run results from various papers can be seen below. DQN-based agents use [
 - [@GeorgOstrovski](https://github.com/GeorgOstrovski) for confirmation on network usage in advantage operators + note on interaction with Double DQN.
 - [@schaul](https://github.com/schaul) for clarifications on prioritised experience replay + dueling DQN hyperparameters.
 
+## Citation
+
+If you find this library useful and would like to cite it, the following would be appropriate:
+
+```
+@misc{Atari,
+  author = {Arulkumaran, Kai and Keri, Laszlo},
+  title = {Kaixhin/Atari},
+  url = {https://github.com/Kaixhin/Atari},
+  year = {2015}
+}
+```
+
 ## References
 
 [1] [Prioritized Experience Replay](http://arxiv.org/abs/1511.05952)  
