@@ -26,7 +26,7 @@ In evaluation mode you can create recordings with `-record true` (requires FFmpe
 
 Requires [Torch7](http://torch.ch/), and can use CUDA and cuDNN if available. Also requires the following extra luarocks packages:
 
-- luaposix
+- luaposix 33.4.0
 - luasocket
 - moses
 - logroll
