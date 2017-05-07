@@ -51,7 +51,7 @@ before_script:
   - export LD_LIBRARY_PATH=${INSTALL_PREFIX}/lib:$LD_LIBRARY_PATH
 script:
   - ${INSTALL_PREFIX}/bin/luarocks install luaffi
-  - ${INSTALL_PREFIX}/bin/luarocks install luaposix
+  - ${INSTALL_PREFIX}/bin/luarocks install luaposix 33.4.0
   - ${INSTALL_PREFIX}/bin/luarocks install moses
   - ${INSTALL_PREFIX}/bin/luarocks install logroll
   - ${INSTALL_PREFIX}/bin/luarocks install classic
