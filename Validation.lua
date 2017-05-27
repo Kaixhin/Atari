@@ -24,7 +24,7 @@ function Validation:_init(opt, agent, env, display)
 end
 
 
-function Validation:validate()
+function Validation:validate(step)
   log.info('Validating')
   -- Set environment and agent to evaluation mode
   self.env:evaluate()
@@ -94,7 +94,11 @@ function Validation:validate()
   
   -- Save latest weights
   log.info('Saving weights')
-  self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'last.weights.t7'))
+  if self.opt.checkpoint then
+    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, step .. '.weights.t7'))
+  else
+    self.agent:saveWeights(paths.concat(self.opt.experiments, self.opt._id, 'last.weights.t7'))
+  end
 
   -- Save "best weights" if best score achieved
   if valTotalScore > self.bestValScore then

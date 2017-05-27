@@ -148,6 +148,7 @@ function Setup:parseOptions(arg)
   cmd:option('-experiments', 'experiments', 'Base directory to store experiments')
   cmd:option('-_id', '', 'ID of experiment (used to store saved results, defaults to game name)')
   cmd:option('-network', '', 'Saved network weights file to load (weights.t7)')
+  cmd:option('-checkpoint', 'false', 'Checkpoint network weights (instead of saving just latest weights)')
   cmd:option('-verbose', 'false', 'Log info for every episode (only in train mode)')
   cmd:option('-saliency', '', 'Display saliency maps (requires QT): <none>|normal|guided|deconvnet')
   cmd:option('-record', 'false', 'Record screen (only in eval mode)')
@@ -162,6 +163,7 @@ function Setup:parseOptions(arg)
   opt.reportWeights = opt.reportWeights == 'true'
   opt.fullActions = opt.fullActions == 'true'
   opt.lifeLossTerminal = opt.lifeLossTerminal == 'true'
+  opt.checkpoint = opt.checkpoint == 'true'
   opt.verbose = opt.verbose == 'true'
   opt.record = opt.record == 'true'
   opt.noValidation = opt.noValidation == 'true'

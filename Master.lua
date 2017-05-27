@@ -136,7 +136,7 @@ function Master:train()
 
     -- Validate
     if not self.noValidation and step >= self.learnStart and step % self.valFreq == 0 then
-      self.validation:validate() -- Sets env and agent to evaluation mode and then back to training mode
+      self.validation:validate(step) -- Sets env and agent to evaluation mode and then back to training mode
 
       log.info('Resuming training')
       -- Start new game (as previous one was interrupted)
