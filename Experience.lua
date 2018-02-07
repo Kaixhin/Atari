@@ -18,6 +18,7 @@ function Experience:_init(capacity, opt, isValidation)
   self.learnStart = opt.learnStart
   self.alpha = opt.alpha
   self.betaZero = opt.betaZero
+  self.heads = math.max(opt.bootstraps, 1)
 
   -- Create transition tuples buffer
   local bufferStateSize = torch.LongStorage(_.append({opt.batchSize, opt.histLen}, opt.stateSpec[2]))
@@ -48,6 +49,8 @@ function Experience:_init(capacity, opt, isValidation)
   -- Validation flags (used if state is stored without transition)
   self.invalid = torch.ByteTensor(capacity) -- 1 is used to denote invalid
   -- Internal pointer
+  self.masks = torch.ByteTensor(capacity, self.heads)
+  -- Masking flags for Bootstrap heads
   self.index = 1
   self.isFull = false
   self.size = 0
@@ -106,6 +109,7 @@ function Experience:_init(capacity, opt, isValidation)
   self.terminals[1] = 0
   self.actions[1] = 1 -- Action is no-op
   self.invalid[1] = 0 -- First step is a fake blanked-out state, but can thereby be utilised
+  self.masks[1]:zero() -- Mask out for all
   if self.memPriority then
     self.priorityQueue:insert(1, 1) -- First priority = 1
   end
@@ -124,7 +128,7 @@ function Experience:circIndex(x)
 end
 
 -- Stores experience tuple parts (including pre-emptive action)
-function Experience:store(reward, state, terminal, action)
+function Experience:store(reward, state, terminal, action, mask)
   self.rewards[self.index] = reward
 
   -- Increment index and size
@@ -144,6 +148,7 @@ function Experience:store(reward, state, terminal, action)
   self.terminals[self.index] = terminal and 1 or 0
   self.actions[self.index] = action
   self.invalid[self.index] = 0
+  self.masks[self.index] = mask:clone()
 
   -- Store with maximal priority
   if self.memPriority then
@@ -220,9 +225,17 @@ function Experience:validateTransition(index)
   return self.terminals[index] == 0 and self.invalid[index] == 0 and (self.index <= minIndex or self.index >= maxIndex)
 end
 
+-- Determines if an index points to a masked state
+function Experience:isUnmasked(index, head)
+  return self.masks[index][head] == 1
+end
+
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
-function Experience:sample()
+function Experience:sample(head)
   local N = self.size
+  local allIndexes = torch.LongTensor():range(1,N)
+  local unmaskedIndexes = allIndexes[self.masks[{{},head}]]
+  local M = unmaskedIndexes:size(1)
 
   -- Priority 'none' = uniform sampling
   if not self.memPriority then
@@ -234,8 +247,8 @@ function Experience:sample()
 
       -- Generate random index until valid transition found
       while not isValid do
-        index = torch.random(1, N)
-        isValid = self:validateTransition(index)
+        index = torch.random(1, M)
+        isValid = self:validateTransition(unmaskedIndexes[index])
       end
 
       -- Store index
@@ -259,10 +272,11 @@ function Experience:sample()
       -- Generate random index until valid transition found
       while not isValid do
         -- Sample within stratum
-        rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1])
+        rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1]) -- TODO: Use unmaskedIndexes for generating rankedIndexes
         -- Retrieve actual transition index
         index = self.priorityQueue:getValueByVal(rankIndices[n])
         isValid = self:validateTransition(index) -- The last stratum might be full of terminal states, leading to many checks
+        isValid = self:isUnmasked(index, head) and isValid or false  -- This might lead to infinite loop TODO: remove this
       end
 
       -- Store actual transition index

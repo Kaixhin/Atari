@@ -232,18 +232,24 @@ function Agent:observe(reward, rawObservation, terminal)
   -- If training
   if self.isTraining then
     -- Store experience tuple parts (including pre-emptive action)
-    self.memory:store(reward, observation, terminal, aIndex) -- TODO: Sample independent Bernoulli(p) bootstrap masks for all heads; p = 1 means no masks needed
+
+    local defaultMask = torch.ByteTensor(self.heads):fill(1) -- By default, the no head is masked
+    local mask = defaultMask:clone()
+    if self.bootstraps > 0 then
+      mask = mask:bernoulli(0.5) -- Sample a mask for bootstrap using p = 0.5; Given in  https://arxiv.org/pdf/1602.04621.pdf
+    end
+    self.memory:store(reward, observation, terminal, aIndex, mask) -- TODO: Sample independent Bernoulli(p) bootstrap masks for all heads; p = 1 means no masks needed
 
     -- Collect validation transitions at the start
     if self.globals.step <= self.valSize + 1 then
-      self.valMemory:store(reward, observation, terminal, aIndex)
+      self.valMemory:store(reward, observation, terminal, aIndex, defaultMask)
     end
 
     -- Sample uniformly or with prioritised sampling
     if self.globals.step % self.memSampleFreq == 0 and self.globals.step >= self.learnStart then
       for n = 1, self.memNSamples do
         -- Optimise (learn) from experience tuples
-        self:optimise(self.memory:sample())
+        self:optimise(self.memory:sample(self.head))
       end
     end
 
