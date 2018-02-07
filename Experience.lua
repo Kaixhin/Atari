@@ -255,7 +255,7 @@ function Experience:sample(head)
       self.indices[n] = index
     end
 
-  elseif self.memPriority == 'rank' then
+  elseif self.memPriority == 'rank' then  -- TODO: Add Setup assertion: if bootstrap then no PriorityReplay
 
     -- Find closest precomputed distribution by size
     local distIndex = math.floor(N / self.capacity * 100)
@@ -272,11 +272,10 @@ function Experience:sample(head)
       -- Generate random index until valid transition found
       while not isValid do
         -- Sample within stratum
-        rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1]) -- TODO: Use unmaskedIndexes for generating rankedIndexes
+        rankIndices[n] = torch.random(distribution.strataEnds[n] + 1, distribution.strataEnds[n+1])
         -- Retrieve actual transition index
         index = self.priorityQueue:getValueByVal(rankIndices[n])
         isValid = self:validateTransition(index) -- The last stratum might be full of terminal states, leading to many checks
-        isValid = self:isUnmasked(index, head) and isValid or false  -- This might lead to infinite loop TODO: remove this
       end
 
       -- Store actual transition index
