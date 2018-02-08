@@ -49,8 +49,10 @@ function Experience:_init(capacity, opt, isValidation)
   -- Validation flags (used if state is stored without transition)
   self.invalid = torch.ByteTensor(capacity) -- 1 is used to denote invalid
   -- Internal pointer
-  self.masks = torch.ByteTensor(capacity, self.heads)
+  self.masks = torch.ByteTensor(capacity, self.heads):fill(0)
   -- Masking flags for Bootstrap heads
+  self.allIndexes = torch.LongTensor():range(1,capacity)
+  -- Used during finding unmasked samples for bootstrap head
   self.index = 1
   self.isFull = false
   self.size = 0
@@ -233,8 +235,7 @@ end
 -- Returns indices and importance-sampling weights based on (stochastic) proportional prioritised sampling
 function Experience:sample(head)
   local N = self.size
-  local allIndexes = torch.LongTensor():range(1,N)
-  local unmaskedIndexes = allIndexes[self.masks[{{},head}]]
+  local unmaskedIndexes = self.allIndexes[self.masks[{{},head}]]
   local M = unmaskedIndexes:size(1)
 
   -- Priority 'none' = uniform sampling
