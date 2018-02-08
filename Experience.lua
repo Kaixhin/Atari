@@ -256,7 +256,7 @@ function Experience:sample(head)
       self.indices[n] = index
     end
 
-  elseif self.memPriority == 'rank' then  -- TODO: Add Setup assertion: if bootstrap then no PriorityReplay
+  elseif self.memPriority == 'rank' then
 
     -- Find closest precomputed distribution by size
     local distIndex = math.floor(N / self.capacity * 100)

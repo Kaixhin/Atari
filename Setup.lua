@@ -242,6 +242,9 @@ function Setup:validateOptions()
   abortIf(self.opt.memPriority and not _.contains({'rank', 'proportional'}, self.opt.memPriority), 'Type of prioritised experience replay unrecognised')
   abortIf(self.opt.memPriority == 'proportional', 'Proportional prioritised experience replay not implemented yet') -- TODO: Implement
 
+  -- Check no prioritized replay is done when bootstrap
+  abortIf(self.opt.bootstraps > 0 and _.contains({'rank', 'proportional'}, self.opt.memPriority), 'Prioritized experience replay not possible with bootstrap')
+
   -- Check start of learning occurs after at least 1/100 of memory has been filled
   abortIf(self.opt.learnStart <= self.opt.memSize/100, 'learnStart must be greater than memSize/100')
 
