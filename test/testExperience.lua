@@ -22,6 +22,7 @@ local opt = {
   },
   discretiseMem = true,
   batchSize = 10,
+  bootstraps = 5,
   gpu = false,
   memPriority = '',
   learnStart = 0,
@@ -40,9 +41,11 @@ local function randomPopulate(priorities, experience)
   local idx = torch.Tensor(1)
   local prio = torch.Tensor(1)
   local maxPrio = 1000
+  local heads = math.max(opt.bootstraps, 1)
+  local mask = torch.ByteTensor(heads)
 
   for i=1,capacity do
-    experience:store(reward, state, terminal, action)
+    experience:store(reward, state, terminal, action, mask:clone():bernoulli(0.5))
     idx[1] = i
     prio[1] = torch.random(maxPrio) - maxPrio / 2
     priorities[i] = prio[1]
@@ -53,16 +56,17 @@ end
 local function samplePriorityMeans(times)
   local experience = Experience(capacity, opt, isValidation)
   local priorities = torch.Tensor(capacity)
+  local heads = math.max(opt.bootstraps, 1)
   randomPopulate(priorities, experience)
 
   local samplePriorities = torch.Tensor(times, opt.batchSize)
 
   for i=1,times do
-    local idxs = experience:sample()
+    local idxs = experience:sample(torch.random(heads))
     samplePriorities[i] = priorities:gather(1, idxs)
   end
 
---    print(samplePriorities)
+  -- print(samplePriorities)
   local means = samplePriorities:abs():mean(1):squeeze()
   print(means)
 
